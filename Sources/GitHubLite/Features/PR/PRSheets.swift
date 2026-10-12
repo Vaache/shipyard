@@ -1,0 +1,339 @@
+import SwiftUI
+
+enum MergeMethod: String, CaseIterable, Identifiable {
+    case MERGE, SQUASH, REBASE
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .MERGE: return "Merge commit"
+        case .SQUASH: return "Squash and merge"
+        case .REBASE: return "Rebase and merge"
+        }
+    }
+}
+
+struct SheetFrame<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.headline)
+            content
+        }
+        .padding(20)
+        .frame(width: 560)
+    }
+}
+
+struct ReviewSheet: View {
+    let model: PRDetailModel
+    let pr: PullRequestDetail
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @State private var event = "COMMENT"
+
+    var body: some View {
+        SheetFrame(title: t("Ревью #\(pr.number)", "Review #\(pr.number)")) {
+            if !model.pending.isEmpty {
+                Label(t("Будет отправлено комментариев в коде: \(model.pending.count)", "Inline comments to be submitted: \(model.pending.count)"), systemImage: "text.bubble")
+                    .foregroundStyle(.secondary)
+            }
+            ComposerBox(text: $text, placeholder: t("Общий комментарий к ревью (необязательно для одобрения)", "Review summary (optional when approving)"), minHeight: 140)
+                .frame(maxHeight: 260)
+            Picker("", selection: $event) {
+                Text(t("Комментарий — без решения", "Comment — without approval")).tag("COMMENT")
+                Text(t("Одобрить", "Approve")).tag("APPROVE").disabled(pr.viewerDidAuthor)
+                Text(t("Запросить изменения", "Request changes")).tag("REQUEST_CHANGES").disabled(pr.viewerDidAuthor)
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+            HStack {
+                if !model.pending.isEmpty {
+                    Button(t("Удалить черновые комментарии", "Discard pending comments"), role: .destructive) { model.pending.removeAll() }
+                }
+                Spacer()
+                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(t("Отправить ревью", "Submit review")) {
+                    let body = text, ev = event
+                    Task { if await model.submitReview(event: ev, body: body) { dismiss() } }
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .buttonStyle(.borderedProminent)
+                .disabled(model.busy || (event != "APPROVE" && text.trimmingCharacters(in: .whitespaces).isEmpty && model.pending.isEmpty))
+            }
+        }
+    }
+}
+
+struct MergeSheet: View {
+    let model: PRDetailModel
+    let pr: PullRequestDetail
+    @Environment(\.dismiss) private var dismiss
+    @State private var method: MergeMethod = .MERGE
+    @State private var title = ""
+    @State private var message = ""
+    @State private var deleteBranch = true
+
+    private var allowed: [MergeMethod] {
+        guard let r = model.repo else { return MergeMethod.allCases }
+        return MergeMethod.allCases.filter {
+            switch $0 {
+            case .MERGE: return r.mergeCommitAllowed
+            case .SQUASH: return r.squashMergeAllowed
+            case .REBASE: return r.rebaseMergeAllowed
+            }
+        }
+    }
+
+    var body: some View {
+        SheetFrame(title: t("Слить #\(pr.number) в \(pr.baseRefName)", "Merge #\(pr.number) into \(pr.baseRefName)")) {
+            Picker(t("Способ", "Method"), selection: $method) {
+                ForEach(allowed) { Text($0.title).tag($0) }
+            }
+            .onChange(of: method) { _, m in prefill(m) }
+            if method != .REBASE {
+                TextField(t("Заголовок коммита (по умолчанию от GitHub)", "Commit title (GitHub default)"), text: $title)
+                ComposerBox(text: $message, placeholder: t("Описание коммита (необязательно)", "Commit description (optional)"), minHeight: 80)
+                    .frame(maxHeight: 160)
+            }
+            if !(model.repo?.deleteBranchOnMerge ?? false), pr.headRepository?.nameWithOwner == model.ref.repo.full {
+                Toggle(t("Удалить ветку \(pr.headRefName) после слияния", "Delete branch \(pr.headRefName) after merge"), isOn: $deleteBranch)
+            }
+            HStack {
+                if model.repo?.autoMergeAllowed == true, pr.autoMergeRequest == nil, pr.mergeStateStatus != "CLEAN" {
+                    Button(t("Включить автослияние", "Enable auto-merge")) {
+                        Task { if await model.enableAutoMerge(method: method.rawValue) { dismiss() } }
+                    }
+                    .help(t("Слить автоматически, когда проверки и ревью пройдут", "Merge automatically when checks and reviews pass"))
+                }
+                Spacer()
+                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(t("Слить", "Merge")) {
+                    let t = title.trimmingCharacters(in: .whitespaces)
+                    let b = message.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let del = deleteBranch && !(model.repo?.deleteBranchOnMerge ?? false) && pr.headRepository?.nameWithOwner == model.ref.repo.full
+                    Task {
+                        if await model.merge(method: method.rawValue, title: t.isEmpty ? nil : t, body: b.isEmpty ? nil : b, deleteBranch: del) { dismiss() }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.ghGreen)
+                .disabled(model.busy || allowed.isEmpty)
+            }
+        }
+        .onAppear {
+            let def = MergeMethod(rawValue: model.repo?.viewerDefaultMergeMethod ?? "MERGE") ?? .MERGE
+            method = allowed.contains(def) ? def : (allowed.first ?? .MERGE)
+            prefill(method)
+        }
+    }
+
+    private func prefill(_ m: MergeMethod) {
+        switch m {
+        case .SQUASH: title = "\(pr.title) (#\(pr.number))"
+        case .MERGE: title = ""
+        case .REBASE: title = ""
+        }
+    }
+}
+
+struct EditPRSheet: View {
+    let model: PRDetailModel
+    let pr: PullRequestDetail
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var text = ""
+
+    var body: some View {
+        SheetFrame(title: t("Редактировать #\(pr.number)", "Edit #\(pr.number)")) {
+            TextField(t("Заголовок", "Title"), text: $title).textFieldStyle(.roundedBorder)
+            ComposerBox(text: $text, placeholder: t("Описание (Markdown)", "Description (Markdown)"), minHeight: 260)
+                .frame(maxHeight: 420)
+            HStack {
+                Spacer()
+                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(t("Сохранить", "Save")) {
+                    let t = title, b = text
+                    Task { if await model.edit(title: t, body: b) { dismiss() } }
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .buttonStyle(.borderedProminent)
+                .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || model.busy)
+            }
+        }
+        .frame(width: 680)
+        .onAppear {
+            title = pr.title
+            text = pr.body
+        }
+    }
+}
+
+struct ReviewersSheet: View {
+    let model: PRDetailModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var logins = ""
+
+    var body: some View {
+        SheetFrame(title: t("Запросить ревью", "Request review")) {
+            TextField(t("Логины через запятую, например: alice, bob", "Comma-separated logins, e.g. alice, bob"), text: $logins).textFieldStyle(.roundedBorder)
+            HStack {
+                Spacer()
+                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(t("Запросить", "Request")) {
+                    let list = logins.split(whereSeparator: { $0 == "," || $0 == " " }).map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "@ ")) }.filter { !$0.isEmpty }
+                    Task { if await model.requestReviewers(list) { dismiss() } }
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(logins.trimmingCharacters(in: .whitespaces).isEmpty || model.busy)
+            }
+        }
+    }
+}
+
+struct ReplySheet: View {
+    let model: PRDetailModel
+    let thread: ReviewThread
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+
+    var body: some View {
+        SheetFrame(title: t("Ответ в обсуждении", "Reply to thread")) {
+            Text("\(thread.path)\(thread.line.map { ":\($0)" } ?? "")").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+            if let last = thread.comments.nodes.last {
+                HStack(alignment: .top, spacing: 8) {
+                    Avatar(url: last.author?.avatarUrl, size: 18)
+                    MarkdownText(text: last.body).lineLimit(6).font(.callout)
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.5)))
+            }
+            ComposerBox(text: $text, placeholder: t("Ответ (Markdown)", "Reply (Markdown)"), minHeight: 120).frame(maxHeight: 240)
+            HStack {
+                if thread.viewerCanResolve, !thread.isResolved {
+                    Button(t("Ответить и решить", "Reply and resolve")) { send(resolve: true) }
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy)
+                }
+                Spacer()
+                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(t("Ответить", "Reply")) { send(resolve: false) }
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy)
+            }
+        }
+    }
+
+    private func send(resolve: Bool) {
+        let body = text
+        let id = thread.id
+        Task {
+            if await model.reply(id, body: body) {
+                if resolve { await model.setResolved(id, true) }
+                dismiss()
+            }
+        }
+    }
+}
+
+struct JobLogSheet: View {
+    let api: GitHubAPI
+    let repo: RepoRef
+    let check: CheckContext
+    @Environment(\.dismiss) private var dismiss
+    @State private var log: String?
+    @State private var error: String?
+    @State private var errorsOnly = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                OutcomeIcon(outcome: check.outcome)
+                Text(check.workflowName.map { "\($0) / \(check.title)" } ?? check.title).font(.headline).lineLimit(1)
+                Spacer()
+                Toggle(t("Только ошибки", "Errors only"), isOn: $errorsOnly).toggleStyle(.checkbox)
+                if let log { Button(t("Копировать", "Copy")) { copyToPasteboard(log) } }
+                if let link = check.link { Button(t("В браузере", "Open in browser")) { openInBrowser(link) } }
+                Button(t("Закрыть", "Close")) { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            .padding(12)
+            Divider()
+            if let log {
+                LogTextView(text: errorsOnly ? filterErrors(log) : log)
+            } else if let error {
+                ErrorStateView(message: error)
+            } else {
+                LoadingView()
+            }
+        }
+        .frame(width: 980, height: 640)
+        .task {
+            guard let id = check.databaseId else { return }
+            do {
+                let raw = try await api.jobLog(repo: repo, jobId: id)
+                log = await Task.detached { Self.clean(raw) }.value
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    private func filterErrors(_ s: String) -> String {
+        let lines = s.components(separatedBy: "\n")
+        var keep: [String] = []
+        for (i, l) in lines.enumerated() where l.contains("##[error]") || l.localizedCaseInsensitiveContains("error") || l.contains("FAILED") || l.contains("✗") {
+            let from = max(0, i - 3)
+            if let last = keep.last, last == "…" {} else if !keep.isEmpty { keep.append("…") }
+            keep += lines[from...i]
+        }
+        return keep.isEmpty ? t("Строк с ошибками не найдено", "No error lines found") : keep.joined(separator: "\n")
+    }
+
+    nonisolated static func clean(_ raw: String) -> String {
+        raw.components(separatedBy: "\n").map { line -> String in
+            var l = Substring(line)
+            if l.first == "\u{FEFF}" { l = l.dropFirst() }
+            if l.count > 29, l.dropFirst(4).first == "-", let space = l.firstIndex(of: " "), l.distance(from: l.startIndex, to: space) >= 20, l.distance(from: l.startIndex, to: space) <= 34 {
+                l = l[l.index(after: space)...]
+            }
+            return String(l)
+        }.joined(separator: "\n")
+    }
+}
+
+struct LogTextView: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSTextView.scrollableTextView()
+        let tv = scroll.documentView as! NSTextView
+        tv.isEditable = false
+        tv.isSelectable = true
+        tv.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        tv.textContainerInset = NSSize(width: 8, height: 8)
+        tv.isAutomaticSpellingCorrectionEnabled = false
+        set(tv)
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let tv = scroll.documentView as? NSTextView, tv.string != text else { return }
+        set(tv)
+    }
+
+    private func set(_ tv: NSTextView) {
+        let attr = NSMutableAttributedString(string: text, attributes: [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular), .foregroundColor: NSColor.textColor])
+        let ns = text as NSString
+        ns.enumerateSubstrings(in: NSRange(location: 0, length: ns.length), options: .byLines) { sub, range, _, _ in
+            guard let sub else { return }
+            if sub.contains("##[error]") { attr.addAttribute(.foregroundColor, value: NSColor.systemRed, range: range) }
+            else if sub.contains("##[warning]") { attr.addAttribute(.foregroundColor, value: NSColor.systemOrange, range: range) }
+            else if sub.hasPrefix("##[group]") { attr.addAttribute(.foregroundColor, value: NSColor.systemBlue, range: range) }
+        }
+        tv.textStorage?.setAttributedString(attr)
+        tv.scrollToEndOfDocument(nil)
+    }
+}
