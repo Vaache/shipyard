@@ -95,6 +95,40 @@ struct ChatModelOption: Identifiable, Hashable {
     var id: String { value }
 }
 
+struct ContextCategory: Identifiable, Hashable {
+    let name: String
+    let tokens: Int
+    let color: String
+    let kind: String
+    var id: String { name + kind }
+}
+
+struct ContextUsage {
+    let total: Int
+    let max: Int
+    let percentage: Int
+    let autoCompactThreshold: Int?
+    let autoCompactEnabled: Bool
+    let categories: [ContextCategory]
+}
+
+struct RateWindow: Identifiable, Hashable {
+    let key: String
+    let utilization: Double
+    let resetsAt: Date?
+    var id: String { key }
+}
+
+@Observable
+@MainActor
+final class ClaudeUsageStore {
+    static let shared = ClaudeUsageStore()
+    var windows: [RateWindow] = []
+    var subscription: String?
+    var overageNote: String?
+    var updatedAt: Date?
+}
+
 struct ChatCommand: Identifiable, Hashable {
     let name: String
     let description: String
@@ -119,8 +153,12 @@ final class ChatSession {
     var pendingPermissions: [PermissionRequest] = []
     var totalCost: Double = 0
     var contextPercent: Int?
+    var context: ContextUsage?
     var lastError: String?
     var turnStartedAt: Date?
+    var sleeping = false
+    var lastActivity = Date()
+    var memoryBytes = 0
 
     @ObservationIgnored private var process: Process?
     @ObservationIgnored private var stdin: FileHandle?
@@ -131,6 +169,7 @@ final class ChatSession {
     @ObservationIgnored private var messageTexts: [String: [ChatText]] = [:]
     @ObservationIgnored private var queuedPrompt: String?
     @ObservationIgnored private var requestCounter = 0
+    @ObservationIgnored private var intentionalStop = false
     @ObservationIgnored var onSessionId: ((String) -> Void)?
     @ObservationIgnored var onTurnFinished: (() -> Void)?
 
@@ -140,8 +179,29 @@ final class ChatSession {
 
     var pendingCount: Int { pendingPermissions.filter { !$0.resolved }.count }
 
+    var pid: pid_t { process?.processIdentifier ?? 0 }
+
+    var canSleep: Bool { running && !busy && pendingCount == 0 }
+
+    func sleep() {
+        guard canSleep, process != nil else { return }
+        intentionalStop = true
+        process?.terminate()
+    }
+
+    func wake() {
+        guard !running, let sid = sessionId, !sid.isEmpty else { return }
+        start(
+            resume: sid,
+            model: modelValue == "default" || modelValue.isEmpty ? nil : modelValue,
+            effort: effort.isEmpty ? nil : effort,
+            mode: permissionMode == "default" ? nil : permissionMode
+        )
+    }
+
     func start(resume: String? = nil, fork: Bool = false, model: String?, effort: String?, mode: String?, initialPrompt: String? = nil) {
         guard process == nil, let bin = ClaudeLauncher.claudeBinary else {
+            if process != nil { return }
             if ClaudeLauncher.claudeBinary == nil { lastError = t("claude CLI не найден", "claude CLI not found") }
             return
         }
@@ -195,20 +255,32 @@ final class ChatSession {
         process = p
         stdin = inPipe.fileHandleForWriting
         running = true
+        sleeping = false
+        intentionalStop = false
+        lastActivity = Date()
         lastError = nil
         control("initialize", [:])
         if let initialPrompt, !initialPrompt.isEmpty { send(initialPrompt) }
     }
 
     func stop() {
+        intentionalStop = true
         process?.terminate()
     }
 
     private func terminated(code: Int32) {
+        let wasIntentional = intentionalStop
+        intentionalStop = false
         running = false
         busy = false
         process = nil
         stdin = nil
+        memoryBytes = 0
+        if wasIntentional {
+            sleeping = sessionId != nil
+            pendingPermissions.removeAll()
+            return
+        }
         for p in pendingPermissions where !p.resolved { p.resolved = true }
         pendingPermissions.removeAll()
         if code != 0 && code != 15 {
@@ -238,6 +310,7 @@ final class ChatSession {
             queuedPrompt = text
             return
         }
+        lastActivity = Date()
         items.append(.user(id: UUID().uuidString, text: trimmed, images: images))
         var content: [[String: Any]] = images.map {
             ["type": "image", "source": ["type": "base64", "media_type": $0.mediaType, "data": $0.data.base64EncodedString()]]
@@ -271,6 +344,7 @@ final class ChatSession {
     func respond(_ req: PermissionRequest, allow: Bool, always: PermissionSuggestion? = nil, message: String? = nil, updatedInput: [String: Any]? = nil) {
         guard !req.resolved else { return }
         req.resolved = true
+        lastActivity = Date()
         var response: [String: Any]
         if allow {
             response = ["behavior": "allow", "updatedInput": updatedInput ?? req.input]
@@ -294,6 +368,7 @@ final class ChatSession {
     }
 
     private func handle(_ o: [String: Any]) {
+        lastActivity = Date()
         switch o["type"] as? String {
         case "system": handleSystem(o)
         case "stream_event": handleStream(o)
@@ -301,6 +376,7 @@ final class ChatSession {
         case "user": handleUser(o)
         case "result": handleResult(o)
         case "control_request": handleControlRequest(o)
+        case "rate_limit_event": handleRateLimit(o)
         case "control_response": handleControlResponse(o)
         default: break
         }
@@ -501,6 +577,33 @@ final class ChatSession {
         NSApp.requestUserAttention(.informationalRequest)
     }
 
+    private func handleRateLimit(_ o: [String: Any]) {
+        guard let info = o["rate_limit_info"] as? [String: Any] else { return }
+        let store = ClaudeUsageStore.shared
+        if let windows = info["unifiedWindows"] as? [String: [String: Any]] {
+            let order = ["five_hour": 0, "seven_day": 1]
+            store.windows = windows.map { key, w in
+                RateWindow(key: key, utilization: w["utilization"] as? Double ?? 0, resetsAt: (w["resetsAt"] as? Double).map { Date(timeIntervalSince1970: $0) })
+            }
+            .sorted { (order[$0.key] ?? 9, $0.key) < (order[$1.key] ?? 9, $1.key) }
+        }
+        if info["status"] as? String == "rejected" || info["status"] as? String == "allowed_warning" {
+            store.overageNote = info["status"] as? String == "rejected" ? t("Лимит исчерпан", "Limit reached") : t("Близко к лимиту", "Close to the limit")
+        } else {
+            store.overageNote = nil
+        }
+        store.updatedAt = Date()
+    }
+
+    func refreshContext() {
+        guard running else { return }
+        control("get_context_usage", [:])
+    }
+
+    func compact() {
+        send("/compact")
+    }
+
     private func handleControlResponse(_ o: [String: Any]) {
         guard let r = o["response"] as? [String: Any], let rid = r["request_id"] as? String, let body = r["response"] as? [String: Any] else { return }
         if rid.hasSuffix("-initialize") {
@@ -508,16 +611,30 @@ final class ChatSession {
                 guard let v = m["value"] as? String else { return nil }
                 return ChatModelOption(value: v, displayName: m["displayName"] as? String ?? v, description: m["description"] as? String ?? "", efforts: m["supportedEffortLevels"] as? [String] ?? [])
             }
+            if let sub = (body["account"] as? [String: Any])?["subscriptionType"] as? String {
+                ClaudeUsageStore.shared.subscription = sub.replacingOccurrences(of: "Claude ", with: "")
+            }
             commands = (body["commands"] as? [[String: Any]] ?? []).compactMap { c in
                 guard let n = c["name"] as? String else { return nil }
                 return ChatCommand(name: n, description: c["description"] as? String ?? "")
             }
         } else if rid.hasSuffix("-get_context_usage") {
-            if let pct = body["percentage"] as? Double {
-                contextPercent = Int(pct.rounded())
-            } else if let total = body["totalTokens"] as? Double, let max = body["maxTokens"] as? Double, max > 0 {
-                contextPercent = Int((total / max * 100).rounded())
+            let total = (body["totalTokens"] as? NSNumber)?.intValue ?? 0
+            let max = (body["maxTokens"] as? NSNumber)?.intValue ?? 0
+            let pct = (body["percentage"] as? NSNumber)?.intValue ?? (max > 0 ? total * 100 / max : 0)
+            contextPercent = pct
+            let cats = (body["categories"] as? [[String: Any]] ?? []).compactMap { c -> ContextCategory? in
+                guard let name = c["name"] as? String else { return nil }
+                return ContextCategory(name: name, tokens: (c["tokens"] as? NSNumber)?.intValue ?? 0, color: c["color"] as? String ?? "", kind: c["kind"] as? String ?? "used")
             }
+            context = ContextUsage(
+                total: total,
+                max: max,
+                percentage: pct,
+                autoCompactThreshold: (body["autoCompactThreshold"] as? NSNumber)?.intValue,
+                autoCompactEnabled: body["isAutoCompactEnabled"] as? Bool ?? true,
+                categories: cats
+            )
         }
     }
 

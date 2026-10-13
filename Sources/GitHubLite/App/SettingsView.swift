@@ -54,6 +54,18 @@ struct SettingsView: View {
                 }
                 .onChange(of: pollInterval) { app.startPolling() }
             }
+            Section("Claude Code") {
+                Picker(t("Усыплять сессии после простоя", "Sleep idle sessions after"), selection: Binding(get: { app.claude.idleMinutes }, set: { app.claude.idleMinutes = $0 })) {
+                    Text(t("Никогда", "Never")).tag(0)
+                    Text(t("5 минут", "5 minutes")).tag(5)
+                    Text(t("15 минут", "15 minutes")).tag(15)
+                    Text(t("30 минут", "30 minutes")).tag(30)
+                    Text(t("1 час", "1 hour")).tag(60)
+                }
+                Text(t("Спящая сессия не занимает память: процесс claude останавливается, переписка остаётся, следующее сообщение продолжит её.", "A sleeping session uses no memory: the claude process stops, the conversation stays, and the next message resumes it."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("OAuth Device Flow") {
                 TextField("Client ID", text: $clientID)
             }

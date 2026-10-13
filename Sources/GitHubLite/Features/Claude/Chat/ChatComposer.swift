@@ -259,21 +259,7 @@ struct ChatComposer: View {
                 .buttonStyle(.borderless)
                 .help(t("Прикрепить изображение", "Attach image"))
             Spacer()
-            if let pct = chat.contextPercent {
-                HStack(spacing: 4) {
-                    Gauge(value: Double(min(pct, 100)), in: 0...100) { EmptyView() }
-                        .gaugeStyle(.accessoryCircularCapacity)
-                        .scaleEffect(0.42)
-                        .frame(width: 18, height: 18)
-                        .tint(pct > 80 ? .orange : .accentColor)
-                    Text("\(pct)%").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                }
-                .help(t("Занято контекста", "Context used"))
-            }
-            if chat.totalCost > 0 {
-                Text(String(format: "$%.2f", chat.totalCost)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    .help(t("Стоимость сессии", "Session cost"))
-            }
+            UsageRingButton(chat: chat)
             if chat.busy {
                 Button { chat.interrupt() } label: { Image(systemName: "stop.fill") }
                     .buttonStyle(.borderedProminent)

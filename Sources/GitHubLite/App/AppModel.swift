@@ -188,7 +188,7 @@ final class AppModel {
     }
 
     func handle(url: URL) {
-        guard url.scheme == "ghlite" else { return }
+        guard url.scheme?.hasPrefix("ghlite") == true else { return }
         if url.host == "claude" {
             section = .claude
             let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
@@ -210,7 +210,7 @@ final class AppModel {
         if let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "url" })?.value {
             target = q
         } else {
-            target = url.absoluteString.replacingOccurrences(of: "ghlite://", with: "https://")
+            target = "https://" + url.absoluteString.components(separatedBy: "://").dropFirst().joined(separator: "://")
         }
         if let route = GitHubURL.parse(target) { open(route) }
     }

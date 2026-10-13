@@ -5,6 +5,12 @@ import SwiftUI
 final class ClaudeTerminalView: LocalProcessTerminalView {
     var onTerminated: ((Int32?) -> Void)?
     var onTitle: ((String) -> Void)?
+    var lastOutput = Date()
+
+    override func dataReceived(slice: ArraySlice<UInt8>) {
+        lastOutput = Date()
+        super.dataReceived(slice: slice)
+    }
 
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
         if let url = URL(string: link) { LinkBrowser.open(url) }
@@ -74,6 +80,8 @@ final class ClaudeTab: Identifiable {
     var title: String
     var sessionId: String
     var terminalRunning = false
+    var terminalSleeping = false
+    var terminalMemory = 0
     var exitCode: Int32?
     var startedAt = Date()
     let git: GitWorkingCopy
@@ -102,6 +110,33 @@ final class ClaudeTab: Identifiable {
     }
 
     var running: Bool { kind == .chat ? (chat?.running ?? false) : terminalRunning }
+
+    var state: ClaudeTabState {
+        if let chat {
+            if chat.pendingCount > 0 { return .waiting }
+            if chat.busy { return .working }
+            if chat.running { return .active }
+            return chat.sleeping ? .sleeping : .stopped
+        }
+        if terminalRunning { return Date().timeIntervalSince(terminal.lastOutput) < 3 ? .working : .active }
+        return terminalSleeping ? .sleeping : .stopped
+    }
+
+    var memoryBytes: Int { chat?.memoryBytes ?? terminalMemory }
+
+    var pid: pid_t {
+        if let chat { return chat.pid }
+        return terminalRunning ? terminal.process?.shellPid ?? 0 : 0
+    }
+
+    func sleepNow() {
+        if let chat {
+            chat.sleep()
+        } else if terminalRunning {
+            terminalSleeping = true
+            terminal.terminate()
+        }
+    }
     var busy: Bool { chat?.busy ?? false }
     var needsAttention: Bool { (chat?.pendingCount ?? 0) > 0 }
     var chatRunning: Bool { chat?.running ?? false }
@@ -133,6 +168,10 @@ final class ClaudeWorkspace {
         get { _ = modelTick; return ClaudeMode(rawValue: UserDefaults.standard.string(forKey: "claude.mode") ?? "default") ?? .standard }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "claude.mode"); modelTick += 1 }
     }
+    var idleMinutes: Int {
+        get { _ = modelTick; return UserDefaults.standard.object(forKey: "claude.idleSleepMinutes") as? Int ?? 15 }
+        set { UserDefaults.standard.set(newValue, forKey: "claude.idleSleepMinutes"); modelTick += 1 }
+    }
     var preferredKind: ClaudeTabKind {
         get { _ = modelTick; return ClaudeTabKind(rawValue: UserDefaults.standard.string(forKey: "claude.ui") ?? "chat") ?? .chat }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "claude.ui"); modelTick += 1 }
@@ -140,6 +179,45 @@ final class ClaudeWorkspace {
     private var modelTick = 0
 
     @ObservationIgnored private var gits: [String: GitWorkingCopy] = [:]
+    @ObservationIgnored private var monitor: Task<Void, Never>?
+
+    var totalMemory: Int { tabs.reduce(0) { $0 + $1.memoryBytes } }
+    var awakeCount: Int { tabs.filter(\.running).count }
+
+    func startMonitoring() {
+        guard monitor == nil else { return }
+        monitor = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                await self?.tick()
+            }
+        }
+    }
+
+    func tick() async {
+        let live = tabs.filter(\.running)
+        if !live.isEmpty {
+            let snap = await Task.detached(priority: .utility) { ProcessMemory.snapshot() }.value
+            for tab in live {
+                let bytes = ProcessMemory.treeBytes(tab.pid, in: snap)
+                if let chat = tab.chat { chat.memoryBytes = bytes } else { tab.terminalMemory = bytes }
+            }
+        }
+        let limit = idleMinutes
+        guard limit > 0 else { return }
+        let threshold = TimeInterval(limit * 60)
+        for tab in tabs {
+            if let chat = tab.chat {
+                if chat.canSleep, Date().timeIntervalSince(chat.lastActivity) > threshold { chat.sleep() }
+            } else if tab.terminalRunning, Date().timeIntervalSince(tab.terminal.lastOutput) > threshold {
+                tab.sleepNow()
+            }
+        }
+    }
+
+    func sleepAll() {
+        for tab in tabs where tab.running && tab.state != .working && tab.state != .waiting { tab.sleepNow() }
+    }
 
     var selectedTab: ClaudeTab? { tabs.first { $0.id == selectedTabID } }
 
@@ -229,8 +307,13 @@ final class ClaudeWorkspace {
     func restart(_ tab: ClaudeTab) {
         guard !tab.running else { return }
         if tab.kind == .chat {
-            startChat(tab, resume: tab.sessionId.isEmpty ? nil : tab.sessionId, prompt: nil, mode: nil)
+            if let chat = tab.chat, chat.sessionId?.isEmpty == false {
+                chat.wake()
+            } else {
+                startChat(tab, resume: tab.sessionId.isEmpty ? nil : tab.sessionId, prompt: nil, mode: nil)
+            }
         } else {
+            tab.terminalSleeping = false
             launchTerminal(tab, extra: ["--resume", tab.sessionId])
         }
     }
@@ -276,6 +359,7 @@ final class ClaudeWorkspace {
         }
         tabs.append(tab)
         selectedTabID = tab.id
+        startMonitoring()
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             await self?.reloadProjects()

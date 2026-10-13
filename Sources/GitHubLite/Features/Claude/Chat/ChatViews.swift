@@ -41,6 +41,19 @@ struct ChatView: View {
                 }
                 .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
             }
+            if chat.sleeping && !chat.running {
+                HStack(spacing: 8) {
+                    Image(systemName: "moon.zzz.fill").foregroundStyle(.indigo)
+                    Text(t("Сессия спит — процесс остановлен, память освобождена. Новое сообщение продолжит её.", "Session is sleeping — process stopped, memory freed. A new message resumes it."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(t("Разбудить", "Wake up")) { chat.wake() }.controlSize(.small)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(Color.indigo.opacity(0.08))
+            }
             ChatComposer(tab: tab, chat: chat)
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))

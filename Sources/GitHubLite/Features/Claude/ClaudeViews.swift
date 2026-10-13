@@ -50,22 +50,39 @@ struct ClaudeProjectsColumn: View {
                     .foregroundStyle(.orange)
             }
             if !ws.tabs.isEmpty {
-                Section(t("Открытые", "Open")) {
+                Section {
                     ForEach(ws.tabs) { tab in
-                        Button { ws.selectedTabID = tab.id } label: {
-                            HStack(spacing: 8) {
-                                Circle().fill(tab.running ? Color.ghGreen : Color.secondary).frame(width: 7, height: 7)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(tab.title).lineLimit(1)
-                                    Text(tab.projectName).font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                            }
+                        OpenTabRow(tab: tab, selected: ws.selectedTabID == tab.id)
                             .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .listRowBackground(ws.selectedTabID == tab.id ? Color.accentColor.opacity(0.15) : Color.clear)
+                            .onTapGesture { ws.selectedTabID = tab.id }
+                            .listRowBackground(ws.selectedTabID == tab.id ? Color.accentColor.opacity(0.15) : Color.clear)
+                            .contextMenu {
+                                if tab.running {
+                                    Button(t("Освободить память (усыпить)", "Free memory (sleep)")) { tab.sleepNow() }
+                                        .disabled(tab.state == .working || tab.state == .waiting)
+                                } else {
+                                    Button(t("Разбудить", "Wake up")) { ws.restart(tab) }
+                                }
+                                Button(t("Закрыть", "Close")) { ws.close(tab) }
+                            }
                     }
+                } header: {
+                    HStack(spacing: 6) {
+                        Text(t("Открытые", "Open"))
+                        Spacer()
+                        Image(systemName: "memorychip").imageScale(.small)
+                        Text(ws.totalMemory > 0 ? ProcessMemory.format(ws.totalMemory) : "0 " + t("МБ", "MB"))
+                            .monospacedDigit()
+                        if ws.awakeCount > 0 {
+                            Button(t("Усыпить все", "Sleep all")) { ws.sleepAll() }
+                                .buttonStyle(.link)
+                                .help(t("Остановить простаивающие процессы и освободить память", "Stop idle processes and free memory"))
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textCase(nil)
+                    .help(t("Память, которую сейчас занимают процессы Claude", "Memory used by running Claude processes"))
                 }
             }
             ForEach(filtered) { project in
@@ -137,16 +154,27 @@ struct ProjectHeader: View {
     let onNew: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2.weight(.bold)).frame(width: 10)
-            Image(systemName: project.exists ? "folder.fill" : "folder.badge.questionmark").foregroundStyle(project.exists ? Color.accentColor : .secondary)
+        let color = ProjectPalette.color(for: project.path)
+        HStack(spacing: 7) {
+            Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(.secondary).frame(width: 10)
+            ZStack {
+                RoundedRectangle(cornerRadius: 6).fill(color.opacity(project.exists ? 0.18 : 0.08)).frame(width: 24, height: 24)
+                Text(String(project.name.prefix(1)).uppercased())
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(project.exists ? color : .secondary)
+            }
             VStack(alignment: .leading, spacing: 0) {
                 Text(project.name).font(.callout.weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
                 Text(project.path.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"))
                     .font(.caption2).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
             }
             Spacer()
-            Text("\(project.sessions.count)").font(.caption2).foregroundStyle(.secondary)
+            Text("\(project.sessions.count)")
+                .font(.caption2.weight(.semibold).monospacedDigit())
+                .foregroundStyle(color)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(color.opacity(0.14)))
             Button(action: onNew) { Image(systemName: "plus") }
                 .buttonStyle(.borderless)
                 .help(t("Новая сессия", "New session"))
@@ -155,7 +183,8 @@ struct ProjectHeader: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
         .textCase(nil)
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
+        .opacity(project.exists ? 1 : 0.6)
     }
 }
 
@@ -164,27 +193,53 @@ struct SessionRow: View {
     let open: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 5) {
-                if open { Circle().fill(Color.ghGreen).frame(width: 6, height: 6) }
-                Text(session.title).lineLimit(2)
+        HStack(alignment: .top, spacing: 8) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(ProjectPalette.color(for: ClaudeSessionParser.projectRoot(for: session.cwd)).opacity(open ? 1 : 0.45))
+                .frame(width: 3)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if open {
+                        Image(systemName: "bubble.left.fill").font(.caption2).foregroundStyle(Color.ghGreen).help(t("Открыта", "Open"))
+                    }
+                    Text(session.title).lineLimit(2).fontWeight(open ? .semibold : .regular)
+                }
+                HStack(spacing: 5) {
+                    if let b = session.branch { BranchTag(name: b) }
+                    if let w = session.worktreeName {
+                        Label(w, systemImage: "square.stack.3d.up").labelStyle(CompactLabelStyle()).font(.caption).foregroundStyle(.teal).lineLimit(1)
+                    }
+                    if let n = session.prNumber { PRTag(number: n) }
+                    Spacer(minLength: 4)
+                    if let a = session.linesAdded, let r = session.linesRemoved, a + r > 0 {
+                        DiffStat(additions: a, deletions: r)
+                    }
+                    Text(Fmt.rel(session.modified)).font(.caption).foregroundStyle(.tertiary).fixedSize()
+                }
             }
-            HStack(spacing: 6) {
-                if let b = session.branch {
-                    Label(b, systemImage: "arrow.branch").lineLimit(1)
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+struct OpenTabRow: View {
+    let tab: ClaudeTab
+    let selected: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            RoundedRectangle(cornerRadius: 1.5).fill(ProjectPalette.color(for: tab.folder)).frame(width: 3)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Image(systemName: tab.kind == .chat ? "bubble.left.and.text.bubble.right" : "terminal").font(.caption2).foregroundStyle(.secondary)
+                    Text(tab.title).lineLimit(1).fontWeight(selected ? .semibold : .regular)
                 }
-                if let w = session.worktreeName {
-                    Label(w, systemImage: "square.stack.3d.up").lineLimit(1)
+                HStack(spacing: 6) {
+                    TabStateBadge(state: tab.state, memory: tab.memoryBytes)
+                    Spacer(minLength: 4)
+                    Text(tab.projectName).font(.caption).foregroundStyle(ProjectPalette.color(for: tab.folder)).lineLimit(1)
                 }
-                if let n = session.prNumber {
-                    Label("#\(n)", systemImage: "arrow.triangle.pull")
-                }
-                Spacer(minLength: 4)
-                Text(Fmt.rel(session.modified))
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .labelStyle(CompactLabelStyle())
         }
         .padding(.vertical, 2)
     }
@@ -218,7 +273,11 @@ struct ClaudeWorkspaceView: View {
                             ClaudeTerminalHost(tab: tab)
                             if !tab.running {
                                 VStack(spacing: 10) {
-                                    Text(t("Сессия завершена", "Session ended") + (tab.exitCode.map { " (\($0))" } ?? "")).foregroundStyle(.secondary)
+                                    if tab.terminalSleeping {
+                                        Label(t("Сессия спит — память освобождена", "Session is sleeping — memory freed"), systemImage: "moon.zzz.fill").foregroundStyle(.indigo)
+                                    } else {
+                                        Text(t("Сессия завершена", "Session ended") + (tab.exitCode.map { " (\($0))" } ?? "")).foregroundStyle(.secondary)
+                                    }
                                     HStack {
                                         Button(t("Продолжить сессию", "Resume session")) { ws.restart(tab) }.buttonStyle(.borderedProminent)
                                         Button(t("Закрыть вкладку", "Close tab")) { ws.close(tab) }
@@ -301,13 +360,8 @@ struct ClaudeTabBar: View {
                 ForEach(ws.tabs) { tab in
                     let selected = tab.id == ws.selectedTabID
                     HStack(spacing: 6) {
-                        if tab.needsAttention {
-                            Image(systemName: "hand.raised.fill").font(.caption2).foregroundStyle(Color.accentColor)
-                        } else if tab.busy {
-                            ProgressView().controlSize(.mini).frame(width: 10)
-                        } else {
-                            Circle().fill(tab.running ? Color.ghGreen : Color.secondary).frame(width: 6, height: 6)
-                        }
+                        RoundedRectangle(cornerRadius: 2).fill(ProjectPalette.color(for: tab.folder)).frame(width: 3, height: 14)
+                        TabStateBadge(state: tab.state, compact: true)
                         Image(systemName: tab.kind == .chat ? "bubble.left.and.text.bubble.right" : "terminal").font(.caption2).foregroundStyle(.secondary)
                         Text(tab.title).lineLimit(1).frame(maxWidth: 180, alignment: .leading)
                         Text(tab.projectName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -355,15 +409,11 @@ struct ClaudeControlBar: View {
         let ws = app.claude
         HStack(spacing: 6) {
             HStack(spacing: 6) {
-                Image(systemName: "folder.fill").foregroundStyle(Color.accentColor)
+                Image(systemName: "folder.fill").foregroundStyle(ProjectPalette.color(for: tab.folder))
                 Text(tab.projectName).fontWeight(.semibold).lineLimit(1)
-                if let b = tab.git.branch, b != "HEAD" {
-                    Label(b, systemImage: "arrow.branch")
-                        .labelStyle(CompactLabelStyle())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+                if let b = tab.git.branch, b != "HEAD" { BranchTag(name: b) }
+                TabStateBadge(state: tab.state, memory: tab.memoryBytes)
+                    .padding(.leading, 4)
             }
             .fixedSize(horizontal: false, vertical: true)
             .layoutPriority(1)
@@ -406,6 +456,13 @@ struct ClaudeControlBar: View {
                 Button(t("Перезапустить с новыми настройками", "Restart with new settings")) {
                     if tab.kind == .chat { tab.chat?.stop() } else if tab.running { tab.terminal.terminate() }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ws.restart(tab) }
+                }
+                Button(t("Освободить память сейчас", "Free memory now")) { tab.sleepNow() }
+                    .disabled(!tab.running || tab.state == .working || tab.state == .waiting)
+                Menu(t("Усыплять после простоя", "Sleep after idle")) {
+                    ForEach([0, 5, 15, 30, 60], id: \.self) { m in
+                        Button { ws.idleMinutes = m } label: { checkLabel(m == 0 ? t("Никогда", "Never") : t("\(m) мин", "\(m) min"), ws.idleMinutes == m) }
+                    }
                 }
                 Menu(t("Новые сессии открывать как", "Open new sessions as")) {
                     Button { ws.preferredKind = .chat } label: { checkLabel(t("Чат", "Chat"), ws.preferredKind == .chat) }
