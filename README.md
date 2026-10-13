@@ -95,7 +95,7 @@ cd shipyard
 Other scripts:
 
 - `UNIVERSAL=1 ./scripts/build.sh`: universal binary (arm64 + x86_64)
-- `./scripts/release.sh 2.1.0`: universal build packed into `build/Shipyard-2.1.0.dmg` with a drag-to-Applications window (needs `pip3 install --user dmgbuild`)
+- `./scripts/release.sh 2.1.0`: universal build packed into `build/Shipyard-2.1.0.dmg` with a drag-to-Applications window (needs `pip3 install --user dmgbuild`; Finder applies the background so it also shows on macOS 26)
 - `swift scripts/make_icon.swift Resources/Brand/icon.svg build/AppIcon.iconset`: regenerate the icon
 
 The build is signed with the first "Apple Development" identity in your keychain, or ad-hoc if there is none. Set `SIGN_ID` to choose another one.

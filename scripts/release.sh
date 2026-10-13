@@ -15,7 +15,7 @@ APP="build/Shipyard.app"
 DMG="build/Shipyard-$VERSION.dmg"
 LATEST="build/Shipyard.dmg"
 rm -f "$DMG"
-python3 -m dmgbuild -s scripts/dmg_settings.py -D app="$APP" -D readme="Resources/DMG/How to Install.rtf" "Shipyard" "$DMG" >/dev/null
+./scripts/make_dmg.sh "$APP" "$DMG"
 cp "$DMG" "$LATEST"
 echo "DMG: $DMG ($(du -h "$DMG" | cut -f1))"
 
