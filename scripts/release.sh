@@ -11,25 +11,27 @@ plutil -replace CFBundleVersion -string "$BUILD_NUMBER" Resources/Info.plist
 
 UNIVERSAL=1 ./scripts/build.sh
 
-APP="build/GitHub Lite.app"
-DMG="build/GitHubLite-$VERSION.dmg"
+APP="build/Shipyard.app"
+DMG="build/Shipyard-$VERSION.dmg"
+LATEST="build/Shipyard.dmg"
 STAGE="build/dmg"
 rm -rf "$STAGE" "$DMG"
 mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-hdiutil create -volname "GitHub Lite $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+hdiutil create -volname "Shipyard $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$STAGE"
+cp "$DMG" "$LATEST"
 echo "DMG: $DMG ($(du -h "$DMG" | cut -f1))"
 
 if [ "${2:-}" = "--publish" ]; then
     NOTES="Universal build (Apple Silicon + Intel), macOS 14+.
 
-Install: open the DMG and drag **GitHub Lite** to Applications.
+Install: open the DMG and drag **Shipyard** to Applications.
 
 The app is not notarized. On first launch macOS will block it — open **System Settings → Privacy & Security** and click **Open Anyway**, or run:
 \`\`\`
-xattr -dr com.apple.quarantine \"/Applications/GitHub Lite.app\"
+xattr -dr com.apple.quarantine /Applications/Shipyard.app
 \`\`\`"
-    gh release create "v$VERSION" "$DMG" --title "GitHub Lite $VERSION" --notes "$NOTES" --target "$(git rev-parse HEAD)"
+    gh release create "v$VERSION" "$DMG" "$LATEST" --title "Shipyard $VERSION" --notes "$NOTES" --target "$(git rev-parse HEAD)"
 fi

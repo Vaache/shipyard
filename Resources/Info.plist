@@ -5,42 +5,42 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>ru</string>
 	<key>CFBundleDisplayName</key>
-	<string>GitHub Lite</string>
+	<string>Shipyard</string>
 	<key>CFBundleExecutable</key>
-	<string>GitHubLite</string>
+	<string>Shipyard</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>dev.vaache.githublite</string>
+	<string>dev.vaache.shipyard</string>
 	<key>CFBundleName</key>
-	<string>GitHub Lite</string>
+	<string>Shipyard</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.6.0</string>
+	<string>2.0.0</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>dev.vaache.githublite</string>
+			<string>dev.vaache.shipyard</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>ghlite</string>
+				<string>shipyard</string>
 			</array>
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>1.6.0</string>
+	<string>2.0.0</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSDesktopFolderUsageDescription</key>
-	<string>GitHub Lite runs git and Claude Code inside your project folders to show changes and start sessions.</string>
+	<string>Shipyard runs git and Claude Code inside your project folders to show changes and start sessions.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
-	<string>GitHub Lite runs git and Claude Code inside your project folders to show changes and start sessions.</string>
+	<string>Shipyard runs git and Claude Code inside your project folders to show changes and start sessions.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
-	<string>GitHub Lite runs git and Claude Code inside your project folders to show changes and start sessions.</string>
+	<string>Shipyard runs git and Claude Code inside your project folders to show changes and start sessions.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

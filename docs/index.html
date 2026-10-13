@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shipyard — pull requests without the browser</title>
+<meta name="description" content="Shipyard is a tiny native macOS client for GitHub pull requests, with a built-in Claude Code workspace.">
+<meta property="og:title" content="Shipyard — pull requests without the browser">
+<meta property="og:description" content="A tiny native macOS client for GitHub pull requests, with a built-in Claude Code workspace.">
+<meta property="og:image" content="icon-512.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-512.png">
+<link rel="stylesheet" href="demo.css">
+<style>
+:root{
+  --bg:#05070f;--bg2:#0b1222;--panel:#0f172a;--panel2:#131c33;--line:rgba(148,163,184,.14);--line2:rgba(148,163,184,.24);
+  --text:#e8edf6;--muted:#93a1b8;--dim:#64748b;
+  --coral:#fb7185;--coral2:#e11d48;--violet:#a78bfa;--sky:#38bdf8;--green:#4ade80;--amber:#fbbf24;
+  --radius:16px;--maxw:1160px;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+.glow{position:absolute;inset:0;pointer-events:none;background:
+  radial-gradient(600px 380px at 18% 8%,rgba(167,139,250,.18),transparent 70%),
+  radial-gradient(640px 420px at 82% 4%,rgba(56,189,248,.14),transparent 70%),
+  radial-gradient(800px 500px at 50% 100%,rgba(251,113,133,.08),transparent 70%)}
+
+nav{position:sticky;top:0;z-index:20;backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);background:rgba(5,7,15,.72);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:28px;height:64px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:-.01em;font-size:17px}
+.brand img{width:30px;height:30px}
+nav .links{display:flex;gap:24px;margin-left:auto;color:var(--muted);font-size:14.5px}
+nav .links a:hover{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:10px;border-radius:12px;padding:12px 20px;font-weight:600;font-size:15px;transition:transform .15s ease,box-shadow .2s ease,background .2s ease;white-space:nowrap}
+.btn svg{width:18px;height:18px;flex:none}
+.btn-primary{background:linear-gradient(180deg,#fb7185,#e11d48);color:#fff;box-shadow:0 8px 30px rgba(225,29,72,.35),inset 0 1px 0 rgba(255,255,255,.25)}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 36px rgba(225,29,72,.45),inset 0 1px 0 rgba(255,255,255,.25)}
+.btn-ghost{border:1px solid var(--line2);background:rgba(255,255,255,.03)}
+.btn-ghost:hover{background:rgba(255,255,255,.07)}
+.btn-sm{padding:8px 14px;font-size:14px;border-radius:10px}
+
+header.hero{position:relative;padding:96px 0 40px;text-align:center}
+.hero-icon{width:132px;height:132px;margin:0 auto 26px;display:block;filter:drop-shadow(0 22px 40px rgba(0,0,0,.55))}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:1px solid var(--line2);background:rgba(255,255,255,.03);color:var(--muted);font-size:13px;margin-bottom:22px}
+.pill b{color:var(--text);font-weight:600}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+h1{font-size:clamp(40px,6.4vw,76px);line-height:1.02;letter-spacing:-.035em;margin:0 auto 22px;max-width:900px;font-weight:750}
+h1 .grad{background:linear-gradient(92deg,var(--violet),var(--sky) 45%,var(--coral));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:clamp(17px,2vw,20px);color:var(--muted);max-width:680px;margin:0 auto 34px}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.meta{margin-top:16px;color:var(--dim);font-size:13.5px}
+
+.shot{position:relative;margin:64px auto 0;max-width:1100px}
+.shot:before{content:"";position:absolute;inset:8% 6% -4%;background:radial-gradient(closest-side,rgba(56,189,248,.18),transparent);filter:blur(40px);z-index:-1}
+.shot img{display:block;width:100%;height:auto;filter:drop-shadow(0 40px 60px rgba(0,0,0,.55)) drop-shadow(0 0 1px rgba(0,0,0,.6))}
+.gallery{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:48px}
+.gallery figure{margin:0}
+.gallery img{display:block;width:100%;height:auto;filter:drop-shadow(0 24px 40px rgba(0,0,0,.5))}
+.gallery figcaption{margin-top:14px;color:var(--muted);font-size:15px}
+.gallery figcaption b{color:var(--text);font-weight:600}
+.gallery .wide{grid-column:1/-1}
+
+section{padding:110px 0;position:relative}
+.eyebrow{color:var(--sky);font-weight:600;font-size:13.5px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
+h2{font-size:clamp(30px,4vw,46px);line-height:1.08;letter-spacing:-.028em;margin:0 0 16px;font-weight:720}
+.sub{color:var(--muted);font-size:18px;max-width:640px;margin:0}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:52px}
+.card{position:relative;padding:26px;border-radius:var(--radius);background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.01));border:1px solid var(--line);transition:border-color .2s ease,transform .2s ease}
+.card:hover{border-color:var(--line2);transform:translateY(-2px)}
+.card .ic{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;margin-bottom:18px}
+.card .ic svg{width:22px;height:22px}
+.card h4{margin:0 0 8px;font-size:17.5px;letter-spacing:-.01em}
+.card p{margin:0;color:var(--muted);font-size:15px}
+
+.checks{list-style:none;padding:0;margin:28px 0 0;display:grid;gap:14px}
+.checks li{display:flex;gap:12px;color:#cbd5e1}
+.checks li svg{width:20px;height:20px;flex:none;margin-top:3px;color:var(--coral)}
+.checks b{color:#fff;font-weight:600}
+.split{display:grid;grid-template-columns:.8fr 1.2fr;gap:56px;align-items:center}
+.claude-shot img{display:block;width:100%;height:auto;filter:drop-shadow(0 30px 50px rgba(0,0,0,.55))}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:48px;counter-reset:s}
+.step{padding:26px;border-radius:var(--radius);border:1px solid var(--line);background:rgba(255,255,255,.02)}
+.step:before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:rgba(56,189,248,.14);color:var(--sky);font-weight:700;margin-bottom:16px}
+.step h4{margin:0 0 6px;font-size:17px}
+.step p{margin:0;color:var(--muted);font-size:15px}
+.code{margin-top:22px;display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;border:1px solid var(--line2);background:#0b1222;font:14px var(--mono);color:#cbd5e1;overflow-x:auto}
+.code code{white-space:nowrap}
+.code button{margin-left:auto;flex:none;background:rgba(255,255,255,.06);border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:6px 12px;font:600 12.5px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer}
+.code button:hover{background:rgba(255,255,255,.1)}
+.req{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
+.req span{font-size:13.5px;color:var(--muted);padding:6px 12px;border-radius:999px;border:1px solid var(--line)}
+
+.faq{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:44px}
+details{border:1px solid var(--line);border-radius:14px;padding:18px 22px;background:rgba(255,255,255,.02)}
+details[open]{border-color:var(--line2)}
+summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:16px}
+summary::-webkit-details-marker{display:none}
+summary:after{content:"+";color:var(--dim);font-weight:400;font-size:20px;line-height:1}
+details[open] summary:after{content:"–"}
+details p{color:var(--muted);margin:12px 0 0;font-size:15px}
+
+.final{text-align:center;padding:120px 0}
+.final img{width:96px;height:96px;margin-bottom:22px;filter:drop-shadow(0 18px 34px rgba(0,0,0,.5))}
+footer{border-top:1px solid var(--line);padding:34px 0 46px;color:var(--dim);font-size:13.5px}
+footer .wrap{display:flex;gap:20px;justify-content:space-between;flex-wrap:wrap}
+footer a:hover{color:var(--text)}
+
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s ease}
+.reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}.btn,.card{transition:none}}
+
+@media (max-width:1000px){
+  .grid{grid-template-columns:1fr 1fr}.split{grid-template-columns:1fr;gap:40px}
+}
+@media (max-width:680px){
+  .wrap{padding:0 16px}
+  nav .links{display:none}nav .wrap{gap:12px}nav .btn{margin-left:auto}
+  header.hero{padding:64px 0 24px}
+  .hero-icon{width:104px;height:104px}
+  .grid,.steps,.faq,.gallery{grid-template-columns:1fr}
+  section{padding:76px 0}
+  .shot{margin-top:44px}
+  .cta .btn{width:100%;justify-content:center}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#"><img src="icon.svg" alt="">Shipyard</a>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#claude">Claude Code</a>
+      <a href="#tour">Tour</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/Vaache/shipyard" data-repo>GitHub</a>
+    </div>
+    <a class="btn btn-primary btn-sm" href="https://github.com/Vaache/shipyard/releases/latest/download/Shipyard.dmg" data-download>Download</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="glow"></div>
+  <div class="wrap" style="position:relative">
+    <img class="hero-icon" src="icon.svg" alt="Shipyard app icon">
+    <div class="pill"><span class="dot"></span><b>Free &amp; open source</b> · native macOS app</div>
+    <h1>Pull requests,<br><span class="grad">without the browser.</span></h1>
+    <p class="lead">Shipyard is a tiny native GitHub client for your Mac. Review PRs, read huge diffs and hand review comments straight to Claude Code — in a window that opens instantly.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/Vaache/shipyard/releases/latest/download/Shipyard.dmg" data-download>
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.97-3.46-1.07-1.57-2.74-1.78-3.33-1.8-1.42-.14-2.77.83-3.49.83-.72 0-1.83-.81-3.01-.79-1.55.02-2.98.9-3.78 2.29-1.61 2.8-.41 6.94 1.16 9.21.77 1.11 1.68 2.36 2.88 2.31 1.16-.05 1.6-.75 3-.75s1.79.75 3.01.72c1.25-.02 2.04-1.13 2.8-2.25.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.42-.93-2.47-3.71zM14.08 5.85c.64-.78 1.07-1.85.95-2.93-.92.04-2.04.61-2.7 1.39-.59.69-1.11 1.79-.97 2.85 1.03.08 2.07-.52 2.72-1.31z"/></svg>
+        Download for macOS
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/Vaache/shipyard" data-repo>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        View source
+      </a>
+    </div>
+    <div class="meta">Universal · Apple Silicon &amp; Intel · macOS 14 Sonoma or later · ~9 MB</div>
+
+    <div class="shot reveal">
+      <div id="demo" class="demo" role="application" aria-label="Interactive Shipyard demo">
+        <noscript><img src="img/pr-files.webp" width="1600" height="997" alt="Shipyard showing a pull request's changed files"></noscript>
+      </div>
+      <p class="demo-hint"><i></i>Live demo — click around, then try “Fix with Claude Code”</p>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="eyebrow">Why Shipyard</div>
+      <h2>Everything you open GitHub for.<br>Nothing you don't.</h2>
+      <p class="sub">A browser tab with GitHub can eat a gigabyte just to show one diff. Shipyard is a SwiftUI app that does the daily review work and stays out of the way.</p>
+    </div>
+    <div class="grid">
+      <div class="card reveal">
+        <div class="ic" style="background:rgba(56,189,248,.14);color:var(--sky)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+        <h4>Native and instant</h4>
+        <p>Built with SwiftUI and AppKit. Diffs with thousands of lines scroll smoothly, with sticky file headers.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic" style="background:rgba(167,139,250,.14);color:var(--violet)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V10a3 3 0 0 0-3-3h-4"/><path d="m13 5-2 2 2 2"/></svg></div>
+        <h4>Full pull request review</h4>
+        <p>Conversation, review threads, commits, checks and files. Comment, approve, request changes and merge.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic" style="background:rgba(251,113,133,.14);color:var(--coral)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></div>
+        <h4>Fix with Claude Code</h4>
+        <p>One click sends review feedback to Claude Code. Uses the reviewer's “Fix prompt” if there is one, or writes it for you.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic" style="background:rgba(251,191,36,.14);color:var(--amber)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+        <h4>Inbox that keeps up</h4>
+        <p>Notifications, issues and review requests with a menu bar badge, so you know when someone is waiting on you.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic" style="background:rgba(45,212,191,.14);color:#2dd4bf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+        <h4>Repos and projects</h4>
+        <p>Browse repository files with syntax highlighting, and see your GitHub Projects boards without leaving the app.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic" style="background:rgba(74,222,128,.14);color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+        <h4>Your keys stay yours</h4>
+        <p>Sign in with the GitHub CLI, a personal token or Device Flow. Tokens live in the macOS Keychain. No servers in between.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="claude" style="background:linear-gradient(180deg,transparent,rgba(15,23,42,.6) 30%,rgba(15,23,42,.6) 70%,transparent)">
+  <div class="wrap split">
+    <div class="reveal">
+      <div class="eyebrow" style="color:var(--coral)">Claude Code workspace</div>
+      <h2>Review it, fix it, ship it — in one window.</h2>
+      <p class="sub">Shipyard has a built-in chat for the official Claude Code CLI, next to the PR, the changed files and the branch it's working on.</p>
+      <ul class="checks">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Sessions by project.</b> History grouped by folder and branch, with the PR each session opened.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Model, effort and mode.</b> Switch on the fly, approve tool calls inline, see diffs of every edit.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Idle sessions sleep.</b> Chats you left in the morning free their memory and wake up on the next message.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Usage at a glance.</b> Context window and plan limits in one overlay, like the CLI shows.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Personal and work accounts.</b> Keep separate Claude sign-ins and switch between them.</span></li>
+      </ul>
+    </div>
+    <div class="claude-shot reveal">
+      <img src="img/claude.webp" width="1600" height="997" loading="lazy" alt="Claude Code chat in Shipyard editing a file and asking permission to run tests, with the changed files on the right">
+    </div>
+  </div>
+</section>
+
+<section id="tour" style="padding-top:40px">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="eyebrow" style="color:var(--violet)">A closer look</div>
+      <h2>Built for the way you review.</h2>
+      <p class="sub">Every screen is a real screenshot of Shipyard running on a public repository.</p>
+    </div>
+    <div class="gallery">
+      <figure class="reveal wide"><img src="img/pr-files.webp" width="1600" height="997" loading="lazy" alt="Changed files of a pull request with a fast diff viewer"><figcaption><b>Diffs that keep up.</b> A native diff viewer that scrolls thousands of lines smoothly, with a file list and viewed checkmarks.</figcaption></figure>
+      <figure class="reveal"><img src="img/pr-conversation.webp" width="1600" height="997" loading="lazy" alt="Pull request conversation with merge status and unresolved comments"><figcaption><b>The whole conversation.</b> Reviews, threads and checks, plus one click to hand unresolved comments to Claude Code.</figcaption></figure>
+      <figure class="reveal"><img src="img/repo.webp" width="1600" height="997" loading="lazy" alt="Repository browser with file tree and rendered README"><figcaption><b>Browse any repository.</b> File tree, README and code with syntax highlighting.</figcaption></figure>
+      <figure class="reveal wide"><img src="img/light.webp" width="1600" height="997" loading="lazy" alt="Shipyard in light mode"><figcaption><b>Light or dark.</b> The Shipyard theme comes in both, or switch to the native macOS look in Settings.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="eyebrow">Install</div>
+      <h2>Up and running in a minute.</h2>
+      <p class="sub">Shipyard isn't notarized yet, so macOS asks once before the first launch.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><h4>Download</h4><p>Get the latest universal DMG from GitHub Releases.</p></div>
+      <div class="step reveal"><h4>Drag to Applications</h4><p>Open the DMG and drop Shipyard into your Applications folder.</p></div>
+      <div class="step reveal"><h4>Allow first launch</h4><p>System Settings → Privacy &amp; Security → Open Anyway, or run the command below.</p></div>
+    </div>
+    <div class="code reveal"><code id="cmd">xattr -dr com.apple.quarantine /Applications/Shipyard.app</code><button type="button" id="copy">Copy</button></div>
+    <div class="req reveal">
+      <span>macOS 14 or later</span><span>Apple Silicon or Intel</span><span>Optional: GitHub CLI</span><span>Optional: Claude Code CLI</span>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:20px">
+  <div class="wrap">
+    <h2 class="reveal">Questions</h2>
+    <div class="faq">
+      <details class="reveal"><summary>Is this an official GitHub or Anthropic app?</summary><p>No. Shipyard is an independent open-source project. It uses the public GitHub API and runs the official Claude Code CLI that you install yourself.</p></details>
+      <details class="reveal"><summary>Where does my data go?</summary><p>Straight from your Mac to api.github.com. Your token is stored in the macOS Keychain. Shipyard has no backend and no analytics.</p></details>
+      <details class="reveal"><summary>Do I need Claude Code?</summary><p>No. Everything GitHub-related works without it. The Claude Code workspace and “Fix with Claude Code” light up once the CLI is installed and signed in.</p></details>
+      <details class="reveal"><summary>How does sign-in to Claude work?</summary><p>Shipyard never sees your Claude credentials. It runs <code>claude auth login</code>, which opens the official sign-in page in your browser.</p></details>
+    </div>
+  </div>
+</section>
+
+<div class="final">
+  <div class="wrap reveal">
+    <img src="icon.svg" alt="">
+    <h2>Close the browser tab.</h2>
+    <p class="sub" style="margin:0 auto 30px">Free, open source and about 9 MB.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/Vaache/shipyard/releases/latest/download/Shipyard.dmg" data-download>Download Shipyard</a>
+      <a class="btn btn-ghost" href="https://github.com/Vaache/shipyard/releases" data-repo-releases>All releases</a>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Shipyard contributors</span>
+    <span>Not affiliated with GitHub, Inc. or Anthropic. GitHub and Claude are trademarks of their respective owners.</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var copy=document.getElementById("copy");
+  copy.addEventListener("click",function(){
+    var text=document.getElementById("cmd").textContent;
+    (navigator.clipboard?navigator.clipboard.writeText(text):Promise.reject()).then(function(){copy.textContent="Copied";setTimeout(function(){copy.textContent="Copy"},1600)}).catch(function(){
+      var r=document.createRange();r.selectNodeContents(document.getElementById("cmd"));var s=getSelection();s.removeAllRanges();s.addRange(r);
+    });
+  });
+  var els=document.querySelectorAll(".reveal");
+  if(!("IntersectionObserver" in window)){els.forEach(function(e){e.classList.add("in")});return}
+  var io=new IntersectionObserver(function(entries){entries.forEach(function(e){if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target)}})},{rootMargin:"0px 0px -8% 0px"});
+  els.forEach(function(e){io.observe(e)});
+})();
+</script>
+<script src="demo.js"></script>
+</body>
+</html>
