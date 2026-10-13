@@ -46,10 +46,12 @@ struct PRDetailContent: View {
     @State private var showEdit = false
     @State private var showReviewers = false
     @State private var confirm: PRConfirm?
+    @State private var showFix = false
 
     var body: some View {
         VStack(spacing: 0) {
             PRHeaderView(model: model, pr: pr, onMerge: { showMerge = true })
+            ClaudeFixBanner(pr: pr) { showFix = true }
             Picker("", selection: $model.tab) {
                 Text(t("Обсуждение", "Conversation")).tag(PRTab.conversation)
                 Text(t("Коммиты · \(pr.allCommits.totalCount ?? pr.allCommits.nodes.count)", "Commits · \(pr.allCommits.totalCount ?? pr.allCommits.nodes.count)")).tag(PRTab.commits)
@@ -82,6 +84,7 @@ struct PRDetailContent: View {
         .sheet(isPresented: $showMerge) { MergeSheet(model: model, pr: pr) }
         .sheet(isPresented: $showEdit) { EditPRSheet(model: model, pr: pr) }
         .sheet(isPresented: $showReviewers) { ReviewersSheet(model: model) }
+        .sheet(isPresented: $showFix) { FixWithClaudeSheet(model: model, pr: pr) }
         .sheet(item: $model.replyThread) { ReplySheet(model: model, thread: $0) }
         .alert(t("Ошибка", "Error"), isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })) {
             Button("OK") {}
@@ -167,6 +170,8 @@ struct PRDetailContent: View {
                 }
                 .help(t("Отправить ревью", "Submit review"))
             }
+            Button { showFix = true } label: { Label(t("Исправить с Claude", "Fix with Claude"), systemImage: "sparkles") }
+                .help(t("Отправить комментарии ревью в новую сессию Claude Code", "Send review comments to a new Claude Code session"))
             if canMerge {
                 Button { showMerge = true } label: { Label(t("Слить", "Merge"), systemImage: "arrow.triangle.merge") }
                     .help(t("Слить pull request", "Merge pull request"))

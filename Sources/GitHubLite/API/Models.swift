@@ -316,6 +316,7 @@ struct TimelineItem: Decodable {
     let id: String?
     let author: Actor?
     let actor: Actor?
+    let body: String?
     let bodyHTML: String?
     let createdAt: Date?
     let url: String?
@@ -329,7 +330,7 @@ struct TimelineItem: Decodable {
     let requestedReviewer: Reviewer?
 
     enum CodingKeys: String, CodingKey {
-        case typename = "__typename", id, author, actor, bodyHTML, createdAt, url, state, label, source, previousTitle, currentTitle, commit, mergeRefName, requestedReviewer
+        case typename = "__typename", id, author, actor, body, bodyHTML, createdAt, url, state, label, source, previousTitle, currentTitle, commit, mergeRefName, requestedReviewer
     }
 }
 

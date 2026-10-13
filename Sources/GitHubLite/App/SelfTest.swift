@@ -42,7 +42,15 @@ enum SelfTest {
                     let r = try await api.pullRequest(pr)
                     guard let p = r.repository?.pullRequest else { return "not a PR" }
                     let html = ConversationHTML.render(pr: p)
-                    return "state=\(p.state) merge=\(p.mergeStateStatus ?? "-") timeline=\(p.timelineItems.nodes.count) threads=\(p.reviewThreads.nodes.count) checks=\(p.checks.count) html=\(html.count)"
+                    let fix = FixPromptExtractor.latest(in: p)
+                    let unresolved = p.reviewThreads.nodes.filter { !$0.isResolved }
+                    let composed = FixPrompt.build(pr: p, repo: pr.repo, threads: unresolved, general: FixPrompt.generalFeedback(p), options: FixOptions())
+                    let folder = await LocalRepoStore.detect(pr.repo) ?? "-"
+                    if ProcessInfo.processInfo.environment["GHLITE_SHOWFIX"] != nil {
+                        print("----- FOUND -----\n" + (fix.map { String($0.text.prefix(300)) + "\n…\n" + String($0.text.suffix(200)) } ?? "none"))
+                        print("----- COMPOSED -----\n" + String(composed.prefix(1200)))
+                    }
+                    return "state=\(p.state) timeline=\(p.timelineItems.nodes.count) threads=\(p.reviewThreads.nodes.count) unresolved=\(unresolved.count) html=\(html.count) fixPrompt=\(fix.map { "@\($0.author) \($0.text.count)ch \(Fmt.rel($0.date))" } ?? "none") composed=\(composed.count)ch folder=\(folder)"
                 }
                 await step("files") {
                     let f = try await api.pullRequestFiles(pr)

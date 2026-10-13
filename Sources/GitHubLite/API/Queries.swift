@@ -20,7 +20,7 @@ enum Q {
     static let actor = "{ login avatarUrl }"
 
     static let commonTimeline = """
-    ... on IssueComment { id author \(actor) bodyHTML createdAt url }
+    ... on IssueComment { id author \(actor) body bodyHTML createdAt url }
     ... on ClosedEvent { actor \(actor) createdAt }
     ... on ReopenedEvent { actor \(actor) createdAt }
     ... on LabeledEvent { actor \(actor) createdAt label { name color } }
@@ -29,7 +29,7 @@ enum Q {
     """
 
     static let prTimeline = """
-    ... on PullRequestReview { id author \(actor) state bodyHTML createdAt url }
+    ... on PullRequestReview { id author \(actor) state body bodyHTML createdAt url }
     ... on PullRequestCommit { commit { oid abbreviatedOid messageHeadline committedDate author { name avatarUrl user { login } } } }
     ... on MergedEvent { actor \(actor) createdAt mergeRefName commit { abbreviatedOid } }
     ... on HeadRefForcePushedEvent { actor \(actor) createdAt }
