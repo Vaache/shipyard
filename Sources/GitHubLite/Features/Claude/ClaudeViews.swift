@@ -666,80 +666,295 @@ struct LocalFilesPanel: View {
     }
 }
 
+enum PRListScope: String, CaseIterable, Identifiable {
+    case open, merged, mine
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .open: return t("Открытые", "Open")
+        case .merged: return t("Слитые", "Merged")
+        case .mine: return t("Мои", "Mine")
+        }
+    }
+}
+
 struct BranchPRPanel: View {
     @Environment(AppModel.self) private var app
     let tab: ClaudeTab
-    @State private var items: [SearchItem] = []
+    @State private var branchPRs: [SearchItem] = []
+    @State private var linked: SearchItem?
+    @State private var list: [SearchItem] = []
+    @State private var scope: PRListScope = .open
     @State private var loading = false
-    @State private var detail: PullRequestDetail?
-    @State private var fix: FoundFixPrompt?
+    @State private var error: String?
+    @State private var selected: ItemRef?
+
+    private var repo: RepoRef? { tab.git.repo }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if tab.git.repo == nil {
-                Text(t("Папка не связана с репозиторием GitHub", "Folder isn't linked to a GitHub repository")).foregroundStyle(.secondary)
-            } else if loading && items.isEmpty {
-                LoadingView()
-            } else if items.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(t("Для ветки \(tab.git.branch ?? "?") нет PR", "No PR for branch \(tab.git.branch ?? "?")")).foregroundStyle(.secondary)
-                    if let repo = tab.git.repo, let b = tab.git.branch {
-                        Button(t("Создать PR в браузере", "Create PR in browser")) { openInBrowser("https://github.com/\(repo.full)/pull/new/\(b)") }
-                    }
+        Group {
+            if let selected {
+                InspectorPRDetail(tab: tab, ref: selected) { self.selected = nil }
+            } else if repo == nil {
+                VStack(spacing: 8) {
+                    Image(systemName: "link.badge.plus").font(.title2).foregroundStyle(.tertiary)
+                    Text(t("Папка не связана с репозиторием GitHub", "Folder isn't linked to a GitHub repository")).foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ForEach(items) { item in
-                    VStack(alignment: .leading, spacing: 8) {
-                        ItemRow(item: item)
-                        if let detail, detail.number == item.number {
-                            let unresolved = detail.reviewThreads.nodes.filter { !$0.isResolved }
-                            HStack(spacing: 10) {
-                                Label("\(unresolved.count)", systemImage: "text.bubble").help(t("Нерешённые комментарии", "Unresolved comments"))
-                                CIIcon(state: detail.rollup?.state)
-                                if let fix { Text(t("Fix prompt от @\(fix.author)", "Fix prompt by @\(fix.author)")).font(.caption).foregroundStyle(.secondary) }
-                            }
-                            .font(.caption)
-                            HStack {
-                                Button(t("Открыть PR", "Open PR")) {
-                                    app.section = .prs(.mine)
-                                    app.open(item.route)
-                                }
-                                if tab.running {
-                                    Menu(t("Отправить в сессию", "Send to session")) {
-                                        if let fix {
-                                            Button(t("Fix prompt ревьюера", "Reviewer's Fix prompt")) {
-                                                app.claude.send(FixPromptExtractor.wrap(fix, pr: detail, options: FixOptions()), to: tab)
-                                            }
-                                        }
-                                        Button(t("Нерешённые комментарии (\(unresolved.count))", "Unresolved comments (\(unresolved.count))")) {
-                                            app.claude.send(FixPrompt.build(pr: detail, repo: item.repo, threads: unresolved, general: FixPrompt.generalFeedback(detail), options: FixOptions()), to: tab)
-                                        }
-                                        .disabled(unresolved.isEmpty)
-                                    }
-                                    .fixedSize()
-                                }
-                            }
-                            .controlSize(.small)
+                listView
+            }
+        }
+        .task(id: "\(repo?.full ?? "")|\(tab.git.branch ?? "")|\(scope.rawValue)") { await load() }
+    }
+
+    private var listView: some View {
+        List {
+            Section {
+                if branchPRs.isEmpty && linked == nil {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(t("Для ветки \(tab.git.branch ?? "?") PR нет", "No PR for branch \(tab.git.branch ?? "?")"))
+                            .font(.callout).foregroundStyle(.secondary)
+                        if let repo, let b = tab.git.branch, b != "HEAD" {
+                            Button(t("Создать PR в браузере", "Create PR in browser")) { openInBrowser("https://github.com/\(repo.full)/pull/new/\(b)") }
+                                .controlSize(.small)
                         }
                     }
-                    .padding(10)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.07)))
+                    .padding(.vertical, 4)
                 }
+                ForEach(branchPRs) { item in row(item) }
+                if let linked, !branchPRs.contains(where: { $0.number == linked.number }) {
+                    row(linked, note: t("из этой сессии", "from this session"))
+                }
+            } header: {
+                HStack(spacing: 6) {
+                    Text(t("Эта ветка", "This branch"))
+                    if let b = tab.git.branch { BranchTag(name: b) }
+                }
+                .textCase(nil)
             }
-            Spacer()
+            Section {
+                Picker("", selection: $scope) {
+                    ForEach(PRListScope.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .listRowSeparator(.hidden)
+                if let error { Text(error).font(.caption).foregroundStyle(.red) }
+                if list.isEmpty, !loading {
+                    Text(t("Ничего нет", "Nothing here")).font(.callout).foregroundStyle(.tertiary)
+                }
+                ForEach(list) { item in row(item) }
+            } header: {
+                HStack {
+                    Text(repo?.full ?? "")
+                    Spacer()
+                    if loading { ProgressView().controlSize(.mini) }
+                    Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+                        .buttonStyle(.borderless)
+                }
+                .textCase(nil)
+            }
         }
-        .padding(10)
-        .task(id: "\(tab.git.repo?.full ?? "")|\(tab.git.branch ?? "")") { await load() }
+        .listStyle(.inset)
+    }
+
+    private func row(_ item: SearchItem, note: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .top, spacing: 6) {
+                StateBadge(state: item.visualState, compact: true)
+                Text(item.title).lineLimit(2).fontWeight(.medium)
+            }
+            HStack(spacing: 6) {
+                Text("#\(item.number)").foregroundStyle(.secondary)
+                Text(item.author?.login ?? "").foregroundStyle(.secondary)
+                CIIcon(state: item.ciState)
+                if let a = item.additions, let d = item.deletions { DiffStat(additions: a, deletions: d) }
+                if let note { Text(note).foregroundStyle(Color.ghPurple) }
+                Spacer()
+                Text(Fmt.rel(item.updatedAt)).foregroundStyle(.tertiary)
+            }
+            .font(.caption)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onTapGesture { selected = item.ref }
+        .contextMenu {
+            Button(t("Открыть в разделе PR", "Open in PR section")) { app.section = .prs(.mine); app.open(item.route) }
+            Button(t("Открыть в браузере", "Open in browser")) { openInBrowser(item.url) }
+            Button(t("Копировать ссылку", "Copy link")) { copyToPasteboard(item.url) }
+        }
     }
 
     private func load() async {
-        guard let api = app.api, let repo = tab.git.repo, let branch = tab.git.branch, branch != "HEAD" else { return }
+        guard let api = app.api, let repo else { return }
         loading = true
         defer { loading = false }
-        items = (try? await api.search("repo:\(repo.full) is:pr head:\(branch) sort:updated-desc").nodes) ?? []
-        if let first = items.first, let r = try? await api.pullRequest(first.ref), let pr = r.repository?.pullRequest {
-            detail = pr
-            fix = FixPromptExtractor.latest(in: pr)
+        do {
+            if let b = tab.git.branch, b != "HEAD" {
+                branchPRs = try await api.repoPullRequests(repo, headRefName: b, states: ["OPEN", "MERGED", "CLOSED"], first: 5)
+            } else {
+                branchPRs = []
+            }
+            if let number = app.claude.projects.flatMap(\.sessions).first(where: { $0.id == tab.sessionId })?.prNumber,
+               !branchPRs.contains(where: { $0.number == number }) {
+                linked = try? await api.search("repo:\(repo.full) is:pr \(number)").nodes.first { $0.number == number }
+            } else {
+                linked = nil
+            }
+            switch scope {
+            case .open: list = try await api.repoPullRequests(repo, states: ["OPEN"])
+            case .merged: list = try await api.repoPullRequests(repo, states: ["MERGED"])
+            case .mine: list = try await api.search("repo:\(repo.full) is:pr author:@me sort:updated-desc").nodes
+            }
+            error = nil
+        } catch {
+            if isCancellation(error) { return }
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+struct InspectorPRDetail: View {
+    @Environment(AppModel.self) private var app
+    let tab: ClaudeTab
+    let ref: ItemRef
+    let onBack: () -> Void
+    @State private var model: PRDetailModel?
+    @State private var showFiles = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button(action: onBack) { Label(t("Назад", "Back"), systemImage: "chevron.left") }
+                    .buttonStyle(.borderless)
+                Spacer()
+                Button { openInBrowser("https://github.com/\(ref.repo.full)/pull/\(ref.number)") } label: { Image(systemName: "safari") }
+                    .buttonStyle(.borderless)
+                    .help(t("В браузере", "Open in browser"))
+                Button(t("Открыть полностью", "Open full")) { app.section = .prs(.mine); app.open(.pr(ref)) }
+                    .controlSize(.small)
+            }
+            .padding(10)
+            Divider()
+            if let pr = model?.pr {
+                ScrollView { content(pr).padding(12) }
+            } else if let e = model?.error {
+                ErrorStateView(message: e) { Task { await model?.load() } }
+            } else {
+                LoadingView()
+            }
+        }
+        .task(id: ref) {
+            let m = app.prModel(ref)
+            model = m
+            await m?.load()
+        }
+    }
+
+    @ViewBuilder
+    private func content(_ pr: PullRequestDetail) -> some View {
+        let unresolved = pr.reviewThreads.nodes.filter { !$0.isResolved }
+        let fix = FixPromptExtractor.latest(in: pr)
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(pr.title).font(.headline).textSelection(.enabled)
+                HStack(spacing: 6) {
+                    StateBadge(state: pr.visualState)
+                    Text("#\(pr.number)").foregroundStyle(.secondary)
+                    DiffStat(additions: pr.additions, deletions: pr.deletions)
+                }
+                HStack(spacing: 4) {
+                    BranchTag(name: pr.baseRefName)
+                    Image(systemName: "arrow.left").font(.caption2).foregroundStyle(.secondary)
+                    BranchTag(name: pr.headRefName)
+                }
+            }
+            if let m = model, pr.isOpen {
+                MergeStatusBar(model: m, pr: pr, onMerge: { app.section = .prs(.mine); app.open(.pr(ref)) })
+            }
+            HStack(spacing: 14) {
+                let checks = pr.checks
+                Label("\(checks.filter { $0.outcome == .success }.count)/\(checks.count)", systemImage: "checklist")
+                    .foregroundStyle(checks.contains { $0.outcome == .failure } ? Color.ghRed : .secondary)
+                Label("\(unresolved.count)", systemImage: "text.bubble")
+                    .foregroundStyle(unresolved.isEmpty ? Color.secondary : Color.orange)
+                    .help(t("Нерешённые комментарии", "Unresolved comments"))
+                if !model!.reviewers.isEmpty {
+                    HStack(spacing: 3) {
+                        ForEach(model!.reviewers, id: \.login) { ReviewerBadge(login: $0.login, avatar: $0.avatar, state: $0.state) }
+                    }
+                }
+            }
+            .font(.caption)
+            if tab.chat != nil || tab.running {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(t("Отправить в эту сессию", "Send to this session")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    if let fix {
+                        Button {
+                            app.claude.send(FixPromptExtractor.wrap(fix, pr: pr, options: FixOptions()), to: tab)
+                        } label: {
+                            Label(t("Fix prompt от @\(fix.author)", "Fix prompt by @\(fix.author)"), systemImage: "wand.and.stars")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    Button {
+                        app.claude.send(FixPrompt.build(pr: pr, repo: ref.repo, threads: unresolved, general: FixPrompt.generalFeedback(pr), options: FixOptions()), to: tab)
+                    } label: {
+                        Label(t("Нерешённые комментарии (\(unresolved.count))", "Unresolved comments (\(unresolved.count))"), systemImage: "text.bubble")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .disabled(unresolved.isEmpty)
+                    Button {
+                        app.claude.send(t("Посмотри PR #\(pr.number) (\(pr.url)) и кратко расскажи, что в нём сделано и есть ли проблемы.", "Review PR #\(pr.number) (\(pr.url)) and briefly summarize what it does and any problems."), to: tab)
+                    } label: {
+                        Label(t("Попросить Claude разобрать PR", "Ask Claude to review this PR"), systemImage: "sparkles")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .controlSize(.small)
+            }
+            if !unresolved.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(t("Нерешённые комментарии", "Unresolved comments")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(unresolved) { th in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("\(th.path)\((th.line ?? th.originalLine).map { ":\($0)" } ?? "")")
+                                .font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+                            if let c = th.comments.nodes.first {
+                                HStack(alignment: .top, spacing: 5) {
+                                    Avatar(url: c.author?.avatarUrl, size: 14)
+                                    MarkdownText(text: c.body).font(.callout).lineLimit(4)
+                                }
+                            }
+                        }
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.08)))
+                    }
+                }
+            }
+            DisclosureGroup(isExpanded: $showFiles) {
+                VStack(alignment: .leading, spacing: 3) {
+                    if let m = model, m.filesLoaded {
+                        ForEach(m.files) { f in
+                            HStack(spacing: 6) {
+                                Text(f.statusLetter).font(.caption2.weight(.bold).monospaced()).foregroundStyle(.secondary)
+                                Text(f.id).font(.caption.monospaced()).lineLimit(1).truncationMode(.head)
+                                Spacer()
+                                DiffStat(additions: f.additions, deletions: f.deletions)
+                            }
+                        }
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                .padding(.top, 4)
+            } label: {
+                Text(t("Изменённые файлы · \(pr.changedFiles)", "Files changed · \(pr.changedFiles)")).font(.caption.weight(.semibold))
+            }
+            .onChange(of: showFiles) { _, open in if open { Task { await model?.loadFiles() } } }
         }
     }
 }

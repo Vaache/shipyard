@@ -58,6 +58,15 @@ enum SelfTest {
                     return "files=\(f.count) lines=\(lines)"
                 }
             }
+            if let pr = samplePR {
+                await step("repo PRs \(pr.repo.full)") {
+                    let open = try await api.repoPullRequests(pr.repo, states: ["OPEN"])
+                    let merged = try await api.repoPullRequests(pr.repo, states: ["MERGED"])
+                    let branch = ProcessInfo.processInfo.environment["GHLITE_BRANCH"] ?? "feat/composer-hashtags"
+                    let byBranch = try await api.repoPullRequests(pr.repo, headRefName: branch, states: ["OPEN", "MERGED", "CLOSED"], first: 5)
+                    return "open=\(open.count) [\(open.prefix(3).map { "#\($0.number)" }.joined(separator: ","))] merged=\(merged.count) [\(merged.prefix(3).map { "#\($0.number)" }.joined(separator: ","))] branch(\(branch))=\(byBranch.map { "#\($0.number) \($0.prState ?? "")" })"
+                }
+            }
             if let issue = sampleIssue {
                 await step("issue \(issue.title)") {
                     let r = try await api.issue(issue)

@@ -24,6 +24,18 @@ extension GitHubAPI {
         return r.search
     }
 
+    func repoPullRequests(_ repo: RepoRef, headRefName: String? = nil, states: [String], first: Int = 30) async throws -> [SearchItem] {
+        struct R: Decodable {
+            struct Repo: Decodable {
+                struct Conn: Decodable { let nodes: [SearchItem] }
+                let pullRequests: Conn
+            }
+            let repository: Repo?
+        }
+        let r: R = try await graphQL(Q.repoPullRequests, ["o": repo.owner, "n": repo.name, "b": headRefName, "states": states, "first": first])
+        return r.repository?.pullRequests.nodes ?? []
+    }
+
     func badges() async throws -> BadgeResponse {
         try await graphQL(Q.badges)
     }

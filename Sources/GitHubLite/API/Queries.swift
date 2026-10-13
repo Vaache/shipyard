@@ -1,6 +1,14 @@
 import Foundation
 
 enum Q {
+    static let prItemFragment = """
+    fragment PRItem on PullRequest { number title url prState: state isDraft createdAt updatedAt author { login avatarUrl } repository { nameWithOwner } reviewDecision additions deletions comments { totalCount } labels(first: 6) { nodes { name color } } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
+    """
+
+    static let repoPullRequests = """
+    query($o: String!, $n: String!, $b: String, $states: [PullRequestState!], $first: Int!) { repository(owner: $o, name: $n) { pullRequests(headRefName: $b, states: $states, first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { __typename ...PRItem } } } }
+    """ + prItemFragment
+
     static let itemFragments = """
     fragment PRItem on PullRequest { number title url prState: state isDraft createdAt updatedAt author { login avatarUrl } repository { nameWithOwner } reviewDecision additions deletions comments { totalCount } labels(first: 6) { nodes { name color } } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
     fragment IssueItem on Issue { number title url issueState: state stateReason createdAt updatedAt author { login avatarUrl } repository { nameWithOwner } comments { totalCount } labels(first: 6) { nodes { name color } } }
