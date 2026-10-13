@@ -63,29 +63,51 @@ enum ClaudeMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum ClaudeTabKind: String { case chat, terminal }
+
 @Observable
 @MainActor
 final class ClaudeTab: Identifiable {
     let id = UUID()
     let folder: String
+    let kind: ClaudeTabKind
     var title: String
     var sessionId: String
-    var running = false
+    var terminalRunning = false
     var exitCode: Int32?
     var startedAt = Date()
-    let terminal: ClaudeTerminalView
     let git: GitWorkingCopy
+    let chat: ChatSession?
+    @ObservationIgnored private var _terminal: ClaudeTerminalView?
+    @ObservationIgnored var restartChat: (() -> Void)?
+    @ObservationIgnored var openNewChat: (() -> Void)?
 
-    init(folder: String, title: String, sessionId: String, git: GitWorkingCopy) {
+    init(folder: String, kind: ClaudeTabKind, title: String, sessionId: String, git: GitWorkingCopy) {
         self.folder = folder
+        self.kind = kind
         self.title = title
         self.sessionId = sessionId
         self.git = git
-        terminal = ClaudeTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 500))
-        terminal.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
-        terminal.optionAsMetaKey = false
-        terminal.applyAppearance()
+        chat = kind == .chat ? ChatSession(folder: folder) : nil
     }
+
+    var terminal: ClaudeTerminalView {
+        if let t = _terminal { return t }
+        let t = ClaudeTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 500))
+        t.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+        t.optionAsMetaKey = false
+        t.applyAppearance()
+        _terminal = t
+        return t
+    }
+
+    var running: Bool { kind == .chat ? (chat?.running ?? false) : terminalRunning }
+    var busy: Bool { chat?.busy ?? false }
+    var needsAttention: Bool { (chat?.pendingCount ?? 0) > 0 }
+    var chatRunning: Bool { chat?.running ?? false }
+
+    func ensureChatRunning() { restartChat?() }
+    func newChatInSameFolder() { openNewChat?() }
 
     var projectName: String { (folder as NSString).lastPathComponent }
 }
@@ -111,6 +133,10 @@ final class ClaudeWorkspace {
         get { _ = modelTick; return ClaudeMode(rawValue: UserDefaults.standard.string(forKey: "claude.mode") ?? "default") ?? .standard }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "claude.mode"); modelTick += 1 }
     }
+    var preferredKind: ClaudeTabKind {
+        get { _ = modelTick; return ClaudeTabKind(rawValue: UserDefaults.standard.string(forKey: "claude.ui") ?? "chat") ?? .chat }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "claude.ui"); modelTick += 1 }
+    }
     private var modelTick = 0
 
     @ObservationIgnored private var gits: [String: GitWorkingCopy] = [:]
@@ -118,6 +144,8 @@ final class ClaudeWorkspace {
     var selectedTab: ClaudeTab? { tabs.first { $0.id == selectedTabID } }
 
     var cliAvailable: Bool { ClaudeLauncher.claudeBinary != nil }
+
+    var attentionCount: Int { tabs.filter(\.needsAttention).count }
 
     func git(for folder: String) -> GitWorkingCopy {
         if let g = gits[folder] { return g }
@@ -135,57 +163,119 @@ final class ClaudeWorkspace {
     }
 
     func tab(forSession id: String) -> ClaudeTab? {
-        tabs.first { $0.sessionId == id && $0.running }
+        tabs.first { $0.sessionId == id }
     }
 
     @discardableResult
-    func newSession(folder: String, prompt: String? = nil, name: String? = nil, mode: ClaudeMode? = nil) -> ClaudeTab {
+    func newSession(folder: String, prompt: String? = nil, name: String? = nil, mode: ClaudeMode? = nil, kind: ClaudeTabKind? = nil) -> ClaudeTab {
+        let kind = kind ?? preferredKind
+        let title = name ?? prompt.map { String($0.prefix(48)) } ?? t("Новая сессия", "New session")
+        if kind == .chat {
+            let tab = makeTab(folder: folder, kind: .chat, title: title, sessionId: "")
+            startChat(tab, resume: nil, prompt: prompt, mode: mode)
+            return tab
+        }
         let sessionId = UUID().uuidString.lowercased()
         var args = ["--session-id", sessionId]
         if let name, !name.isEmpty { args += ["-n", name] }
         if let prompt, !prompt.isEmpty { args.append(prompt) }
-        return start(folder: folder, title: name ?? t("Новая сессия", "New session"), sessionId: sessionId, extra: args, mode: mode)
+        let tab = makeTab(folder: folder, kind: .terminal, title: title, sessionId: sessionId)
+        launchTerminal(tab, extra: args, mode: mode)
+        return tab
     }
 
     @discardableResult
-    func resume(_ s: ClaudeSessionInfo, fork: Bool = false) -> ClaudeTab {
+    func resume(_ s: ClaudeSessionInfo, fork: Bool = false, kind: ClaudeTabKind? = nil) -> ClaudeTab {
         if !fork, let open = tab(forSession: s.id) {
             selectedTabID = open.id
             return open
         }
-        var args = ["--resume", s.id]
-        if fork { args.append("--fork-session") }
-        return start(folder: s.cwd, title: s.title, sessionId: s.id, extra: args)
+        let kind = kind ?? preferredKind
+        let tab = makeTab(folder: s.cwd, kind: kind, title: s.title, sessionId: fork ? "" : s.id)
+        if kind == .chat {
+            tab.chat?.loadHistory(from: s.file)
+            startChat(tab, resume: s.id, fork: fork, prompt: nil, mode: nil)
+        } else {
+            var args = ["--resume", s.id]
+            if fork { args.append("--fork-session") }
+            launchTerminal(tab, extra: args)
+        }
+        return tab
+    }
+
+    func openInTerminal(_ tab: ClaudeTab) {
+        guard !tab.sessionId.isEmpty else { return }
+        tab.chat?.stop()
+        let t = makeTab(folder: tab.folder, kind: .terminal, title: tab.title, sessionId: tab.sessionId)
+        launchTerminal(t, extra: ["--resume", tab.sessionId])
+        tabs.removeAll { $0.id == tab.id }
+        selectedTabID = t.id
+    }
+
+    func openInChat(_ tab: ClaudeTab) {
+        guard !tab.sessionId.isEmpty else { return }
+        if tab.terminalRunning { tab.terminal.terminate() }
+        let c = makeTab(folder: tab.folder, kind: .chat, title: tab.title, sessionId: tab.sessionId)
+        if let file = sessionFile(tab.sessionId) { c.chat?.loadHistory(from: file) }
+        startChat(c, resume: tab.sessionId, prompt: nil, mode: nil)
+        tabs.removeAll { $0.id == tab.id }
+        selectedTabID = c.id
+    }
+
+    private func sessionFile(_ id: String) -> URL? {
+        projects.flatMap(\.sessions).first { $0.id == id }?.file
     }
 
     func restart(_ tab: ClaudeTab) {
         guard !tab.running else { return }
-        launch(tab, extra: ["--resume", tab.sessionId])
+        if tab.kind == .chat {
+            startChat(tab, resume: tab.sessionId.isEmpty ? nil : tab.sessionId, prompt: nil, mode: nil)
+        } else {
+            launchTerminal(tab, extra: ["--resume", tab.sessionId])
+        }
     }
 
     func close(_ tab: ClaudeTab) {
-        if tab.running { tab.terminal.terminate() }
+        tab.chat?.stop()
+        if tab.terminalRunning { tab.terminal.terminate() }
         tabs.removeAll { $0.id == tab.id }
         if selectedTabID == tab.id { selectedTabID = tabs.last?.id }
     }
 
     func applyModelToCurrent() {
         guard let tab = selectedTab, tab.running else { return }
-        if model != .standard { tab.terminal.send(txt: "/model \(model.rawValue)\r") }
+        if let chat = tab.chat {
+            if model != .standard { chat.setModel(model.rawValue) }
+        } else if model != .standard {
+            tab.terminal.send(txt: "/model \(model.rawValue)\r")
+        }
     }
 
     func send(_ text: String, to tab: ClaudeTab? = nil, submit: Bool = false) {
-        guard let tab = tab ?? selectedTab, tab.running else { return }
+        guard let tab = tab ?? selectedTab else { return }
+        if let chat = tab.chat {
+            if !chat.running { restart(tab) }
+            chat.send(text)
+            return
+        }
+        guard tab.running else { return }
         tab.terminal.send(txt: "\u{1b}[200~" + text + "\u{1b}[201~")
         if submit { tab.terminal.send(txt: "\r") }
         tab.terminal.window?.makeFirstResponder(tab.terminal)
     }
 
-    private func start(folder: String, title: String, sessionId: String, extra: [String], mode: ClaudeMode? = nil) -> ClaudeTab {
-        let tab = ClaudeTab(folder: folder, title: title, sessionId: sessionId, git: git(for: folder))
+    private func makeTab(folder: String, kind: ClaudeTabKind, title: String, sessionId: String) -> ClaudeTab {
+        let tab = ClaudeTab(folder: folder, kind: kind, title: title, sessionId: sessionId, git: git(for: folder))
+        tab.restartChat = { [weak self, weak tab] in
+            guard let self, let tab else { return }
+            self.restart(tab)
+        }
+        tab.openNewChat = { [weak self, weak tab] in
+            guard let self, let tab else { return }
+            self.newSession(folder: tab.folder, kind: .chat)
+        }
         tabs.append(tab)
         selectedTabID = tab.id
-        launch(tab, extra: extra, mode: mode)
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             await self?.reloadProjects()
@@ -193,7 +283,25 @@ final class ClaudeWorkspace {
         return tab
     }
 
-    private func launch(_ tab: ClaudeTab, extra: [String], mode modeOverride: ClaudeMode? = nil) {
+    private func startChat(_ tab: ClaudeTab, resume: String?, fork: Bool = false, prompt: String?, mode modeOverride: ClaudeMode?) {
+        guard let chat = tab.chat else { return }
+        chat.onSessionId = { [weak tab] sid in tab?.sessionId = sid }
+        chat.onTurnFinished = { [weak tab] in
+            guard let tab else { return }
+            Task { await tab.git.refresh() }
+        }
+        let m = modeOverride ?? mode
+        chat.start(
+            resume: resume,
+            fork: fork,
+            model: model == .standard ? nil : model.rawValue,
+            effort: effort == .standard ? nil : effort.rawValue,
+            mode: m == .standard ? nil : m.rawValue,
+            initialPrompt: prompt
+        )
+    }
+
+    private func launchTerminal(_ tab: ClaudeTab, extra: [String], mode modeOverride: ClaudeMode? = nil) {
         let mode = modeOverride ?? self.mode
         var args: [String] = []
         if model != .standard { args += ["--model", model.rawValue] }
@@ -213,11 +321,11 @@ final class ClaudeWorkspace {
             env.removeValue(forKey: key)
         }
 
-        tab.running = true
+        tab.terminalRunning = true
         tab.exitCode = nil
         tab.startedAt = Date()
         tab.terminal.onTerminated = { [weak tab] code in
-            tab?.running = false
+            tab?.terminalRunning = false
             tab?.exitCode = code
         }
         tab.terminal.startProcess(

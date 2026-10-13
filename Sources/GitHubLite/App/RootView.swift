@@ -99,7 +99,7 @@ struct SidebarView: View {
             }
             Section("AI") {
                 Label("Claude Code", systemImage: "sparkles")
-                    .badge(app.claude.tabs.filter(\.running).count)
+                    .badge(app.claude.attentionCount > 0 ? app.claude.attentionCount : app.claude.tabs.filter(\.running).count)
                     .tag(SidebarSection.claude)
             }
         }

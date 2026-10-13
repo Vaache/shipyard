@@ -110,8 +110,9 @@ struct ClaudeProjectsColumn: View {
 
     @ViewBuilder
     private func sessionMenu(_ s: ClaudeSessionInfo) -> some View {
-        Button(t("Продолжить", "Resume")) { ws.resume(s) }
-        Button(t("Продолжить в новой ветке сессии (fork)", "Fork session")) { ws.resume(s, fork: true) }
+        Button(t("Продолжить как чат", "Resume as chat")) { ws.resume(s, kind: .chat) }
+        Button(t("Продолжить в терминале", "Resume in terminal")) { ws.resume(s, kind: .terminal) }
+        Button(t("Ответвить сессию (fork)", "Fork session")) { ws.resume(s, fork: true) }
         Divider()
         Button(t("Копировать ID сессии", "Copy session ID")) { copyToPasteboard(s.id) }
         Button(t("Копировать команду resume", "Copy resume command")) { copyToPasteboard("cd \(ClaudeLauncher.shellQuote(s.cwd)) && claude --resume \(s.id)") }
@@ -210,6 +211,9 @@ struct ClaudeWorkspaceView: View {
                         ClaudeTabBar()
                         ClaudeControlBar(tab: tab)
                         Divider()
+                        if let chat = tab.chat {
+                            ChatView(tab: tab, chat: chat)
+                        } else {
                         ZStack {
                             ClaudeTerminalHost(tab: tab)
                             if !tab.running {
@@ -223,6 +227,7 @@ struct ClaudeWorkspaceView: View {
                                 .padding(16)
                                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                             }
+                        }
                         }
                     }
                     .frame(minWidth: 520, idealWidth: 900)
@@ -296,7 +301,14 @@ struct ClaudeTabBar: View {
                 ForEach(ws.tabs) { tab in
                     let selected = tab.id == ws.selectedTabID
                     HStack(spacing: 6) {
-                        Circle().fill(tab.running ? Color.ghGreen : Color.secondary).frame(width: 6, height: 6)
+                        if tab.needsAttention {
+                            Image(systemName: "hand.raised.fill").font(.caption2).foregroundStyle(Color.accentColor)
+                        } else if tab.busy {
+                            ProgressView().controlSize(.mini).frame(width: 10)
+                        } else {
+                            Circle().fill(tab.running ? Color.ghGreen : Color.secondary).frame(width: 6, height: 6)
+                        }
+                        Image(systemName: tab.kind == .chat ? "bubble.left.and.text.bubble.right" : "terminal").font(.caption2).foregroundStyle(.secondary)
                         Text(tab.title).lineLimit(1).frame(maxWidth: 180, alignment: .leading)
                         Text(tab.projectName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         Button { ws.close(tab) } label: { Image(systemName: "xmark").font(.caption2.weight(.bold)) }
@@ -313,7 +325,8 @@ struct ClaudeTabBar: View {
                 }
                 Menu {
                     if let current = ws.selectedTab {
-                        Button(t("В папке \(current.projectName)", "In \(current.projectName)")) { ws.newSession(folder: current.folder) }
+                        Button(t("Чат в \(current.projectName)", "Chat in \(current.projectName)")) { ws.newSession(folder: current.folder, kind: .chat) }
+                        Button(t("Терминал в \(current.projectName)", "Terminal in \(current.projectName)")) { ws.newSession(folder: current.folder, kind: .terminal) }
                         Divider()
                     }
                     ForEach(ws.projects.filter(\.exists).prefix(12)) { p in
@@ -355,6 +368,7 @@ struct ClaudeControlBar: View {
             .fixedSize(horizontal: false, vertical: true)
             .layoutPriority(1)
             Spacer(minLength: 8)
+            if tab.kind == .terminal {
             ControlMenu(icon: "cpu", title: ws.model.title, help: t("Модель", "Model")) {
                 ForEach(ClaudeModelOption.allCases) { m in
                     Button { ws.model = m } label: { checkLabel(m.title, ws.model == m) }
@@ -373,10 +387,29 @@ struct ClaudeControlBar: View {
                     Button { ws.mode = m } label: { checkLabel(m.title, ws.mode == m) }
                 }
             }
+            } else if let chat = tab.chat, chat.totalCost > 0 || chat.sessionId != nil {
+                Text(chat.model.replacingOccurrences(of: "claude-", with: "")).font(.caption).foregroundStyle(.secondary)
+            }
+            Picker("", selection: Binding(get: { tab.kind }, set: { k in
+                if k == .terminal && tab.kind == .chat { ws.openInTerminal(tab) }
+                if k == .chat && tab.kind == .terminal { ws.openInChat(tab) }
+            })) {
+                Image(systemName: "bubble.left.and.text.bubble.right").tag(ClaudeTabKind.chat)
+                Image(systemName: "terminal").tag(ClaudeTabKind.terminal)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .disabled(tab.sessionId.isEmpty)
+            .help(t("Чат или терминал (та же сессия)", "Chat or terminal (same session)"))
             Menu {
                 Button(t("Перезапустить с новыми настройками", "Restart with new settings")) {
-                    if tab.running { tab.terminal.terminate() }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { ws.restart(tab) }
+                    if tab.kind == .chat { tab.chat?.stop() } else if tab.running { tab.terminal.terminate() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ws.restart(tab) }
+                }
+                Menu(t("Новые сессии открывать как", "Open new sessions as")) {
+                    Button { ws.preferredKind = .chat } label: { checkLabel(t("Чат", "Chat"), ws.preferredKind == .chat) }
+                    Button { ws.preferredKind = .terminal } label: { checkLabel(t("Терминал", "Terminal"), ws.preferredKind == .terminal) }
                 }
                 Divider()
                 Button(t("Продолжить в Terminal", "Continue in Terminal")) {

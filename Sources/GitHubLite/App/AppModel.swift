@@ -196,6 +196,13 @@ final class AppModel {
             if url.path == "/new", let folder = value("folder"), FileManager.default.fileExists(atPath: folder) {
                 claude.newSession(folder: folder, prompt: value("prompt"), name: value("name"), mode: value("mode").flatMap(ClaudeMode.init(rawValue:)))
             }
+            if url.path == "/resume", let id = value("id") {
+                let kind = value("kind").flatMap(ClaudeTabKind.init(rawValue:))
+                Task {
+                    if !claude.projects.flatMap(\.sessions).contains(where: { $0.id == id }) { await claude.reloadProjects() }
+                    if let s = claude.projects.flatMap(\.sessions).first(where: { $0.id == id }) { claude.resume(s, kind: kind) }
+                }
+            }
             NSApp.activate(ignoringOtherApps: true)
             return
         }

@@ -197,6 +197,7 @@ struct DiffTableView: NSViewRepresentable {
         weak var table: NSTableView?
         var rows: [DiffTableRow] = []
         var ids: [String] = []
+        var signature: [Int] = []
         var version = -1
         var onComment: ((String, DiffLine) -> Void)?
         var lastScrollTarget: String?
@@ -225,14 +226,30 @@ struct DiffTableView: NSViewRepresentable {
         func update(rows newRows: [DiffTableRow], version newVersion: Int, onComment: ((String, DiffLine) -> Void)?) {
             self.onComment = onComment
             let newIds = newRows.map(\.id)
-            guard newIds != ids || newVersion != version else {
+            let newSignature = newRows.map { row -> Int in
+                switch row {
+                case .line(let id, let line, let commentable):
+                    var h = Hasher()
+                    h.combine(id)
+                    h.combine(line.text)
+                    h.combine(line.oldLine)
+                    h.combine(line.newLine)
+                    h.combine(commentable)
+                    return h.finalize()
+                case .view(let id, _, _):
+                    return id.hashValue
+                }
+            }
+            guard newIds != ids || newVersion != version || newSignature != signature else {
                 rows = newRows
                 refreshVisibleHosts()
                 return
             }
             rows = newRows
             ids = newIds
+            signature = newSignature
             version = newVersion
+            lineHeights.removeAll()
             table?.reloadData()
         }
 
