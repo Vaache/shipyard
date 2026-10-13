@@ -95,6 +95,7 @@ h2{font-size:clamp(30px,4vw,46px);line-height:1.08;letter-spacing:-.028em;margin
 .req span{font-size:13.5px;color:var(--muted);padding:6px 12px;border-radius:999px;border:1px solid var(--line)}
 
 .faq{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:44px;align-items:start}
+.faq-col{display:flex;flex-direction:column;gap:18px;min-width:0}
 details{border:1px solid var(--line);border-radius:14px;padding:18px 22px;background:rgba(255,255,255,.02)}
 details[open]{border-color:var(--line2)}
 summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:16px}
@@ -273,11 +274,15 @@ footer a:hover{color:var(--text)}
   <div class="wrap">
     <h2 class="reveal">Questions</h2>
     <div class="faq">
-      <details class="reveal"><summary>Is this an official GitHub or Anthropic app?</summary><p>No. Shipyard is an independent open-source project. It uses the public GitHub API and runs the official Claude Code CLI that you install yourself.</p></details>
-      <details class="reveal"><summary>Where does my data go?</summary><p>Straight from your Mac to api.github.com. Your token is stored in the macOS Keychain. Shipyard has no backend and no analytics.</p></details>
-      <details class="reveal"><summary>Do I need Claude Code?</summary><p>No. Everything GitHub-related works without it. The Claude Code workspace and “Fix with Claude Code” light up once the CLI is installed and signed in.</p></details>
-      <details class="reveal"><summary>How do I update?</summary><p>Choose <b>Shipyard → Check for Updates…</b> — Shipyard downloads the new release from GitHub, installs it and restarts. It also checks once a day on its own; you can turn that off in Settings.</p></details>
-      <details class="reveal"><summary>How does sign-in to Claude work?</summary><p>Shipyard never sees your Claude credentials. It runs <code>claude auth login</code>, which opens the official sign-in page in your browser.</p></details>
+      <div class="faq-col">
+        <details class="reveal"><summary>Is this an official GitHub or Anthropic app?</summary><p>No. Shipyard is an independent open-source project. It uses the public GitHub API and runs the official Claude Code CLI that you install yourself.</p></details>
+        <details class="reveal"><summary>Do I need Claude Code?</summary><p>No. Everything GitHub-related works without it. The Claude Code workspace and “Fix with Claude Code” light up once the CLI is installed and signed in.</p></details>
+        <details class="reveal"><summary>How does sign-in to Claude work?</summary><p>Shipyard never sees your Claude credentials. It runs <code>claude auth login</code>, which opens the official sign-in page in your browser.</p></details>
+      </div>
+      <div class="faq-col">
+        <details class="reveal"><summary>Where does my data go?</summary><p>Straight from your Mac to api.github.com. Your token is stored in the macOS Keychain. Shipyard has no backend and no analytics.</p></details>
+        <details class="reveal"><summary>How do I update?</summary><p>Choose <b>Shipyard → Check for Updates…</b> — Shipyard downloads the new release from GitHub, installs it and restarts. It also checks once a day on its own; you can turn that off in Settings.</p></details>
+      </div>
     </div>
   </div>
 </section>
