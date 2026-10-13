@@ -96,12 +96,12 @@ h2{font-size:clamp(30px,4vw,46px);line-height:1.08;letter-spacing:-.028em;margin
 
 .faq{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:44px;align-items:start}
 .faq-col{display:flex;flex-direction:column;gap:18px;min-width:0}
-details{border:1px solid var(--line);border-radius:14px;padding:18px 22px;background:rgba(255,255,255,.02)}
-details[open]{border-color:var(--line2)}
+details{border:1px solid var(--line);border-radius:14px;padding:18px 22px;background:rgba(255,255,255,.02);overflow:hidden;transition:border-color .25s ease,background .25s ease}
+details.is-open{border-color:var(--line2);background:rgba(255,255,255,.035)}
 summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:16px}
 summary::-webkit-details-marker{display:none}
-summary:after{content:"+";color:var(--dim);font-weight:400;font-size:20px;line-height:1}
-details[open] summary:after{content:"–"}
+summary:after{content:"+";color:var(--dim);font-weight:400;font-size:22px;line-height:1;display:inline-block;transition:transform .35s cubic-bezier(.3,1.4,.5,1),color .25s}
+details.is-open summary:after{transform:rotate(45deg);color:var(--text)}
 details p{color:var(--muted);margin:12px 0 0;font-size:15px}
 
 .final{text-align:center;padding:120px 0}
@@ -313,6 +313,31 @@ footer a:hover{color:var(--text)}
     var text=document.getElementById("cmd").textContent;
     (navigator.clipboard?navigator.clipboard.writeText(text):Promise.reject()).then(function(){copy.textContent="Copied";setTimeout(function(){copy.textContent="Copy"},1600)}).catch(function(){
       var r=document.createRange();r.selectNodeContents(document.getElementById("cmd"));var s=getSelection();s.removeAllRanges();s.addRange(r);
+    });
+  });
+  var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.querySelectorAll(".faq details").forEach(function(d){
+    var summary=d.querySelector("summary"), body=d.querySelector("p"), running=null;
+    if(d.open)d.classList.add("is-open");
+    summary.addEventListener("click",function(e){
+      e.preventDefault();
+      var opening=!d.classList.contains("is-open");
+      d.classList.toggle("is-open",opening);
+      if(reduce||!d.animate){d.open=opening;return}
+      var from=d.getBoundingClientRect().height;
+      if(running){running.cancel();running=null}
+      d.open=true;
+      var openH=d.getBoundingClientRect().height;
+      d.open=false;
+      var closedH=d.getBoundingClientRect().height;
+      d.open=true;
+      var to=opening?openH:closedH;
+      running=d.animate([{height:from+"px"},{height:to+"px"}],{duration:opening?340:260,easing:"cubic-bezier(.2,.8,.2,1)"});
+      if(body)body.animate(opening?[{opacity:0,transform:"translateY(-6px)"},{opacity:1,transform:"none"}]:[{opacity:1},{opacity:0}],{duration:opening?320:180,easing:"ease-out",fill:"both"});
+      var anim=running;
+      var done=function(){if(running!==anim)return;running=null;anim.cancel();d.open=opening;if(body)body.getAnimations().forEach(function(a){a.cancel()})};
+      anim.onfinish=done;
+      setTimeout(done,(opening?340:260)+80);
     });
   });
   var els=document.querySelectorAll(".reveal");
