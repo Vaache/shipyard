@@ -33,13 +33,15 @@ struct ChatView: View {
                     .frame(maxWidth: 920)
                     .frame(maxWidth: .infinity)
                 }
+                .defaultScrollAnchor(.bottom)
                 .onChange(of: chat.items.count) { scrollDown(proxy) }
                 .onChange(of: lastTextLength) { scrollDown(proxy) }
                 .onChange(of: chat.busy) { scrollDown(proxy) }
                 .onChange(of: chat.pendingCount) {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrollDown(proxy) }
                 }
-                .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
+                .onAppear { jumpToBottom(proxy) }
+                .onChange(of: tab.id) { jumpToBottom(proxy) }
             }
             if chat.sleeping && !chat.running {
                 HStack(spacing: 8) {
@@ -62,6 +64,13 @@ struct ChatView: View {
     private var lastTextLength: Int {
         if case .text(let t)? = chat.items.last { return t.text.count }
         return 0
+    }
+
+    private func jumpToBottom(_ proxy: ScrollViewProxy) {
+        proxy.scrollTo("bottom", anchor: .bottom)
+        for delay in [0.05, 0.2, 0.5, 1.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { proxy.scrollTo("bottom", anchor: .bottom) }
+        }
     }
 
     private func scrollDown(_ proxy: ScrollViewProxy) {
