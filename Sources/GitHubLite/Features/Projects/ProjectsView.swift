@@ -59,6 +59,7 @@ struct ProjectsListView: View {
             projects = try await api.projects()
             error = nil
         } catch {
+            if isCancellation(error) { return }
             self.error = error.localizedDescription
         }
     }
@@ -132,6 +133,7 @@ final class ProjectBoardModel {
             }
             error = nil
         } catch {
+            if isCancellation(error) { return }
             self.error = error.localizedDescription
         }
     }

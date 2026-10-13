@@ -55,6 +55,7 @@ struct ReposView: View {
             hasMore = r.pageInfo.hasNextPage
             error = nil
         } catch {
+            if isCancellation(error) { return }
             self.error = error.localizedDescription
         }
     }
@@ -188,14 +189,12 @@ struct RepoDetailView: View {
             }
             if let d = info?.description, !d.isEmpty { Text(d).foregroundStyle(.secondary).lineLimit(2) }
             HStack {
-                Picker("", selection: $tab) {
-                    Text(t("Код", "Code")).tag(RepoTab.code)
-                    Text("Pull requests\(info.map { " · \($0.pullRequests.totalCount)" } ?? "")").tag(RepoTab.pr)
-                    Text("Issues\(info.map { " · \($0.issues.totalCount)" } ?? "")").tag(RepoTab.issue)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 400)
+                TabStrip(items: [
+                    TabItem(id: RepoTab.code, title: t("Код", "Code"), icon: "chevron.left.forwardslash.chevron.right"),
+                    TabItem(id: RepoTab.pr, title: "Pull requests", icon: "arrow.triangle.pull", badge: info.map { "\($0.pullRequests.totalCount)" }),
+                    TabItem(id: RepoTab.issue, title: "Issues", icon: "smallcircle.filled.circle", badge: info.map { "\($0.issues.totalCount)" })
+                ], selection: $tab)
+                .padding(.leading, -16)
                 if tab != .code {
                     Picker("", selection: $stateFilter) {
                         ForEach(StateFilter.allCases) { Text($0.title).tag($0) }

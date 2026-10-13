@@ -5,7 +5,7 @@ struct HTMLView: NSViewRepresentable {
     let html: String
     var scrollToBottomToken = 0
     var onAction: (String, String) -> Void = { _, _ in }
-    var onLink: (URL) -> Void = { NSWorkspace.shared.open($0) }
+    var onLink: (URL) -> Void = { LinkBrowser.open($0) }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 

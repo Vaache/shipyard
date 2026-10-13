@@ -73,6 +73,7 @@ enum SidebarSection: Hashable {
     case issues(IssueFilter)
     case repos
     case projects
+    case claude
 }
 
 @Observable
@@ -96,6 +97,7 @@ final class AppModel {
     var myPRCount = 0
     var unreadCount = 0
     var lastBadgeRefresh: Date?
+    let claude = ClaudeWorkspace()
 
     private var lastClipboard: String?
     private var pollTask: Task<Void, Never>?
@@ -170,6 +172,13 @@ final class AppModel {
     }
 
     func open(_ route: Route, push: Bool = false) {
+        if section == .claude || section == nil {
+            section = .prs(.mine)
+            detailPath = []
+            detailRoot = route
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
         if push, detailRoot != nil {
             detailPath.append(route)
         } else {
@@ -180,6 +189,16 @@ final class AppModel {
 
     func handle(url: URL) {
         guard url.scheme == "ghlite" else { return }
+        if url.host == "claude" {
+            section = .claude
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+            if url.path == "/new", let folder = value("folder"), FileManager.default.fileExists(atPath: folder) {
+                claude.newSession(folder: folder, prompt: value("prompt"), name: value("name"), mode: value("mode").flatMap(ClaudeMode.init(rawValue:)))
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
         let target: String
         if let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "url" })?.value {
             target = q

@@ -56,38 +56,28 @@ struct FilesTab: View {
                 }
                 .tag(f.id)
             }
-            .listStyle(.sidebar)
+            .listStyle(.inset)
         }
     }
 
     private var diff: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    ForEach(visibleFiles) { file in
-                        Section {
-                            if !model.collapsed.contains(file.id) {
-                                ForEach(model.rows(for: file)) { row in
-                                    rowView(row, file: file)
-                                }
-                            }
-                        } header: {
-                            FileHeader(model: model, file: file, showList: $showList)
-                                .id(file.id)
-                        }
-                    }
+        let flat = model.flatRows(filter: filter)
+        var fileOf: [String: String] = [:]
+        let rows: [DiffTableRow] = flat.map { row in
+            switch row {
+            case .header(let file):
+                return .view(id: row.id, group: true) { AnyView(FileHeader(model: model, file: file, showList: $showList)) }
+            case .row(let file, let r):
+                if case .line(let line) = r {
+                    fileOf[row.id] = file.id
+                    return .line(id: row.id, line: line, commentable: true)
                 }
-                .padding(.bottom, 40)
+                return .view(id: row.id, group: false) { AnyView(rowView(r, file: file)) }
             }
-            .onChange(of: model.scrollTarget) { _, target in
-                guard let target else { return }
-                withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(target, anchor: .top) }
-            }
-            .onAppear {
-                if let t = model.scrollTarget {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { proxy.scrollTo(t, anchor: .top) }
-                }
-            }
+        }
+        return DiffTableView(rows: rows, scrollTarget: model.scrollTarget.map { "h:" + $0 }) { id, line in
+            guard let path = fileOf[id], let n = line.anchorLine else { return }
+            model.composer = DiffAnchor(path: path, line: n, side: line.anchorSide)
         }
     }
 
@@ -99,6 +89,7 @@ struct FilesTab: View {
                 guard let n = line.anchorLine else { return }
                 model.composer = DiffAnchor(path: file.id, line: n, side: line.anchorSide)
             }
+            .equatable()
         case .thread(let t):
             InlineThreadView(model: model, thread: t)
         case .pending(let p):
@@ -167,55 +158,53 @@ struct FileHeader: View {
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
         .overlay(alignment: .top) { Divider() }
+        .padding(.top, 8)
     }
 }
 
-struct DiffLineView: View {
+struct DiffLineView: View, Equatable {
     let line: DiffLine
     var onComment: (() -> Void)?
 
     private static let font = Font.system(size: 12, design: .monospaced)
+    private static let addBG = Color.green.opacity(0.14)
+    private static let delBG = Color.red.opacity(0.14)
+    private static let hunkBG = Color.accentColor.opacity(0.08)
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            if line.kind == .hunk {
-                Text(line.text)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 104)
-                    .padding(.vertical, 3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.accentColor.opacity(0.08))
-            } else {
-                gutter
-                Text(sign + line.text)
-                    .padding(.leading, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .foregroundStyle(line.kind == .meta ? .secondary : .primary)
-            }
-        }
-        .font(Self.font)
-        .background(background)
-        .textSelection(.enabled)
+    static func == (a: DiffLineView, b: DiffLineView) -> Bool {
+        a.line.id == b.line.id && a.line.text == b.line.text && a.line.kind == b.line.kind && (a.onComment == nil) == (b.onComment == nil)
     }
 
-    private var gutter: some View {
-        HStack(spacing: 0) {
-            Text(line.oldLine.map(String.init) ?? "").frame(width: 46, alignment: .trailing)
-            Text(line.newLine.map(String.init) ?? "").frame(width: 46, alignment: .trailing)
-            Group {
-                if line.commentable, onComment != nil {
-                    Image(systemName: "plus.bubble").font(.system(size: 10)).foregroundStyle(Color.accentColor.opacity(0.7))
-                } else {
-                    Color.clear
-                }
+    var body: some View {
+        if line.kind == .hunk {
+            Text(line.text)
+                .font(Self.font)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 104)
+                .padding(.vertical, 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Self.hunkBG)
+        } else {
+            HStack(alignment: .top, spacing: 0) {
+                Text(gutterText)
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 108, alignment: .trailing)
+                    .onTapGesture { if line.commentable { onComment?() } }
+                Text(sign + line.text)
+                    .foregroundStyle(line.kind == .meta ? .secondary : .primary)
+                    .padding(.leading, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: 16)
+            .font(Self.font)
+            .background(background)
         }
-        .foregroundStyle(.tertiary)
-        .contentShape(Rectangle())
-        .onTapGesture { if line.commentable { onComment?() } }
-        .help(line.commentable ? t("Комментировать строку", "Comment on line") : "")
+    }
+
+    private var gutterText: String {
+        let o = line.oldLine.map(String.init) ?? ""
+        let n = line.newLine.map(String.init) ?? ""
+        let pad = { (s: String) in String(repeating: " ", count: max(0, 5 - s.count)) + s }
+        return pad(o) + " " + pad(n) + (line.commentable && onComment != nil ? " +" : "  ")
     }
 
     private var sign: String {
@@ -229,8 +218,8 @@ struct DiffLineView: View {
 
     private var background: Color {
         switch line.kind {
-        case .add: return Color.green.opacity(0.14)
-        case .del: return Color.red.opacity(0.14)
+        case .add: return Self.addBG
+        case .del: return Self.delBG
         default: return .clear
         }
     }

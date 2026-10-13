@@ -35,6 +35,7 @@ struct GitHubLiteApp: App {
                 Button(t("Уведомления", "Notifications")) { app.section = .notifications }.keyboardShortcut("3")
                 Button(t("Репозитории", "Repositories")) { app.section = .repos }.keyboardShortcut("4")
                 Button(t("Проекты", "Projects")) { app.section = .projects }.keyboardShortcut("5")
+                Button("Claude Code") { app.section = .claude }.keyboardShortcut("6")
                 Divider()
                 Button(t("Назад", "Back")) { if !app.detailPath.isEmpty { app.detailPath.removeLast() } }
                     .keyboardShortcut("[")

@@ -276,6 +276,7 @@ struct JobLogSheet: View {
                 let raw = try await api.jobLog(repo: repo, jobId: id)
                 log = await Task.detached { Self.clean(raw) }.value
             } catch {
+                if isCancellation(error) { return }
                 self.error = error.localizedDescription
             }
         }

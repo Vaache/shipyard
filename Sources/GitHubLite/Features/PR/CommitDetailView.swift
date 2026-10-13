@@ -12,38 +12,10 @@ struct CommitDetailView: View {
     var body: some View {
         Group {
             if let commit {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                        header(commit)
-                        ForEach(files) { file in
-                            Section {
-                                if !collapsed.contains(file.id) {
-                                    if file.hasPatch {
-                                        ForEach(file.lines) { DiffLineView(line: $0) }
-                                    } else {
-                                        Text(t("Diff недоступен", "Diff unavailable")).font(.caption).foregroundStyle(.secondary).padding(12)
-                                    }
-                                }
-                            } header: {
-                                HStack(spacing: 8) {
-                                    Button {
-                                        if collapsed.contains(file.id) { collapsed.remove(file.id) } else { collapsed.insert(file.id) }
-                                    } label: {
-                                        Image(systemName: collapsed.contains(file.id) ? "chevron.right" : "chevron.down").frame(width: 12)
-                                    }
-                                    .buttonStyle(.plain)
-                                    Text(file.id).font(.system(.callout, design: .monospaced).weight(.medium)).lineLimit(1).truncationMode(.head)
-                                    DiffStat(additions: file.additions, deletions: file.deletions)
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(.bar)
-                                .overlay(alignment: .bottom) { Divider() }
-                            }
-                        }
-                    }
-                    .padding(.bottom, 30)
+                VStack(spacing: 0) {
+                    header(commit)
+                    Divider()
+                    PlainDiffList(files: files, collapsed: $collapsed)
                 }
             } else if let error {
                 ErrorStateView(message: error) { Task { await load() } }
@@ -93,6 +65,7 @@ struct CommitDetailView: View {
             collapsed = Set(files.filter { $0.lines.count > 1500 }.map(\.id))
             commit = c
         } catch {
+            if isCancellation(error) { return }
             self.error = error.localizedDescription
         }
     }

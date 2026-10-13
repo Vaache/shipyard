@@ -2,12 +2,13 @@ import AppKit
 import Foundation
 
 enum ClaudeTarget: String, CaseIterable, Identifiable {
-    case terminal, iterm, desktop, copy
+    case app, terminal, iterm, desktop, copy
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .app: return t("В приложении", "In this app")
         case .terminal: return "Terminal"
         case .iterm: return "iTerm"
         case .desktop: return "Claude Desktop"
@@ -18,6 +19,7 @@ enum ClaudeTarget: String, CaseIterable, Identifiable {
     var available: Bool {
         switch self {
         case .iterm: return NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.googlecode.iterm2") != nil
+        case .app: return ClaudeLauncher.claudeBinary != nil
         case .desktop: return NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.anthropic.claudefordesktop") != nil && ClaudeLauncher.claudeBinary != nil
         default: return true
         }
@@ -49,7 +51,7 @@ enum ClaudeLauncher {
             .first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    static func launch(prompt: String, folder: String, target: ClaudeTarget, mode: ClaudePermissionMode, sessionName: String) throws {
+    static func launch(prompt: String, folder: String, target: ClaudeTarget, mode: ClaudePermissionMode, sessionName: String, resumeId: String? = nil) throws {
         if target == .copy {
             copyToPasteboard(prompt)
             return
@@ -78,16 +80,17 @@ enum ClaudeLauncher {
 
         var args = ""
         if mode != .standard { args += " --permission-mode \(mode.rawValue)" }
-        args += " -n \(shellQuote(sessionName))"
+        if let resumeId { args += " --resume \(shellQuote(resumeId))" } else { args += " -n \(shellQuote(sessionName))" }
         let script = """
         #!/bin/bash
         export PATH="$HOME/.local/bin:$HOME/.claude/local:/opt/homebrew/bin:/usr/local/bin:$PATH"
+        unset CLAUDECODE $(env | grep -o '^CLAUDE_CODE_[A-Z_]*')
         cd \(shellQuote(folder)) || { echo "Folder not found: \(folder.replacingOccurrences(of: "\"", with: ""))"; exit 1; }
         PROMPT="$(cat \(shellQuote(promptURL.path)))"
         rm -f \(shellQuote(promptURL.path)) "$0"
         clear
         if ! command -v claude >/dev/null 2>&1; then echo "claude CLI not found in PATH"; exit 1; fi
-        exec claude\(args) "$PROMPT"
+        if [ -n "$PROMPT" ]; then exec claude\(args) "$PROMPT"; else exec claude\(args); fi
 
         """
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)

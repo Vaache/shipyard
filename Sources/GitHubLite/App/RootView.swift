@@ -27,20 +27,24 @@ struct MainView: View {
             ContentColumn()
                 .navigationSplitViewColumnWidth(min: 300, ideal: 380, max: 560)
         } detail: {
-            NavigationStack(path: $app.detailPath) {
-                Group {
-                    if let root = app.detailRoot {
-                        RouteView(route: root).id(root)
-                    } else {
-                        VStack(spacing: 10) {
-                            Image(systemName: "arrow.triangle.pull").font(.system(size: 42)).foregroundStyle(.tertiary)
-                            Text(t("Выберите pull request, issue или проект", "Select a pull request, issue or project")).foregroundStyle(.secondary)
-                            Text(t("⌘L — открыть по ссылке", "⌘L — open by link")).font(.caption).foregroundStyle(.tertiary)
+            if app.section == .claude {
+                ClaudeWorkspaceView()
+            } else {
+                NavigationStack(path: $app.detailPath) {
+                    Group {
+                        if let root = app.detailRoot {
+                            RouteView(route: root).id(root)
+                        } else {
+                            VStack(spacing: 10) {
+                                Image(systemName: "arrow.triangle.pull").font(.system(size: 42)).foregroundStyle(.tertiary)
+                                Text(t("Выберите pull request, issue или проект", "Select a pull request, issue or project")).foregroundStyle(.secondary)
+                                Text(t("⌘L — открыть по ссылке", "⌘L — open by link")).font(.caption).foregroundStyle(.tertiary)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    .navigationDestination(for: Route.self) { RouteView(route: $0) }
                 }
-                .navigationDestination(for: Route.self) { RouteView(route: $0) }
             }
         }
         .sheet(isPresented: $app.showOpenLink) { OpenLinkSheet() }
@@ -93,6 +97,11 @@ struct SidebarView: View {
                 Label(t("Репозитории", "Repositories"), systemImage: "book.closed").tag(SidebarSection.repos)
                 Label(t("Проекты", "Projects"), systemImage: "rectangle.split.3x1").tag(SidebarSection.projects)
             }
+            Section("AI") {
+                Label("Claude Code", systemImage: "sparkles")
+                    .badge(app.claude.tabs.filter(\.running).count)
+                    .tag(SidebarSection.claude)
+            }
         }
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom) {
@@ -127,6 +136,8 @@ struct ContentColumn: View {
             ReposView()
         case .projects:
             ProjectsListView()
+        case .claude:
+            ClaudeProjectsColumn()
         case nil:
             Text(t("Выберите раздел", "Select a section")).foregroundStyle(.secondary)
         }

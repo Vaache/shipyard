@@ -1,0 +1,655 @@
+import AppKit
+import SwiftUI
+
+struct ClaudeTerminalHost: NSViewRepresentable {
+    let tab: ClaudeTab
+
+    func makeNSView(context: Context) -> NSView {
+        let container = NSView()
+        attach(to: container)
+        return container
+    }
+
+    func updateNSView(_ container: NSView, context: Context) {
+        if tab.terminal.superview !== container {
+            container.subviews.forEach { $0.removeFromSuperview() }
+            attach(to: container)
+        }
+    }
+
+    private func attach(to container: NSView) {
+        let term = tab.terminal
+        term.removeFromSuperview()
+        term.frame = container.bounds
+        term.autoresizingMask = [.width, .height]
+        container.addSubview(term)
+        DispatchQueue.main.async { term.window?.makeFirstResponder(term) }
+    }
+}
+
+struct ClaudeProjectsColumn: View {
+    @Environment(AppModel.self) private var app
+    @State private var query = ""
+    @State private var expanded: Set<String> = []
+
+    private var ws: ClaudeWorkspace { app.claude }
+
+    private var filtered: [ClaudeProject] {
+        guard !query.isEmpty else { return ws.projects }
+        return ws.projects.compactMap { p in
+            if p.name.localizedCaseInsensitiveContains(query) { return p }
+            let s = p.sessions.filter { $0.title.localizedCaseInsensitiveContains(query) || ($0.branch ?? "").localizedCaseInsensitiveContains(query) }
+            return s.isEmpty ? nil : ClaudeProject(id: p.id, path: p.path, sessions: s)
+        }
+    }
+
+    var body: some View {
+        List {
+            if !ws.cliAvailable {
+                Label(t("claude CLI не найден. Установите Claude Code.", "claude CLI not found. Install Claude Code."), systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+            }
+            if !ws.tabs.isEmpty {
+                Section(t("Открытые", "Open")) {
+                    ForEach(ws.tabs) { tab in
+                        Button { ws.selectedTabID = tab.id } label: {
+                            HStack(spacing: 8) {
+                                Circle().fill(tab.running ? Color.ghGreen : Color.secondary).frame(width: 7, height: 7)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(tab.title).lineLimit(1)
+                                    Text(tab.projectName).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(ws.selectedTabID == tab.id ? Color.accentColor.opacity(0.15) : Color.clear)
+                    }
+                }
+            }
+            ForEach(filtered) { project in
+                Section {
+                    if expanded.contains(project.id) || !query.isEmpty {
+                        ForEach(project.sessions.prefix(query.isEmpty ? 30 : 200)) { s in
+                            SessionRow(session: s, open: ws.tab(forSession: s.id) != nil)
+                                .contentShape(Rectangle())
+                                .onTapGesture { ws.resume(s) }
+                                .contextMenu { sessionMenu(s) }
+                        }
+                    }
+                } header: {
+                    ProjectHeader(project: project, expanded: expanded.contains(project.id) || !query.isEmpty) {
+                        if expanded.contains(project.id) { expanded.remove(project.id) } else { expanded.insert(project.id) }
+                    } onNew: {
+                        ws.newSession(folder: project.path)
+                    }
+                }
+            }
+            if ws.projects.isEmpty, !ws.loadingProjects {
+                Text(t("Сессий Claude Code пока нет", "No Claude Code sessions yet")).foregroundStyle(.secondary)
+            }
+        }
+        .listStyle(.inset)
+        .overlay { if ws.loadingProjects && ws.projects.isEmpty { ProgressView().controlSize(.small) } }
+        .searchable(text: $query, placement: .toolbar, prompt: t("Поиск по сессиям", "Search sessions"))
+        .navigationTitle("Claude Code")
+        .toolbar {
+            ToolbarItemGroup {
+                Button { openFolder() } label: { Label(t("Открыть папку", "Open folder"), systemImage: "folder.badge.plus") }
+                    .help(t("Новая сессия в папке…", "New session in folder…"))
+                Button { Task { await ws.reloadProjects() } } label: { Label(t("Обновить", "Refresh"), systemImage: "arrow.clockwise") }
+            }
+        }
+        .task {
+            await ws.reloadProjects()
+            if expanded.isEmpty, let first = ws.projects.first { expanded.insert(first.id) }
+        }
+        .onChange(of: app.refreshTick) { Task { await ws.reloadProjects() } }
+    }
+
+    @ViewBuilder
+    private func sessionMenu(_ s: ClaudeSessionInfo) -> some View {
+        Button(t("Продолжить", "Resume")) { ws.resume(s) }
+        Button(t("Продолжить в новой ветке сессии (fork)", "Fork session")) { ws.resume(s, fork: true) }
+        Divider()
+        Button(t("Копировать ID сессии", "Copy session ID")) { copyToPasteboard(s.id) }
+        Button(t("Копировать команду resume", "Copy resume command")) { copyToPasteboard("cd \(ClaudeLauncher.shellQuote(s.cwd)) && claude --resume \(s.id)") }
+        Button(t("Показать транскрипт в Finder", "Reveal transcript in Finder")) { NSWorkspace.shared.activateFileViewerSelecting([s.file]) }
+        if let pr = s.prURL { Button(t("Открыть PR", "Open PR")) { if let r = GitHubURL.parse(pr) { app.section = .prs(.mine); app.open(r) } } }
+    }
+
+    private func openFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = t("Открыть", "Open")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        ws.newSession(folder: url.path)
+    }
+}
+
+struct ProjectHeader: View {
+    let project: ClaudeProject
+    let expanded: Bool
+    let onToggle: () -> Void
+    let onNew: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2.weight(.bold)).frame(width: 10)
+            Image(systemName: project.exists ? "folder.fill" : "folder.badge.questionmark").foregroundStyle(project.exists ? Color.accentColor : .secondary)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(project.name).font(.callout.weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
+                Text(project.path.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"))
+                    .font(.caption2).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer()
+            Text("\(project.sessions.count)").font(.caption2).foregroundStyle(.secondary)
+            Button(action: onNew) { Image(systemName: "plus") }
+                .buttonStyle(.borderless)
+                .help(t("Новая сессия", "New session"))
+                .disabled(!project.exists)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onToggle)
+        .textCase(nil)
+        .padding(.vertical, 2)
+    }
+}
+
+struct SessionRow: View {
+    let session: ClaudeSessionInfo
+    let open: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                if open { Circle().fill(Color.ghGreen).frame(width: 6, height: 6) }
+                Text(session.title).lineLimit(2)
+            }
+            HStack(spacing: 6) {
+                if let b = session.branch {
+                    Label(b, systemImage: "arrow.branch").lineLimit(1)
+                }
+                if let w = session.worktreeName {
+                    Label(w, systemImage: "square.stack.3d.up").lineLimit(1)
+                }
+                if let n = session.prNumber {
+                    Label("#\(n)", systemImage: "arrow.triangle.pull")
+                }
+                Spacer(minLength: 4)
+                Text(Fmt.rel(session.modified))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .labelStyle(CompactLabelStyle())
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+struct CompactLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 3) {
+            configuration.icon.imageScale(.small)
+            configuration.title
+        }
+    }
+}
+
+struct ClaudeWorkspaceView: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let ws = app.claude
+        Group {
+            if let tab = ws.selectedTab {
+                HSplitView {
+                    VStack(spacing: 0) {
+                        ClaudeTabBar()
+                        ClaudeControlBar(tab: tab)
+                        Divider()
+                        ZStack {
+                            ClaudeTerminalHost(tab: tab)
+                            if !tab.running {
+                                VStack(spacing: 10) {
+                                    Text(t("Сессия завершена", "Session ended") + (tab.exitCode.map { " (\($0))" } ?? "")).foregroundStyle(.secondary)
+                                    HStack {
+                                        Button(t("Продолжить сессию", "Resume session")) { ws.restart(tab) }.buttonStyle(.borderedProminent)
+                                        Button(t("Закрыть вкладку", "Close tab")) { ws.close(tab) }
+                                    }
+                                }
+                                .padding(16)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            }
+                        }
+                    }
+                    .frame(minWidth: 520, idealWidth: 900)
+                    .layoutPriority(1)
+                    if ws.showInspector {
+                        ClaudeInspector(tab: tab)
+                            .frame(minWidth: 300, idealWidth: 380, maxWidth: 640)
+                    }
+                }
+            } else {
+                ClaudeEmptyState()
+            }
+        }
+        .navigationTitle(ws.selectedTab?.title ?? "Claude Code")
+        .navigationSubtitle(ws.selectedTab?.folder.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~") ?? "")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if ws.selectedTab != nil {
+                    Button { ws.showInspector.toggle() } label: { Label(t("Инспектор", "Inspector"), systemImage: "sidebar.right") }
+                        .help(t("Показать/скрыть панель изменений", "Toggle changes panel"))
+                }
+            }
+        }
+    }
+}
+
+struct ClaudeEmptyState: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let ws = app.claude
+        VStack(spacing: 16) {
+            Image(systemName: "sparkles").font(.system(size: 40)).foregroundStyle(Color.accentColor)
+            Text("Claude Code").font(.title2.weight(.semibold))
+            Text(t("Начните новую сессию в проекте или продолжите сессию из истории слева.", "Start a new session in a project or resume one from the history on the left."))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(ws.projects.filter(\.exists).prefix(6)) { p in
+                    Button {
+                        ws.newSession(folder: p.path)
+                    } label: {
+                        HStack {
+                            Image(systemName: "folder.fill").foregroundStyle(Color.accentColor)
+                            Text(p.name).fontWeight(.medium)
+                            Spacer()
+                            Text(Fmt.rel(p.lastActivity)).font(.caption).foregroundStyle(.secondary)
+                            Image(systemName: "plus.circle").foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.08)))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(width: 380)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+struct ClaudeTabBar: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let ws = app.claude
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(ws.tabs) { tab in
+                    let selected = tab.id == ws.selectedTabID
+                    HStack(spacing: 6) {
+                        Circle().fill(tab.running ? Color.ghGreen : Color.secondary).frame(width: 6, height: 6)
+                        Text(tab.title).lineLimit(1).frame(maxWidth: 180, alignment: .leading)
+                        Text(tab.projectName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        Button { ws.close(tab) } label: { Image(systemName: "xmark").font(.caption2.weight(.bold)) }
+                            .buttonStyle(.borderless)
+                            .help(t("Закрыть", "Close"))
+                    }
+                    .font(.callout)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(selected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.06)))
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(selected ? Color.accentColor.opacity(0.45) : .clear))
+                    .contentShape(Rectangle())
+                    .onTapGesture { ws.selectedTabID = tab.id }
+                }
+                Menu {
+                    if let current = ws.selectedTab {
+                        Button(t("В папке \(current.projectName)", "In \(current.projectName)")) { ws.newSession(folder: current.folder) }
+                        Divider()
+                    }
+                    ForEach(ws.projects.filter(\.exists).prefix(12)) { p in
+                        Button(p.name) { ws.newSession(folder: p.path) }
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help(t("Новая сессия", "New session"))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+        }
+        .background(.bar)
+    }
+}
+
+struct ClaudeControlBar: View {
+    @Environment(AppModel.self) private var app
+    let tab: ClaudeTab
+
+    var body: some View {
+        let ws = app.claude
+        HStack(spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "folder.fill").foregroundStyle(Color.accentColor)
+                Text(tab.projectName).fontWeight(.semibold).lineLimit(1)
+                if let b = tab.git.branch, b != "HEAD" {
+                    Label(b, systemImage: "arrow.branch")
+                        .labelStyle(CompactLabelStyle())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(1)
+            Spacer(minLength: 8)
+            ControlMenu(icon: "cpu", title: ws.model.title, help: t("Модель", "Model")) {
+                ForEach(ClaudeModelOption.allCases) { m in
+                    Button { ws.model = m } label: { checkLabel(m.title, ws.model == m) }
+                }
+                Divider()
+                Button(t("Применить к текущей сессии (/model)", "Apply to current session (/model)")) { ws.applyModelToCurrent() }
+                    .disabled(!tab.running || ws.model == .standard)
+            }
+            ControlMenu(icon: "gauge.with.dots.needle.50percent", title: ws.effort == .standard ? "Effort" : ws.effort.rawValue, help: "Effort") {
+                ForEach(ClaudeEffort.allCases) { e in
+                    Button { ws.effort = e } label: { checkLabel(e.title, ws.effort == e) }
+                }
+            }
+            ControlMenu(icon: "hand.raised", title: ws.mode.title, help: t("Режим разрешений", "Permission mode")) {
+                ForEach(ClaudeMode.allCases) { m in
+                    Button { ws.mode = m } label: { checkLabel(m.title, ws.mode == m) }
+                }
+            }
+            Menu {
+                Button(t("Перезапустить с новыми настройками", "Restart with new settings")) {
+                    if tab.running { tab.terminal.terminate() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { ws.restart(tab) }
+                }
+                Divider()
+                Button(t("Продолжить в Terminal", "Continue in Terminal")) {
+                    try? ClaudeLauncher.launch(prompt: "", folder: tab.folder, target: .terminal, mode: .standard, sessionName: tab.title, resumeId: tab.sessionId)
+                }
+                Button(t("Показать в Finder", "Reveal in Finder")) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: tab.folder)]) }
+                Button(t("Копировать ID сессии", "Copy session ID")) { copyToPasteboard(tab.sessionId) }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
+    @ViewBuilder
+    private func checkLabel(_ title: String, _ on: Bool) -> some View {
+        if on { Label(title, systemImage: "checkmark") } else { Text(title) }
+    }
+}
+
+struct ControlMenu<Content: View>: View {
+    let icon: String
+    let title: String
+    let help: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        Menu {
+            content
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                Text(title).lineLimit(1)
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .fixedSize()
+        .help(help + " — " + t("применяется к новым и перезапущенным сессиям", "applies to new and restarted sessions"))
+    }
+}
+
+enum InspectorTab: String, CaseIterable, Identifiable {
+    case changes, files, pr
+    var id: String { rawValue }
+}
+
+struct ClaudeInspector: View {
+    let tab: ClaudeTab
+    @State private var selection: InspectorTab = .changes
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TabStrip(items: [
+                TabItem(id: InspectorTab.changes, title: t("Изменения", "Changes"), icon: "plusminus", badge: tab.git.changes.isEmpty ? nil : "\(tab.git.changes.count)", badgeColor: .ghYellow),
+                TabItem(id: InspectorTab.files, title: t("Файлы", "Files"), icon: "folder"),
+                TabItem(id: InspectorTab.pr, title: "PR", icon: "arrow.triangle.pull")
+            ], selection: $selection)
+            .padding(.top, 4)
+            Divider()
+            switch selection {
+            case .changes: ChangesPanel(tab: tab)
+            case .files: LocalFilesPanel(root: tab.folder)
+            case .pr: BranchPRPanel(tab: tab)
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+struct ChangesPanel: View {
+    let tab: ClaudeTab
+    @State private var collapsed: Set<String> = []
+    @State private var target: String?
+
+    var body: some View {
+        let git = tab.git
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                if git.loading { ProgressView().controlSize(.mini) }
+                Text(git.changes.isEmpty ? t("Нет незакоммиченных изменений", "No uncommitted changes") : tp(git.changes.count, "файл изменён", "файла изменено", "файлов изменено", "file changed", "files changed"))
+                    .font(.caption).foregroundStyle(.secondary)
+                if !git.changes.isEmpty {
+                    DiffStat(additions: git.changes.reduce(0) { $0 + $1.additions }, deletions: git.changes.reduce(0) { $0 + $1.deletions })
+                }
+                Spacer()
+                Button { Task { await git.refresh() } } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.borderless)
+                    .help(t("Обновить", "Refresh"))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            if !git.unpushed.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t("Неотправленные коммиты", "Unpushed commits") + " · \(git.unpushed.count)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(git.unpushed.prefix(6)) { c in
+                        HStack(spacing: 6) {
+                            Text(c.short).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                            Text(c.subject).font(.caption).lineLimit(1)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
+            }
+            Divider()
+            if git.changes.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle").font(.largeTitle).foregroundStyle(.tertiary)
+                    Text(t("Изменения, которые сделает Claude, появятся здесь автоматически", "Changes Claude makes will show up here automatically"))
+                        .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                PlainDiffList(files: git.changes, collapsed: $collapsed, scrollTarget: target) { path in
+                    NSWorkspace.shared.open(URL(fileURLWithPath: tab.folder + "/" + path))
+                }
+            }
+        }
+        .task(id: tab.id) { await git.refresh() }
+    }
+}
+
+struct LocalFilesPanel: View {
+    let root: String
+    @State private var dir = ""
+    @State private var entries: [TreeEntry] = []
+    @State private var file: String?
+    @State private var content: String?
+
+    var body: some View {
+        VSplitView {
+            VStack(spacing: 0) {
+                HStack(spacing: 4) {
+                    Button { if !dir.isEmpty { dir = (dir as NSString).deletingLastPathComponent } } label: { Image(systemName: "chevron.left") }
+                        .buttonStyle(.borderless)
+                        .disabled(dir.isEmpty)
+                    Text(dir.isEmpty ? (root as NSString).lastPathComponent : dir).font(.caption.monospaced()).lineLimit(1).truncationMode(.head)
+                    Spacer()
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                List(entries) { e in
+                    EntryRow(entry: e)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if e.isDir { dir = e.path } else { file = e.path }
+                        }
+                        .listRowBackground(file == e.path ? Color.accentColor.opacity(0.15) : Color.clear)
+                }
+                .listStyle(.plain)
+            }
+            .frame(minHeight: 140, idealHeight: 220)
+            Group {
+                if let file, let content {
+                    CodeTextView(text: content, ext: (file as NSString).pathExtension.isEmpty ? (file as NSString).lastPathComponent : (file as NSString).pathExtension)
+                } else if file != nil {
+                    Text(t("Бинарный или большой файл", "Binary or large file")).foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Text(t("Выберите файл", "Pick a file")).foregroundStyle(.tertiary).frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .frame(minHeight: 160)
+        }
+        .task(id: dir) { load() }
+        .task(id: file) {
+            guard let file else { content = nil; return }
+            let full = root + "/" + file
+            content = await Task.detached {
+                guard let attrs = try? FileManager.default.attributesOfItem(atPath: full), (attrs[.size] as? Int ?? 0) < 2_000_000 else { return nil }
+                return try? String(contentsOfFile: full, encoding: .utf8)
+            }.value
+        }
+    }
+
+    private func load() {
+        let fm = FileManager.default
+        let base = dir.isEmpty ? root : root + "/" + dir
+        let names = (try? fm.contentsOfDirectory(atPath: base)) ?? []
+        entries = names.filter { $0 != ".git" && $0 != ".DS_Store" }.compactMap { name in
+            var isDir: ObjCBool = false
+            let full = base + "/" + name
+            guard fm.fileExists(atPath: full, isDirectory: &isDir) else { return nil }
+            let size = (try? fm.attributesOfItem(atPath: full)[.size] as? Int) ?? nil
+            return TreeEntry(name: name, path: dir.isEmpty ? name : dir + "/" + name, type: isDir.boolValue ? "tree" : "blob", object: BlobMeta(byteSize: isDir.boolValue ? nil : size, isBinary: nil))
+        }
+        .sorted { a, b in a.isDir != b.isDir ? a.isDir : a.name.localizedStandardCompare(b.name) == .orderedAscending }
+    }
+}
+
+struct BranchPRPanel: View {
+    @Environment(AppModel.self) private var app
+    let tab: ClaudeTab
+    @State private var items: [SearchItem] = []
+    @State private var loading = false
+    @State private var detail: PullRequestDetail?
+    @State private var fix: FoundFixPrompt?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if tab.git.repo == nil {
+                Text(t("Папка не связана с репозиторием GitHub", "Folder isn't linked to a GitHub repository")).foregroundStyle(.secondary)
+            } else if loading && items.isEmpty {
+                LoadingView()
+            } else if items.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(t("Для ветки \(tab.git.branch ?? "?") нет PR", "No PR for branch \(tab.git.branch ?? "?")")).foregroundStyle(.secondary)
+                    if let repo = tab.git.repo, let b = tab.git.branch {
+                        Button(t("Создать PR в браузере", "Create PR in browser")) { openInBrowser("https://github.com/\(repo.full)/pull/new/\(b)") }
+                    }
+                }
+            } else {
+                ForEach(items) { item in
+                    VStack(alignment: .leading, spacing: 8) {
+                        ItemRow(item: item)
+                        if let detail, detail.number == item.number {
+                            let unresolved = detail.reviewThreads.nodes.filter { !$0.isResolved }
+                            HStack(spacing: 10) {
+                                Label("\(unresolved.count)", systemImage: "text.bubble").help(t("Нерешённые комментарии", "Unresolved comments"))
+                                CIIcon(state: detail.rollup?.state)
+                                if let fix { Text(t("Fix prompt от @\(fix.author)", "Fix prompt by @\(fix.author)")).font(.caption).foregroundStyle(.secondary) }
+                            }
+                            .font(.caption)
+                            HStack {
+                                Button(t("Открыть PR", "Open PR")) {
+                                    app.section = .prs(.mine)
+                                    app.open(item.route)
+                                }
+                                if tab.running {
+                                    Menu(t("Отправить в сессию", "Send to session")) {
+                                        if let fix {
+                                            Button(t("Fix prompt ревьюера", "Reviewer's Fix prompt")) {
+                                                app.claude.send(FixPromptExtractor.wrap(fix, pr: detail, options: FixOptions()), to: tab)
+                                            }
+                                        }
+                                        Button(t("Нерешённые комментарии (\(unresolved.count))", "Unresolved comments (\(unresolved.count))")) {
+                                            app.claude.send(FixPrompt.build(pr: detail, repo: item.repo, threads: unresolved, general: FixPrompt.generalFeedback(detail), options: FixOptions()), to: tab)
+                                        }
+                                        .disabled(unresolved.isEmpty)
+                                    }
+                                    .fixedSize()
+                                }
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.07)))
+                }
+            }
+            Spacer()
+        }
+        .padding(10)
+        .task(id: "\(tab.git.repo?.full ?? "")|\(tab.git.branch ?? "")") { await load() }
+    }
+
+    private func load() async {
+        guard let api = app.api, let repo = tab.git.repo, let branch = tab.git.branch, branch != "HEAD" else { return }
+        loading = true
+        defer { loading = false }
+        items = (try? await api.search("repo:\(repo.full) is:pr head:\(branch) sort:updated-desc").nodes) ?? []
+        if let first = items.first, let r = try? await api.pullRequest(first.ref), let pr = r.repository?.pullRequest {
+            detail = pr
+            fix = FixPromptExtractor.latest(in: pr)
+        }
+    }
+}

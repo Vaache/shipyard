@@ -6,6 +6,18 @@ enum PRTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum FlatDiffRow: Identifiable {
+    case header(DiffFile)
+    case row(DiffFile, DiffRow)
+
+    var id: String {
+        switch self {
+        case .header(let f): return "h:" + f.id
+        case .row(let f, let r): return "r:" + f.id + ":" + r.id
+        }
+    }
+}
+
 enum DiffRow: Identifiable {
     case line(DiffLine)
     case thread(ReviewThread)
@@ -56,6 +68,10 @@ final class PRDetailModel {
     var composer: DiffAnchor?
     var replyThread: ReviewThread?
 
+    @ObservationIgnored private var flatCacheKey = ""
+    @ObservationIgnored private var flatCache: [FlatDiffRow] = []
+    private var threadsVersion = 0
+    private var filesVersion = 0
     private var threadIndex: [String: [ReviewThread]] = [:]
     private var outdatedByPath: [String: [ReviewThread]] = [:]
 
@@ -104,6 +120,7 @@ final class PRDetailModel {
                 Task(priority: .utility) { await self.loadFiles() }
             }
         } catch {
+            if isCancellation(error) { return }
             if pr == nil { self.error = error.localizedDescription } else { actionError = error.localizedDescription }
         }
     }
@@ -119,9 +136,11 @@ final class PRDetailModel {
                 collapsed = Set(parsed.filter { viewedPaths.contains($0.id) || $0.lines.count > 1500 }.map(\.id))
             }
             files = parsed
+            filesVersion += 1
             filesLoaded = true
             filesError = nil
         } catch {
+            if isCancellation(error) { return }
             filesError = error.localizedDescription
         }
     }
@@ -138,6 +157,21 @@ final class PRDetailModel {
         }
         threadIndex = idx
         outdatedByPath = outdated
+        threadsVersion += 1
+    }
+
+    func flatRows(filter: String) -> [FlatDiffRow] {
+        let key = "\(filter)|\(filesVersion)|\(collapsed.sorted().joined(separator: ","))|\(pending.map { $0.id.uuidString }.joined())|\(composer.map { "\($0.path):\($0.side):\($0.line)" } ?? "")|\(threadsVersion)|\(Loc.shared.lang.rawValue)"
+        if key == flatCacheKey { return flatCache }
+        var out: [FlatDiffRow] = []
+        for file in files where filter.isEmpty || file.id.localizedCaseInsensitiveContains(filter) {
+            out.append(.header(file))
+            if collapsed.contains(file.id) { continue }
+            for r in rows(for: file) { out.append(.row(file, r)) }
+        }
+        flatCacheKey = key
+        flatCache = out
+        return out
     }
 
     func threadCount(_ path: String) -> Int {

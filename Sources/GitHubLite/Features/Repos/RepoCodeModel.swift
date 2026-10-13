@@ -99,6 +99,7 @@ final class RepoCodeModel {
                 readme = try? await api.readmeHTML(repo, ref: ref, dir: path)
             }
         } catch {
+            if isCancellation(error) { return }
             dirError = error.localizedDescription
         }
     }
@@ -145,6 +146,7 @@ final class RepoCodeModel {
                 file = .text(obj.text ?? "", truncated: obj.isTruncated ?? false)
             }
         } catch {
+            if isCancellation(error) { return }
             fileError = error.localizedDescription
         }
     }

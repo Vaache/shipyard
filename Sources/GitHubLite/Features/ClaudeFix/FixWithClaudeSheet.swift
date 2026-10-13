@@ -8,7 +8,8 @@ struct FixWithClaudeSheet: View {
     let model: PRDetailModel
     let pr: PullRequestDetail
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("claudeTarget") private var target: ClaudeTarget = .terminal
+    @Environment(AppModel.self) private var app
+    @AppStorage("claudeTarget.v2") private var target: ClaudeTarget = .app
     @AppStorage("claudeMode") private var mode: ClaudePermissionMode = .standard
     @State private var found: FoundFixPrompt?
     @State private var source: FixSource = .composed
@@ -194,7 +195,7 @@ struct FixWithClaudeSheet: View {
                 ForEach(ClaudePermissionMode.allCases) { Text($0.title).tag($0) }
             }
             .frame(width: 250)
-            .disabled(target == .desktop || target == .copy)
+            .disabled(target == .desktop || target == .copy || target == .app)
             Spacer()
             Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
             Button(target == .copy ? t("Скопировать", "Copy") : t("Запустить", "Launch")) { launch() }
@@ -213,6 +214,12 @@ struct FixWithClaudeSheet: View {
     }
 
     private func launch() {
+        if target == .app, let folder {
+            app.claude.newSession(folder: folder, prompt: prompt, name: "Fix PR #\(pr.number): \(pr.title)")
+            app.section = .claude
+            dismiss()
+            return
+        }
         do {
             try ClaudeLauncher.launch(prompt: prompt, folder: folder ?? "", target: target, mode: mode, sessionName: "Fix PR #\(pr.number): \(pr.title)")
             dismiss()

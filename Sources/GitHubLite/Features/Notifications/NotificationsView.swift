@@ -67,6 +67,7 @@ struct NotificationsView: View {
             if !showAll { app.unreadCount = items.count }
             error = nil
         } catch {
+            if isCancellation(error) { return }
             self.error = error.localizedDescription
         }
     }

@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Environment(AppModel.self) private var app
     @AppStorage("pollInterval") private var pollInterval = 120.0
     @AppStorage("oauthClientID") private var clientID = ""
+    @State private var browserTick = 0
 
     var body: some View {
         Form {
@@ -36,6 +37,13 @@ struct SettingsView: View {
                 } else {
                     Text(t("Вход не выполнен", "Not signed in")).foregroundStyle(.secondary)
                 }
+            }
+            Section(t("Ссылки", "Links")) {
+                Picker(t("Открывать ссылки в", "Open links in"), selection: Binding(get: { LinkBrowser.selected }, set: { LinkBrowser.selected = $0; browserTick += 1 })) {
+                    Text(t("Браузер по умолчанию", "System default")).tag(LinkBrowser.systemDefault)
+                    ForEach(LinkBrowser.installed) { Text($0.name).tag($0.id) }
+                }
+                .id(browserTick)
             }
             Section(t("Обновление", "Refresh")) {
                 Picker(t("Проверять счётчики", "Check counters"), selection: $pollInterval) {

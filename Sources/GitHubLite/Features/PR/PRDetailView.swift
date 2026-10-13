@@ -52,16 +52,13 @@ struct PRDetailContent: View {
         VStack(spacing: 0) {
             PRHeaderView(model: model, pr: pr, onMerge: { showMerge = true })
             ClaudeFixBanner(pr: pr) { showFix = true }
-            Picker("", selection: $model.tab) {
-                Text(t("Обсуждение", "Conversation")).tag(PRTab.conversation)
-                Text(t("Коммиты · \(pr.allCommits.totalCount ?? pr.allCommits.nodes.count)", "Commits · \(pr.allCommits.totalCount ?? pr.allCommits.nodes.count)")).tag(PRTab.commits)
-                Text(t("Проверки · \(checksSummary)", "Checks · \(checksSummary)")).tag(PRTab.checks)
-                Text(t("Файлы · \(pr.changedFiles)", "Files changed · \(pr.changedFiles)")).tag(PRTab.files)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            TabStrip(items: [
+                TabItem(id: PRTab.conversation, title: t("Обсуждение", "Conversation"), icon: "bubble.left.and.bubble.right", badge: commentsBadge),
+                TabItem(id: PRTab.commits, title: t("Коммиты", "Commits"), icon: "point.3.connected.trianglepath.dotted", badge: "\(pr.allCommits.totalCount ?? pr.allCommits.nodes.count)"),
+                TabItem(id: PRTab.checks, title: t("Проверки", "Checks"), icon: "checklist", badge: checksSummary, badgeColor: checksColor),
+                TabItem(id: PRTab.files, title: t("Файлы", "Files changed"), icon: "doc.text", badge: "\(pr.changedFiles)")
+            ], selection: $model.tab, shortcuts: true)
+            .padding(.top, 6)
             Divider()
             ZStack {
                 ForEach(PRTab.allCases) { tab in
@@ -105,6 +102,18 @@ struct PRDetailContent: View {
         case .checks: ChecksTab(model: model, pr: pr)
         case .files: FilesTab(model: model)
         }
+    }
+
+    private var commentsBadge: String? {
+        let unresolved = pr.reviewThreads.nodes.filter { !$0.isResolved }.count
+        return unresolved > 0 ? "\(unresolved)" : nil
+    }
+
+    private var checksColor: Color {
+        let checks = pr.checks
+        if checks.contains(where: { $0.outcome == .failure }) { return .ghRed }
+        if checks.contains(where: { $0.outcome == .pending }) { return .ghYellow }
+        return checks.isEmpty ? .secondary : .ghGreen
     }
 
     private var checksSummary: String {
@@ -447,7 +456,7 @@ struct ConversationTab: View {
         if let route = GitHubURL.parse(url.absoluteString, allowShort: false) {
             app.open(route, push: true)
         } else {
-            NSWorkspace.shared.open(url)
+            LinkBrowser.open(url)
         }
     }
 }

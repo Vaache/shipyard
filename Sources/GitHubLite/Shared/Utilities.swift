@@ -71,7 +71,7 @@ enum Fmt {
 
 func openInBrowser(_ s: String?) {
     guard let s, let u = URL(string: s) else { return }
-    NSWorkspace.shared.open(u)
+    LinkBrowser.open(u)
 }
 
 func copyToPasteboard(_ s: String) {
@@ -290,4 +290,11 @@ struct ComposerBox: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
     }
+}
+
+func isCancellation(_ error: Error) -> Bool {
+    if error is CancellationError { return true }
+    if let u = error as? URLError, u.code == .cancelled { return true }
+    let ns = error as NSError
+    return ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled
 }

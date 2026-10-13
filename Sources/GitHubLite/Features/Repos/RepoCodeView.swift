@@ -76,7 +76,7 @@ struct RepoCodeView: View {
                         }
                 }
             }
-            .listStyle(.sidebar)
+            .listStyle(.inset)
             .overlay { if model.loadingDir && model.entries.isEmpty { ProgressView().controlSize(.small) } }
         }
     }
@@ -212,15 +212,15 @@ struct RepoCodeView: View {
     }
 
     private func openLink(_ url: URL) {
-        if url.host == "github.com", url.pathComponents.count > 1, url.pathComponents.count <= 2 { NSWorkspace.shared.open(url); return }
+        if url.host == "github.com", url.pathComponents.count > 1, url.pathComponents.count <= 2 { LinkBrowser.open(url); return }
         if let route = GitHubURL.parse(url.absoluteString, allowShort: false), case .repo = route {
-            NSWorkspace.shared.open(url)
+            LinkBrowser.open(url)
         } else if let route = GitHubURL.parse(url.absoluteString, allowShort: false) {
             app.open(route, push: true)
         } else if url.host == "github.com", url.path.isEmpty || url.path == "/" {
             return
         } else {
-            NSWorkspace.shared.open(url)
+            LinkBrowser.open(url)
         }
     }
 }

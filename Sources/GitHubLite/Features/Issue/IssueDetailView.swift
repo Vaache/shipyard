@@ -38,6 +38,7 @@ final class IssueDetailModel {
             if h != html { html = h }
             error = nil
         } catch {
+            if isCancellation(error) { return }
             if issue == nil { self.error = error.localizedDescription } else { actionError = error.localizedDescription }
         }
     }
@@ -122,7 +123,7 @@ struct IssueDetailView: View {
             .padding(16)
             Divider()
             HTMLView(html: model.html, scrollToBottomToken: model.scrollToBottomToken, onLink: { url in
-                if let route = GitHubURL.parse(url.absoluteString, allowShort: false) { app.open(route, push: true) } else { NSWorkspace.shared.open(url) }
+                if let route = GitHubURL.parse(url.absoluteString, allowShort: false) { app.open(route, push: true) } else { LinkBrowser.open(url) }
             })
             Divider()
             HStack(alignment: .bottom, spacing: 8) {
