@@ -42,11 +42,11 @@ struct RepoCodeView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .help(t("Ветка", "Branch"))
+                .help("Branch")
                 Spacer()
                 Button { showQuickOpen = true } label: { Image(systemName: "magnifyingglass").foregroundStyle(Color.syMuted) }
                     .buttonStyle(.borderless)
-                    .help(t("Перейти к файлу (⌘P)", "Go to file (⌘P)"))
+                    .help("Go to file (⌘P)")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -70,8 +70,8 @@ struct RepoCodeView: View {
                         .contentShape(Rectangle())
                         .onTapGesture { Task { await model.select(entry) } }
                         .contextMenu {
-                            Button(t("Копировать путь", "Copy path")) { copyToPasteboard(entry.path) }
-                            Button(t("Открыть в браузере", "Open in browser")) {
+                            Button("Copy path") { copyToPasteboard(entry.path) }
+                            Button("Open in browser") {
                                 openInBrowser("https://github.com/\(model.repo.full)/\(entry.isDir ? "tree" : "blob")/\(model.ref)/\(entry.path)")
                             }
                         }
@@ -124,7 +124,7 @@ struct RepoCodeView: View {
         } else {
             VStack(spacing: 10) {
                 IconTile(systemImage: "doc.text.magnifyingglass", color: .syTeal, size: 48)
-                Text(t("Выберите файл слева или нажмите ⌘P", "Pick a file on the left or press ⌘P")).foregroundStyle(Color.syMuted)
+                Text("Pick a file on the left or press ⌘P").foregroundStyle(Color.syMuted)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -138,27 +138,27 @@ struct RepoCodeView: View {
                 ChipView(text: ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
             }
             if case .text(let s, _) = model.file {
-                ChipView(text: tp(s.reduce(into: 1) { if $1 == "\n" { $0 += 1 } }, "строка", "строки", "строк", "line", "lines"))
+                ChipView(text: plural(s.reduce(into: 1) { if $1 == "\n" { $0 += 1 } }, "line", "lines"))
             }
             Spacer()
             if case .markdown = model.file {
                 Picker("", selection: $markdownSource) {
-                    Text(t("Просмотр", "Preview")).tag(false)
-                    Text(t("Код", "Source")).tag(true)
+                    Text("Preview").tag(false)
+                    Text("Source").tag(true)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: 160)
             }
             if case .text = model.file {
-                Toggle(t("Перенос", "Wrap"), isOn: $wrap).toggleStyle(.checkbox).controlSize(.small)
+                Toggle("Wrap", isOn: $wrap).toggleStyle(.checkbox).controlSize(.small)
             }
             Menu {
-                Button(t("Копировать путь", "Copy path")) { copyToPasteboard(path) }
-                if case .text(let s, _) = model.file { Button(t("Копировать содержимое", "Copy contents")) { copyToPasteboard(s) } }
-                if case .markdown(_, let s) = model.file { Button(t("Копировать содержимое", "Copy contents")) { copyToPasteboard(s) } }
-                Button(t("Копировать ссылку", "Copy link")) { copyToPasteboard(model.webURL) }
-                Button(t("Открыть в браузере", "Open in browser")) { openInBrowser(model.webURL) }
+                Button("Copy path") { copyToPasteboard(path) }
+                if case .text(let s, _) = model.file { Button("Copy contents") { copyToPasteboard(s) } }
+                if case .markdown(_, let s) = model.file { Button("Copy contents") { copyToPasteboard(s) } }
+                Button("Copy link") { copyToPasteboard(model.webURL) }
+                Button("Open in browser") { openInBrowser(model.webURL) }
             } label: {
                 Image(systemName: "ellipsis.circle").foregroundStyle(Color.syMuted)
             }
@@ -177,7 +177,7 @@ struct RepoCodeView: View {
         case .text(let s, let truncated):
             VStack(spacing: 0) {
                 if truncated {
-                    Label(t("Файл слишком большой — показана только часть", "File is too large — showing only part of it"), systemImage: "exclamationmark.triangle.fill")
+                    Label("File is too large — showing only part of it", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption).foregroundStyle(Color.syAmber).padding(6)
                 }
                 CodeTextView(text: s, ext: ext, wrap: wrap)
@@ -212,8 +212,8 @@ struct RepoCodeView: View {
         case .binary(let size):
             VStack(spacing: 8) {
                 IconTile(systemImage: "doc.zipper", color: .sySlate, size: 48)
-                Text(t("Бинарный файл", "Binary file") + " · " + ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)).foregroundStyle(Color.syMuted)
-                Button(t("Открыть в браузере", "Open in browser")) { openInBrowser(model.webURL) }
+                Text("Binary file" + " · " + ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)).foregroundStyle(Color.syMuted)
+                Button("Open in browser") { openInBrowser(model.webURL) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -286,7 +286,7 @@ struct QuickOpenSheet: View {
     var body: some View {
         let results = RepoCodeModel.fuzzyMatch(query, in: model.allPaths ?? [])
         VStack(spacing: 0) {
-            TextField(t("Перейти к файлу…", "Go to file…"), text: $query)
+            TextField("Go to file…", text: $query)
                 .textFieldStyle(.plain)
                 .font(.title3)
                 .padding(14)
@@ -306,15 +306,15 @@ struct QuickOpenSheet: View {
                 }
                 .frame(height: 380)
                 if model.pathsTruncated {
-                    Text(t("Репозиторий большой — список файлов неполный", "Large repository — file list is incomplete"))
+                    Text("Large repository — file list is incomplete")
                         .font(.caption).foregroundStyle(Color.syAmber).padding(6)
                 }
             }
             HStack {
-                Text(t("↩ открыть · Esc закрыть", "↩ open · Esc close")).font(.caption).foregroundStyle(Color.syDim)
+                Text("↩ open · Esc close").font(.caption).foregroundStyle(Color.syDim)
                 Spacer()
-                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(t("Открыть", "Open")) { open(selection ?? results.first) }.keyboardShortcut(.defaultAction)
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Open") { open(selection ?? results.first) }.keyboardShortcut(.defaultAction)
             }
             .padding(10)
             .background(Theme.isBrand ? Color.syBar : Color.clear)

@@ -43,7 +43,7 @@ enum ProcessMemory {
 
     static func format(_ bytes: Int) -> String {
         let mb = Double(bytes) / 1_048_576
-        return mb >= 1024 ? String(format: "%.1f ", mb / 1024) + t("ГБ", "GB") : "\(Int(mb.rounded())) " + t("МБ", "MB")
+        return mb >= 1024 ? String(format: "%.1f ", mb / 1024) + "GB" : "\(Int(mb.rounded())) " + "MB"
     }
 }
 
@@ -138,18 +138,18 @@ enum ClaudeTabState {
 
     var title: String {
         switch self {
-        case .working: return t("Работает", "Working")
-        case .waiting: return t("Ждёт вас", "Needs you")
-        case .active: return t("Активна", "Active")
-        case .sleeping: return t("Спит", "Sleeping")
-        case .stopped: return t("Остановлена", "Stopped")
+        case .working: return "Working"
+        case .waiting: return "Needs you"
+        case .active: return "Active"
+        case .sleeping: return "Sleeping"
+        case .stopped: return "Stopped"
         }
     }
 
     var help: String {
         switch self {
-        case .sleeping: return t("Процесс остановлен, память освобождена. Новое сообщение продолжит сессию.", "Process stopped, memory freed. A new message resumes the session.")
-        case .active: return t("Процесс запущен и занимает память. Уснёт после простоя.", "Process is running and uses memory. Sleeps after idle time.")
+        case .sleeping: return "Process stopped, memory freed. A new message resumes the session."
+        case .active: return "Process is running and uses memory. Sleeps after idle time."
         default: return title
         }
     }

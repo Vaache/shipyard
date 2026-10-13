@@ -67,8 +67,8 @@ enum LocalRepoStore {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.message = t("Выберите локальную папку репозитория \(repo.full)", "Choose the local folder of \(repo.full)")
-        panel.prompt = t("Выбрать", "Choose")
+        panel.message = "Choose the local folder of \(repo.full)"
+        panel.prompt = "Choose"
         guard panel.runModal() == .OK, let path = panel.url?.path else { return nil }
         save(repo, path: path)
         return path

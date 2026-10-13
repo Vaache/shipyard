@@ -22,7 +22,7 @@ struct SplashView: View {
                     Text("Shipyard")
                         .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(Color.syText)
-                    Text(t("Pull requests без браузера", "Pull requests, without the browser"))
+                    Text("Pull requests, without the browser")
                         .foregroundStyle(Color.syMuted)
                 }
                 .opacity(appeared ? 1 : 0)

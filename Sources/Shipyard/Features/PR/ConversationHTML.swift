@@ -17,10 +17,6 @@ enum ConversationHTML {
         return r
     }
 
-    private static func tr(_ ru: String, _ en: String) -> String {
-        t(ru, en)
-    }
-
     private static func avatar(_ url: String?, size: Int = 32) -> String {
         guard let url else { return "<div class=\"avatar ph\"></div>" }
         let sep = url.contains("?") ? "&" : "?"
@@ -34,12 +30,12 @@ enum ConversationHTML {
 
     private static func body(_ html: String?) -> String {
         let h = (html ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return h.isEmpty ? "<div class=\"md\"><p class=\"empty\">\(t("Нет описания", "No description provided."))</p></div>" : "<div class=\"md\">\(h)</div>"
+        return h.isEmpty ? "<div class=\"md\"><p class=\"empty\">\("No description provided.")</p></div>" : "<div class=\"md\">\(h)</div>"
     }
 
     private static func commentBox(author: Actor?, date: Date?, html: String?, note: String, highlight: Bool, link: String? = nil) -> String {
         let login = esc(author?.login ?? "ghost")
-        let linkHTML = link.map { " · <a href=\"\(esc($0))\">\(t("ссылка", "link"))</a>" } ?? ""
+        let linkHTML = link.map { " · <a href=\"\(esc($0))\">\("link")</a>" } ?? ""
         return """
         <div class="item">\(avatar(author?.avatarUrl))<div class="box\(highlight ? " mine" : "")">
         <div class="head"><b>\(login)</b><span>\(note)</span><span>·</span>\(time(date))\(linkHTML)</div>
@@ -71,18 +67,18 @@ enum ConversationHTML {
     static func thread(_ t: ReviewThread) -> String {
         let line = t.line ?? t.originalLine
         var tags = ""
-        if t.isOutdated { tags += "<span class=\"pill\">\(Self.tr("устарело", "outdated"))</span>" }
-        if t.isResolved { tags += "<span class=\"pill ok\">\(Self.tr("решено", "resolved"))</span>" }
+        if t.isOutdated { tags += "<span class=\"pill\">\("outdated")</span>" }
+        if t.isResolved { tags += "<span class=\"pill ok\">\("resolved")</span>" }
         let comments = t.comments.nodes.map { c in
             """
             <div class="tc">\(avatar(c.author?.avatarUrl, size: 20))<div class="tcb"><div class="meta"><b>\(esc(c.author?.login ?? "ghost"))</b> · \(time(c.createdAt))</div><div class="md">\(c.bodyHTML)</div></div></div>
             """
         }.joined()
         var actions = ""
-        if t.viewerCanReply { actions += "<button onclick=\"post('reply','\(esc(t.id))')\">\(Self.tr("Ответить", "Reply"))</button>" }
-        if t.isResolved, t.viewerCanUnresolve { actions += "<button onclick=\"post('unresolve','\(esc(t.id))')\">\(Self.tr("Переоткрыть", "Unresolve"))</button>" }
-        if !t.isResolved, t.viewerCanResolve { actions += "<button onclick=\"post('resolve','\(esc(t.id))')\">\(Self.tr("Решено", "Resolve"))</button>" }
-        actions += "<button class=\"ghost\" onclick=\"post('file','\(esc(t.path))')\">\(Self.tr("Открыть в файлах", "View in files"))</button>"
+        if t.viewerCanReply { actions += "<button onclick=\"post('reply','\(esc(t.id))')\">\("Reply")</button>" }
+        if t.isResolved, t.viewerCanUnresolve { actions += "<button onclick=\"post('unresolve','\(esc(t.id))')\">\("Unresolve")</button>" }
+        if !t.isResolved, t.viewerCanResolve { actions += "<button onclick=\"post('resolve','\(esc(t.id))')\">\("Resolve")</button>" }
+        actions += "<button class=\"ghost\" onclick=\"post('file','\(esc(t.path))')\">\("View in files")</button>"
         return """
         <details class="thread"\(t.isResolved ? "" : " open")><summary class="th">\(esc(t.path))\(line.map { "<span class=\"ln\">:\($0)</span>" } ?? "")\(tags)</summary>
         \(hunk(t.comments.nodes.first?.diffHunk))\(comments)<div class="actions">\(actions)</div></details>
@@ -91,14 +87,14 @@ enum ConversationHTML {
 
     static func render(pr: PullRequestDetail) -> String {
         let authorLogin = pr.author?.login
-        var out = commentBox(author: pr.author, date: pr.createdAt, html: pr.bodyHTML, note: t("описание", "description"), highlight: true)
+        var out = commentBox(author: pr.author, date: pr.createdAt, html: pr.bodyHTML, note: "description", highlight: true)
         var byReview: [String: [ReviewThread]] = [:]
         for t in pr.reviewThreads.nodes {
             if let rid = t.comments.nodes.first?.pullRequestReview?.id { byReview[rid, default: []].append(t) }
         }
         var rendered = Set<String>()
         if (pr.timelineItems.totalCount ?? 0) > pr.timelineItems.nodes.count {
-            out += "<div class=\"event\"><span class=\"ic\">…</span><span>\(t("Показаны последние \(pr.timelineItems.nodes.count) событий из \(pr.timelineItems.totalCount ?? 0)", "Showing the latest \(pr.timelineItems.nodes.count) of \(pr.timelineItems.totalCount ?? 0) events")) — <a href=\"\(esc(pr.url))\">\(t("полная история", "full history"))</a></span></div>"
+            out += "<div class=\"event\"><span class=\"ic\">…</span><span>\("Showing the latest \(pr.timelineItems.nodes.count) of \(pr.timelineItems.totalCount ?? 0) events") — <a href=\"\(esc(pr.url))\">\("full history")</a></span></div>"
         }
         for item in pr.timelineItems.nodes {
             if item.typename == "PullRequestReview" {
@@ -111,13 +107,13 @@ enum ConversationHTML {
         }
         let rest = pr.reviewThreads.nodes.filter { !rendered.contains($0.id) }
         if !rest.isEmpty {
-            out += "<h3 class=\"sec\">\(t("Обсуждения в коде", "Review threads"))</h3>" + rest.map(thread).joined()
+            out += "<h3 class=\"sec\">\("Review threads")</h3>" + rest.map(thread).joined()
         }
         return page(out)
     }
 
     static func render(issue: IssueDetail) -> String {
-        var out = commentBox(author: issue.author, date: issue.createdAt, html: issue.bodyHTML, note: t("описание", "description"), highlight: true)
+        var out = commentBox(author: issue.author, date: issue.createdAt, html: issue.bodyHTML, note: "description", highlight: true)
         for item in issue.timelineItems.nodes {
             out += common(item, authorLogin: issue.author?.login, base: "")
         }
@@ -128,11 +124,11 @@ enum ConversationHTML {
         let hasBody = !(item.bodyHTML ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let (icon, cls, text): (String, String, String) = {
             switch item.state {
-            case "APPROVED": return ("✓", "ok", t("одобрено", "approved"))
-            case "CHANGES_REQUESTED": return ("±", "bad", t("запрошены изменения", "requested changes"))
-            case "DISMISSED": return ("✕", "", t("ревью отклонено", "review dismissed"))
-            case "PENDING": return ("…", "", t("черновик ревью", "pending review"))
-            default: return ("💬", "", t("ревью", "reviewed"))
+            case "APPROVED": return ("✓", "ok", "approved")
+            case "CHANGES_REQUESTED": return ("±", "bad", "requested changes")
+            case "DISMISSED": return ("✕", "", "review dismissed")
+            case "PENDING": return ("…", "", "pending review")
+            default: return ("💬", "", "reviewed")
             }
         }()
         if !hasBody && threads.isEmpty {
@@ -151,37 +147,37 @@ enum ConversationHTML {
     private static func common(_ item: TimelineItem, authorLogin: String?, base: String) -> String {
         switch item.typename {
         case "IssueComment":
-            return commentBox(author: item.author, date: item.createdAt, html: item.bodyHTML, note: t("комментарий", "commented"), highlight: item.author?.login == authorLogin)
+            return commentBox(author: item.author, date: item.createdAt, html: item.bodyHTML, note: "commented", highlight: item.author?.login == authorLogin)
         case "PullRequestCommit":
             guard let c = item.commit else { return "" }
             let who = c.author?.user?.login ?? c.author?.name ?? ""
             let actor = Actor(login: who, avatarUrl: c.author?.avatarUrl)
-            return event("●", "", actor: actor, text: t("коммит", "commit") + " <code>\(esc(c.abbreviatedOid ?? ""))</code> \(esc(c.messageHeadline ?? ""))", date: c.committedDate)
+            return event("●", "", actor: actor, text: "commit" + " <code>\(esc(c.abbreviatedOid ?? ""))</code> \(esc(c.messageHeadline ?? ""))", date: c.committedDate)
         case "MergedEvent":
-            return event("⇢", "merged", actor: item.actor, text: t("слито", "merged") + "\(item.commit?.abbreviatedOid.map { " (<code>\(esc($0))</code>)" } ?? "") " + t("в", "into") + " <code>\(esc(item.mergeRefName ?? base))</code>", date: item.createdAt)
+            return event("⇢", "merged", actor: item.actor, text: "merged" + "\(item.commit?.abbreviatedOid.map { " (<code>\(esc($0))</code>)" } ?? "") " + "into" + " <code>\(esc(item.mergeRefName ?? base))</code>", date: item.createdAt)
         case "ClosedEvent":
-            return event("✕", "bad", actor: item.actor, text: t("закрыто", "closed"), date: item.createdAt)
+            return event("✕", "bad", actor: item.actor, text: "closed", date: item.createdAt)
         case "ReopenedEvent":
-            return event("↺", "ok", actor: item.actor, text: t("переоткрыто", "reopened"), date: item.createdAt)
+            return event("↺", "ok", actor: item.actor, text: "reopened", date: item.createdAt)
         case "HeadRefForcePushedEvent":
-            return event("⤒", "", actor: item.actor, text: t("force-push в ветку", "force-pushed the branch"), date: item.createdAt)
+            return event("⤒", "", actor: item.actor, text: "force-pushed the branch", date: item.createdAt)
         case "HeadRefDeletedEvent":
-            return event("⌫", "", actor: item.actor, text: t("ветка удалена", "deleted the branch"), date: item.createdAt)
+            return event("⌫", "", actor: item.actor, text: "deleted the branch", date: item.createdAt)
         case "ReadyForReviewEvent":
-            return event("◉", "ok", actor: item.actor, text: t("готово к ревью", "marked as ready for review"), date: item.createdAt)
+            return event("◉", "ok", actor: item.actor, text: "marked as ready for review", date: item.createdAt)
         case "ConvertToDraftEvent":
-            return event("◌", "", actor: item.actor, text: t("переведено в черновик", "converted to draft"), date: item.createdAt)
+            return event("◌", "", actor: item.actor, text: "converted to draft", date: item.createdAt)
         case "ReviewRequestedEvent":
-            return event("👁", "", actor: item.actor, text: t("запрос ревью", "requested review from") + " → <b>\(esc(item.requestedReviewer?.display ?? "?"))</b>", date: item.createdAt)
+            return event("👁", "", actor: item.actor, text: "requested review from" + " → <b>\(esc(item.requestedReviewer?.display ?? "?"))</b>", date: item.createdAt)
         case "LabeledEvent":
             guard let l = item.label else { return "" }
-            return event("🏷", "", actor: item.actor, text: t("метка", "label") + " \(label(l))", date: item.createdAt)
+            return event("🏷", "", actor: item.actor, text: "label" + " \(label(l))", date: item.createdAt)
         case "RenamedTitleEvent":
-            return event("✎", "", actor: item.actor, text: t("заголовок", "title") + ": <s>\(esc(item.previousTitle ?? ""))</s> → \(esc(item.currentTitle ?? ""))", date: item.createdAt)
+            return event("✎", "", actor: item.actor, text: "title" + ": <s>\(esc(item.previousTitle ?? ""))</s> → \(esc(item.currentTitle ?? ""))", date: item.createdAt)
         case "CrossReferencedEvent":
             guard let s = item.source, let url = s.url else { return "" }
             let name = "\(s.repository?.nameWithOwner ?? "")#\(s.number ?? 0)"
-            return event("↗", "", actor: item.actor, text: t("упоминание в", "mentioned in") + " <a href=\"\(esc(url))\">\(esc(name)) \(esc(s.title ?? ""))</a>", date: item.createdAt)
+            return event("↗", "", actor: item.actor, text: "mentioned in" + " <a href=\"\(esc(url))\">\(esc(name)) \(esc(s.title ?? ""))</a>", date: item.createdAt)
         default:
             return ""
         }

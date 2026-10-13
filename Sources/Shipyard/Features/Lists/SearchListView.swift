@@ -6,9 +6,9 @@ enum StateFilter: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .open: return t("Открытые", "Open")
-        case .closed: return t("Закрытые", "Closed")
-        case .all: return t("Все", "All")
+        case .open: return "Open"
+        case .closed: return "Closed"
+        case .all: return "All"
         }
     }
 
@@ -150,7 +150,7 @@ struct SearchListView: View {
                         .contextMenu { ItemContextMenu(item: item) }
                 }
                 if model.items.isEmpty, !model.loading, model.error == nil {
-                    Text(t("Ничего нет", "Nothing here")).foregroundStyle(Color.syMuted)
+                    Text("Nothing here").foregroundStyle(Color.syMuted)
                 }
             }
             .opacity(model.loading && !model.items.isEmpty ? 0.55 : 1)
@@ -159,7 +159,7 @@ struct SearchListView: View {
                 if model.loading && model.items.isEmpty { ProgressView().controlSize(.small) }
             }
         }
-        .searchable(text: $text, placement: .toolbar, prompt: t("Фильтр: текст, repo:org/name, label:bug", "Filter: text, repo:org/name, label:bug"))
+        .searchable(text: $text, placement: .toolbar, prompt: "Filter: text, repo:org/name, label:bug")
         .navigationTitle(title)
         .navigationSubtitle(model.total > 0 ? "\(model.total)" : "")
         .task(id: "\(query)|\(app.api != nil)") {
@@ -175,10 +175,10 @@ struct ItemContextMenu: View {
     let item: SearchItem
 
     var body: some View {
-        Button(t("Открыть в браузере", "Open in Browser")) { openInBrowser(item.url) }
-        Button(t("Копировать ссылку", "Copy Link")) { copyToPasteboard(item.url) }
+        Button("Open in Browser") { openInBrowser(item.url) }
+        Button("Copy Link") { copyToPasteboard(item.url) }
         if item.isPR {
-            Button(t("Копировать «gh pr checkout»", "Copy “gh pr checkout”")) { copyToPasteboard("gh pr checkout \(item.number) -R \(item.repository.nameWithOwner)") }
+            Button("Copy “gh pr checkout”") { copyToPasteboard("gh pr checkout \(item.number) -R \(item.repository.nameWithOwner)") }
         }
     }
 }
@@ -211,7 +211,7 @@ struct ItemRow: View {
                     }
                 }
                 if let base = item.stackedOn {
-                    Label(t("в стеке на \(base)", "stacked on \(base)"), systemImage: "square.stack.3d.up")
+                    Label("stacked on \(base)", systemImage: "square.stack.3d.up")
                         .font(.caption)
                         .foregroundStyle(Color.syIndigo)
                         .lineLimit(1)
@@ -229,9 +229,9 @@ struct ItemRow: View {
     @ViewBuilder
     private var reviewBadge: some View {
         switch item.reviewDecision {
-        case "APPROVED": Image(systemName: "checkmark.seal.fill").foregroundStyle(Color.ghGreen).font(.caption).help(t("Одобрено", "Approved"))
-        case "CHANGES_REQUESTED": Image(systemName: "exclamationmark.bubble.fill").foregroundStyle(Color.ghRed).font(.caption).help(t("Запрошены изменения", "Changes requested"))
-        case "REVIEW_REQUIRED": Image(systemName: "eye").foregroundStyle(Color.syMuted).font(.caption).help(t("Нужно ревью", "Review required"))
+        case "APPROVED": Image(systemName: "checkmark.seal.fill").foregroundStyle(Color.ghGreen).font(.caption).help("Approved")
+        case "CHANGES_REQUESTED": Image(systemName: "exclamationmark.bubble.fill").foregroundStyle(Color.ghRed).font(.caption).help("Changes requested")
+        case "REVIEW_REQUIRED": Image(systemName: "eye").foregroundStyle(Color.syMuted).font(.caption).help("Review required")
         default: EmptyView()
         }
     }

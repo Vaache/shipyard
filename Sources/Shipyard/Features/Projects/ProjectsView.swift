@@ -9,7 +9,7 @@ struct ProjectsListView: View {
 
     var body: some View {
         List(selection: Binding(get: { app.detailRoot }, set: { app.select($0) })) {
-            if !app.hasProjectScope || (error?.contains("scope") ?? false) || (error?.contains("прав") ?? false) {
+            if !app.hasProjectScope || (error?.contains("scope") ?? false) {
                 ScopeHint()
             } else if let error {
                 Text(error).foregroundStyle(Color.syRed).font(.caption)
@@ -21,13 +21,13 @@ struct ProjectsListView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 5) {
                             Text(p.title).fontWeight(.semibold).foregroundStyle(Color.syText).lineLimit(1)
-                            if p.closed { ChipView(text: t("закрыт", "closed"), color: .sySlate) }
+                            if p.closed { ChipView(text: "closed", color: .sySlate) }
                         }
                         if let d = p.shortDescription, !d.isEmpty { Text(d).font(.caption).foregroundStyle(Color.syMuted).lineLimit(2) }
                         HStack(spacing: 6) {
                             Text("\(p.owner?.login ?? "") · #\(p.number)").foregroundStyle(Color.syMuted)
                             Text("·").foregroundStyle(Color.syDim)
-                            Text(tp(p.items.totalCount, "элемент", "элемента", "элементов", "item", "items")).foregroundStyle(Color.syIndigo)
+                            Text(plural(p.items.totalCount, "item", "items")).foregroundStyle(Color.syIndigo)
                             Spacer()
                             Text(Fmt.rel(p.updatedAt)).foregroundStyle(Color.syDim)
                         }
@@ -36,17 +36,17 @@ struct ProjectsListView: View {
                 }
                 .padding(.vertical, 4)
                 .tag(Route.project(p.ref))
-                .contextMenu { Button(t("Открыть в браузере", "Open in Browser")) { openInBrowser(p.url) } }
+                .contextMenu { Button("Open in Browser") { openInBrowser(p.url) } }
             }
             if projects.isEmpty, !loading, error == nil {
-                Text(t("Проектов нет", "No projects")).foregroundStyle(Color.syMuted)
+                Text("No projects").foregroundStyle(Color.syMuted)
             }
         }
         .overlay { if loading && projects.isEmpty { ProgressView().controlSize(.small) } }
-        .navigationTitle(t("Проекты", "Projects"))
+        .navigationTitle("Projects")
         .toolbar {
             ToolbarItem {
-                Toggle(isOn: $showClosed) { Label(t("Закрытые", "Closed"), systemImage: "archivebox") }.help(t("Показывать закрытые", "Show closed"))
+                Toggle(isOn: $showClosed) { Label("Closed", systemImage: "archivebox") }.help("Show closed")
             }
         }
         .task { await load() }
@@ -75,9 +75,9 @@ struct ScopeHint: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 IconTile(systemImage: "key.fill", color: .syAmber, size: 22)
-                Text(t("Токену не хватает прав на Projects", "Token is missing Projects scopes")).font(.callout.weight(.semibold)).foregroundStyle(Color.syText)
+                Text("Token is missing Projects scopes").font(.callout.weight(.semibold)).foregroundStyle(Color.syText)
             }
-            Text(t("Выполните в терминале и затем нажмите «Обновить токен»:", "Run this in Terminal, then click “Refresh Token”:")).font(.caption).foregroundStyle(Color.syMuted)
+            Text("Run this in Terminal, then click “Refresh Token”:").font(.caption).foregroundStyle(Color.syMuted)
             Text("gh auth refresh -s read:project,project")
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(Color.syText)
@@ -87,8 +87,8 @@ struct ScopeHint: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .card(radius: 6, fill: .sySunken)
             HStack {
-                Button(t("Копировать команду", "Copy Command")) { copyToPasteboard("gh auth refresh -s read:project,project") }
-                Button(t("Обновить токен из gh", "Refresh Token from gh")) {
+                Button("Copy Command") { copyToPasteboard("gh auth refresh -s read:project,project") }
+                Button("Refresh Token from gh") {
                     busy = true
                     Task {
                         if let t = try? await GHCLI.token() { try? await app.login(token: t) }
@@ -202,15 +202,15 @@ struct ProjectBoardView: View {
         return VStack(spacing: 0) {
             HStack {
                 if model.groupFields.count > 1 {
-                    Picker(t("Группировать по", "Group by"), selection: $model.fieldId) {
+                    Picker("Group by", selection: $model.fieldId) {
                         ForEach(model.groupFields) { Text($0.name).tag(Optional($0.id)) }
                     }
                     .foregroundStyle(Color.syMuted)
                     .frame(maxWidth: 260)
                 }
-                TextField(t("Фильтр карточек", "Filter cards"), text: $filter).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
+                TextField("Filter cards", text: $filter).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
                 Spacer()
-                ChipView(text: tp(model.items.count, "элемент", "элемента", "элементов", "item", "items"), color: .syIndigo, icon: "square.stack")
+                ChipView(text: plural(model.items.count, "item", "items"), color: .syIndigo, icon: "square.stack")
                 if model.loading { ProgressView().controlSize(.small) }
             }
             .padding(.horizontal, 14)
@@ -228,11 +228,11 @@ struct ProjectBoardView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button { Task { await model.load() } } label: { Label(t("Обновить", "Refresh"), systemImage: "arrow.clockwise") }
-                Button { openInBrowser(project.url) } label: { Label(t("В браузере", "Open in Browser"), systemImage: "safari") }
+                Button { Task { await model.load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                Button { openInBrowser(project.url) } label: { Label("Open in Browser", systemImage: "safari") }
             }
         }
-        .alert(t("Ошибка", "Error"), isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })) {
+        .alert("Error", isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })) {
             Button("OK") {}
         } message: {
             Text(model.actionError ?? "")
@@ -250,12 +250,12 @@ struct ProjectBoardView: View {
     private func columnsFor(_ model: ProjectBoardModel) -> [Column] {
         let items = model.items.filter { filter.isEmpty || ($0.content?.title ?? "").localizedCaseInsensitiveContains(filter) || ($0.content?.repository?.nameWithOwner ?? "").localizedCaseInsensitiveContains(filter) }
         guard let field = model.field, let fieldId = model.fieldId, let options = field.options else {
-            return [Column(id: "all", optionId: nil, name: t("Все", "All"), color: "GRAY", items: items)]
+            return [Column(id: "all", optionId: nil, name: "All", color: "GRAY", items: items)]
         }
         var cols: [Column] = []
         let known = Set(options.map(\.id))
         let none = items.filter { $0.optionId(for: fieldId).map { !known.contains($0) } ?? true }
-        if !none.isEmpty { cols.append(Column(id: "none", optionId: nil, name: t("Без \(field.name)", "No \(field.name)"), color: "GRAY", items: none)) }
+        if !none.isEmpty { cols.append(Column(id: "none", optionId: nil, name: "No \(field.name)", color: "GRAY", items: none)) }
         for o in options {
             cols.append(Column(id: o.id, optionId: o.id, name: o.name, color: o.color, items: items.filter { $0.optionId(for: fieldId) == o.id }))
         }
@@ -302,16 +302,16 @@ struct ProjectColumn: View {
                         ProjectCard(item: item)
                             .draggable(item.id)
                             .contextMenu {
-                                Menu(t("Переместить в", "Move to")) {
+                                Menu("Move to") {
                                     ForEach(options) { o in
                                         Button(o.name) { Task { await model.move(item.id, to: o.id) } }
                                     }
                                     Divider()
-                                    Button(t("Без статуса", "No Status")) { Task { await model.move(item.id, to: nil) } }
+                                    Button("No Status") { Task { await model.move(item.id, to: nil) } }
                                 }
                                 if let url = item.content?.url {
-                                    Button(t("Открыть в браузере", "Open in Browser")) { openInBrowser(url) }
-                                    Button(t("Копировать ссылку", "Copy Link")) { copyToPasteboard(url) }
+                                    Button("Open in Browser") { openInBrowser(url) }
+                                    Button("Copy Link") { copyToPasteboard(url) }
                                 }
                             }
                     }
@@ -345,7 +345,7 @@ struct ProjectCard: View {
                 } else {
                     Image(systemName: "doc.text").foregroundStyle(Color.syDim).font(.caption)
                 }
-                Text(c?.repository.map { "\($0.nameWithOwner)\(c?.number.map { "#\($0)" } ?? "")" } ?? t("Черновик", "Draft"))
+                Text(c?.repository.map { "\($0.nameWithOwner)\(c?.number.map { "#\($0)" } ?? "")" } ?? "Draft")
                     .font(.caption).foregroundStyle(Color.syMuted).lineLimit(1)
                 Spacer()
                 ForEach(c?.assignees?.nodes ?? [], id: \.login) { Avatar(url: $0.avatarUrl, size: 16).help($0.login) }

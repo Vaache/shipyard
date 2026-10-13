@@ -25,7 +25,7 @@ final class IssueDetailModel {
         do {
             let r = try await api.issue(ref)
             guard let node = r.repository?.issueOrPullRequest else {
-                error = t("Issue \(ref.title) не найден", "Issue \(ref.title) not found")
+                error = "Issue \(ref.title) not found"
                 return
             }
             if node.typename == "PullRequest" {
@@ -112,7 +112,7 @@ struct IssueDetailView: View {
                     Avatar(url: issue.author?.avatarUrl, size: 18)
                     Text(issue.author?.login ?? "ghost").fontWeight(.semibold).foregroundStyle(Color.syText)
                     ChipView(text: ref.repo.full, color: .syTeal, icon: "book.closed.fill")
-                    ChipView(text: tp(issue.comments.totalCount, "комментарий", "комментария", "комментариев", "comment", "comments"), color: .sySky, icon: "bubble.left.fill")
+                    ChipView(text: plural(issue.comments.totalCount, "comment", "comments"), color: .sySky, icon: "bubble.left.fill")
                     Spacer(minLength: 0)
                     Text(Fmt.rel(issue.createdAt)).foregroundStyle(Color.syMuted).help(Fmt.full.string(from: issue.createdAt))
                 }
@@ -122,7 +122,7 @@ struct IssueDetailView: View {
                     HStack(spacing: 6) {
                         ForEach(issue.labels.nodes, id: \.name) { LabelChip(label: $0) }
                         if !issue.assignees.nodes.isEmpty {
-                            Text(t("Исполнители:", "Assignees:")).font(.caption).foregroundStyle(Color.syMuted).padding(.leading, issue.labels.nodes.isEmpty ? 0 : 6)
+                            Text("Assignees:").font(.caption).foregroundStyle(Color.syMuted).padding(.leading, issue.labels.nodes.isEmpty ? 0 : 6)
                             ForEach(issue.assignees.nodes, id: \.login) { Avatar(url: $0.avatarUrl, size: 18).help($0.login) }
                         }
                     }
@@ -136,8 +136,8 @@ struct IssueDetailView: View {
             })
             Rectangle().fill(Color.syLine).frame(height: 1)
             HStack(alignment: .bottom, spacing: 8) {
-                ComposerBox(text: $text, placeholder: t("Комментарий (Markdown) — ⌘↩ отправить", "Comment (Markdown) — ⌘↩ to send"), minHeight: 56).frame(height: 64)
-                Button(t("Комментировать", "Comment")) {
+                ComposerBox(text: $text, placeholder: "Comment (Markdown) — ⌘↩ to send", minHeight: 56).frame(height: 64)
+                Button("Comment") {
                     let body = text
                     Task { if await model.comment(body) { text = "" } }
                 }
@@ -155,19 +155,19 @@ struct IssueDetailView: View {
                 if model.busy || model.loading { ProgressView().controlSize(.small) }
                 if issue.viewerCanUpdate {
                     if issue.issueState == "OPEN" {
-                        Button { Task { await model.setOpen(false) } } label: { Label(t("Закрыть", "Close"), systemImage: "checkmark.circle") }
-                            .help(t("Закрыть issue", "Close issue"))
+                        Button { Task { await model.setOpen(false) } } label: { Label("Close", systemImage: "checkmark.circle") }
+                            .help("Close issue")
                     } else {
-                        Button { Task { await model.setOpen(true) } } label: { Label(t("Переоткрыть", "Reopen"), systemImage: "arrow.uturn.backward.circle") }
-                            .help(t("Переоткрыть issue", "Reopen issue"))
+                        Button { Task { await model.setOpen(true) } } label: { Label("Reopen", systemImage: "arrow.uturn.backward.circle") }
+                            .help("Reopen issue")
                     }
                 }
-                Button { copyToPasteboard(issue.url) } label: { Label(t("Копировать ссылку", "Copy Link"), systemImage: "link") }
-                Button { Task { await model.load() } } label: { Label(t("Обновить", "Refresh"), systemImage: "arrow.clockwise") }
-                Button { openInBrowser(issue.url) } label: { Label(t("В браузере", "Open in Browser"), systemImage: "safari") }
+                Button { copyToPasteboard(issue.url) } label: { Label("Copy Link", systemImage: "link") }
+                Button { Task { await model.load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                Button { openInBrowser(issue.url) } label: { Label("Open in Browser", systemImage: "safari") }
             }
         }
-        .alert(t("Ошибка", "Error"), isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })) {
+        .alert("Error", isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })) {
             Button("OK") {}
         } message: {
             Text(model.actionError ?? "")

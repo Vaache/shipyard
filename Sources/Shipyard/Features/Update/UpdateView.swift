@@ -18,7 +18,7 @@ struct UpdateView: View {
                     .transition(.rise)
             }
             if case .manualInstall = updater.state {
-                Label(t("Не удалось заменить приложение автоматически. Образ диска открыт в Finder — перетащите Shipyard в папку «Программы».", "Shipyard can't replace itself in its current location. The disk image is open in Finder — drag Shipyard to Applications."), systemImage: "info.circle")
+                Label("Shipyard can't replace itself in its current location. The disk image is open in Finder — drag Shipyard to Applications.", systemImage: "info.circle")
                     .font(.callout)
                     .foregroundStyle(Color.syMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -44,7 +44,7 @@ struct UpdateView: View {
                 Text(title)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.syText)
-                Text(t("У вас версия \(updater.currentVersion)", "You have \(updater.currentVersion)"))
+                Text("You have \(updater.currentVersion)")
                     .foregroundStyle(Color.syMuted)
                 if let release = updater.release, let date = release.publishedAt, showsRelease {
                     Text(Fmt.full.string(from: date))
@@ -61,13 +61,13 @@ struct UpdateView: View {
 
     private var title: String {
         switch updater.state {
-        case .idle, .checking: return t("Проверка обновлений…", "Checking for updates…")
-        case .upToDate: return t("У вас последняя версия", "You're up to date")
-        case .failed: return updater.release.map { t("Доступен Shipyard \($0.version)", "Shipyard \($0.version) is available") } ?? t("Не удалось проверить обновления", "Couldn't check for updates")
-        case .installing: return t("Подготовка обновления…", "Preparing update…")
-        case .readyToRelaunch: return t("Shipyard \(updater.release?.version ?? "") готов к установке", "Shipyard \(updater.release?.version ?? "") is ready to install")
+        case .idle, .checking: return "Checking for updates…"
+        case .upToDate: return "You're up to date"
+        case .failed: return updater.release.map { "Shipyard \($0.version) is available" } ?? "Couldn't check for updates"
+        case .installing: return "Preparing update…"
+        case .readyToRelaunch: return "Shipyard \(updater.release?.version ?? "") is ready to install"
         case .available, .downloading, .manualInstall:
-            return t("Доступен Shipyard \(updater.release?.version ?? "")", "Shipyard \(updater.release?.version ?? "") is available")
+            return "Shipyard \(updater.release?.version ?? "") is available"
         }
     }
 
@@ -87,13 +87,13 @@ struct UpdateView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(release.name).font(.headline).foregroundStyle(Color.syText)
                         if release.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text(t("Описание изменений отсутствует.", "No release notes.")).foregroundStyle(Color.syMuted)
+                            Text("No release notes.").foregroundStyle(Color.syMuted)
                         } else {
                             MarkdownView(text: release.notes)
                         }
                     }
                 } else if updater.state == .upToDate {
-                    Text(t("Shipyard \(updater.currentVersion) — самая новая версия.", "Shipyard \(updater.currentVersion) is the newest version available."))
+                    Text("Shipyard \(updater.currentVersion) is the newest version available.")
                         .foregroundStyle(Color.syMuted)
                 } else {
                     Color.clear.frame(height: 1)
@@ -111,7 +111,7 @@ struct UpdateView: View {
             ProgressView(value: progress)
                 .tint(Color.syAccent)
             HStack {
-                Text(t("Загрузка…", "Downloading…"))
+                Text("Downloading…")
                 Spacer()
                 if let size = updater.release?.dmgSize, size > 0 {
                     Text("\(ByteCountFormatter.string(fromByteCount: Int64(Double(size) * progress), countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))")
@@ -130,7 +130,7 @@ struct UpdateView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             Spacer(minLength: 0)
-            Button(t("Открыть на GitHub", "View on GitHub")) { openInBrowser(updater.pageURL) }
+            Button("View on GitHub") { openInBrowser(updater.pageURL) }
                 .buttonStyle(.link)
         }
         .font(.callout)
@@ -147,29 +147,29 @@ struct UpdateView: View {
                 installButtons
             case .installing:
                 Spacer()
-                Button(t("Позже", "Later")) { close() }
+                Button("Later") { close() }
                     .disabled(true)
             case .readyToRelaunch:
                 Spacer()
-                Button(t("Позже", "Later")) { close() }
+                Button("Later") { close() }
                     .keyboardShortcut(.cancelAction)
-                Button(t("Перезапустить и обновить", "Restart to Update")) { updater.relaunch() }
+                Button("Restart to Update") { updater.relaunch() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
             case .manualInstall:
-                Button(t("Открыть на GitHub", "View on GitHub")) { openInBrowser(updater.pageURL) }
+                Button("View on GitHub") { openInBrowser(updater.pageURL) }
                 Spacer()
-                Button(t("Готово", "Done")) { close() }
+                Button("Done") { close() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
             default:
                 Spacer()
                 if case .failed = updater.state {
-                    Button(t("Повторить", "Try Again")) {
+                    Button("Try Again") {
                         Task { await updater.check(userInitiated: true) }
                     }
                 }
-                Button(t("OK", "OK")) { close() }
+                Button("OK") { close() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(updater.state == .checking)
@@ -179,15 +179,15 @@ struct UpdateView: View {
 
     @ViewBuilder
     private var installButtons: some View {
-        Button(t("Пропустить эту версию", "Skip This Version")) {
+        Button("Skip This Version") {
             updater.skip()
             close()
         }
         .disabled(updater.isBusy)
         Spacer()
-        Button(t("Позже", "Later")) { close() }
+        Button("Later") { close() }
             .keyboardShortcut(.cancelAction)
-        Button(t("Загрузить и установить", "Download & Install")) {
+        Button("Download & Install") {
             Task { await updater.downloadAndInstall() }
         }
         .buttonStyle(.borderedProminent)
@@ -205,7 +205,7 @@ struct CheckForUpdatesButton: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button(t("Проверить обновления…", "Check for Updates…")) {
+        Button("Check for Updates…") {
             openWindow(id: "update")
             Task { await Updater.shared.check(userInitiated: true) }
         }

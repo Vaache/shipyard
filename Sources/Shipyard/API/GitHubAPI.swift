@@ -79,7 +79,7 @@ final class GitHubAPI {
         guard !(200..<300).contains(http.statusCode) else { return }
         let msg = (try? JSONDecoder().decode(RESTMessage.self, from: data))?.message ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
         if http.statusCode == 401 {
-            throw APIError(message: t("Токен недействителен или отозван (401)", "Token is invalid or revoked (401)"), status: 401)
+            throw APIError(message: "Token is invalid or revoked (401)", status: 401)
         }
         throw APIError(message: "GitHub \(http.statusCode): \(msg)", status: http.statusCode)
     }
@@ -98,18 +98,18 @@ final class GitHubAPI {
             if let errs = try? gqlDecoder.decode(GraphQLResponse<EmptyData>.self, from: data).errors, let first = errs.first {
                 throw APIError(message: GitHubAPI.describe(first))
             }
-            throw APIError(message: t("Ошибка разбора ответа: \(error)", "Failed to parse response: \(error)"))
+            throw APIError(message: "Failed to parse response: \(error)")
         }
         if let errors = decoded.errors, let first = errors.first, strict || decoded.data == nil {
             throw APIError(message: GitHubAPI.describe(first))
         }
-        guard let value = decoded.data else { throw APIError(message: t("Пустой ответ GitHub", "Empty response from GitHub")) }
+        guard let value = decoded.data else { throw APIError(message: "Empty response from GitHub") }
         return value
     }
 
     private static func describe(_ e: GraphQLError) -> String {
         if e.type == "INSUFFICIENT_SCOPES" {
-            return t("Недостаточно прав токена: \(e.message)", "Insufficient token scopes: \(e.message)")
+            return "Insufficient token scopes: \(e.message)"
         }
         return e.message
     }
@@ -124,7 +124,7 @@ final class GitHubAPI {
         do {
             return try restDecoder.decode(T.self, from: data)
         } catch {
-            throw APIError(message: t("Ошибка разбора ответа: \(error)", "Failed to parse response: \(error)"))
+            throw APIError(message: "Failed to parse response: \(error)")
         }
     }
 
@@ -147,12 +147,12 @@ final class GitHubAPI {
     func redirectTarget(_ path: String) async throws -> URL {
         let req = request(url(path), method: "GET")
         let (data, response) = try await session.data(for: req, delegate: NoRedirect())
-        guard let http = response as? HTTPURLResponse else { throw APIError(message: t("Нет ответа", "No response")) }
+        guard let http = response as? HTTPURLResponse else { throw APIError(message: "No response") }
         if (300..<400).contains(http.statusCode), let loc = http.value(forHTTPHeaderField: "Location"), let u = URL(string: loc) {
             return u
         }
         try check(response, data)
-        throw APIError(message: t("Лог недоступен", "Log unavailable"))
+        throw APIError(message: "Log unavailable")
     }
 
     func plain(_ url: URL) async throws -> String {

@@ -8,7 +8,7 @@ enum ThemeStyle: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .shipyard: return "Shipyard"
-        case .system: return t("Системная", "System")
+        case .system: return "System"
         }
     }
 }
@@ -19,9 +19,9 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .auto: return t("Как в системе", "Match system")
-        case .light: return t("Светлое", "Light")
-        case .dark: return t("Тёмное", "Dark")
+        case .auto: return "Match system"
+        case .light: return "Light"
+        case .dark: return "Dark"
         }
     }
 

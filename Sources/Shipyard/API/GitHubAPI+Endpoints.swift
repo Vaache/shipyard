@@ -146,7 +146,7 @@ extension GitHubAPI {
         var detail: ProjectDetail?
         for _ in 0..<10 {
             let r: ProjectDetailResponse = try await graphQL(Q.project, ["id": id, "after": after])
-            guard let node = r.node else { throw APIError(message: t("Проект не найден", "Project not found")) }
+            guard let node = r.node else { throw APIError(message: "Project not found") }
             detail = detail ?? node
             items += node.items.nodes
             guard node.items.pageInfo.hasNextPage else { break }

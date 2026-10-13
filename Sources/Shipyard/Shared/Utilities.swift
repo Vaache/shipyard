@@ -42,30 +42,25 @@ enum GitHubURL {
 }
 
 enum Fmt {
-    private static func makeRelative(_ lang: AppLanguage) -> RelativeDateTimeFormatter {
+    private static let relative: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
-        f.locale = lang.locale
+        f.locale = .app
         f.unitsStyle = .short
         return f
-    }
+    }()
 
-    private static func makeFull(_ lang: AppLanguage) -> DateFormatter {
+    static let full: DateFormatter = {
         let f = DateFormatter()
-        f.locale = lang.locale
+        f.locale = .app
         f.dateStyle = .medium
         f.timeStyle = .short
         return f
-    }
-
-    private static let relatives: [AppLanguage: RelativeDateTimeFormatter] = [.ru: makeRelative(.ru), .en: makeRelative(.en)]
-    private static let fulls: [AppLanguage: DateFormatter] = [.ru: makeFull(.ru), .en: makeFull(.en)]
-
-    static var full: DateFormatter { fulls[Loc.shared.lang]! }
+    }()
 
     static func rel(_ date: Date?) -> String {
         guard let date else { return "" }
-        if abs(date.timeIntervalSinceNow) < 45 { return t("только что", "just now") }
-        return relatives[Loc.shared.lang]!.localizedString(for: date, relativeTo: Date())
+        if abs(date.timeIntervalSinceNow) < 45 { return "just now" }
+        return relative.localizedString(for: date, relativeTo: Date())
     }
 }
 
@@ -131,12 +126,12 @@ enum VisualState {
 
     var title: String {
         switch self {
-        case .open, .issueOpen: return t("Открыт", "Open")
-        case .draft: return t("Черновик", "Draft")
-        case .merged: return t("Слит", "Merged")
-        case .closed: return t("Закрыт", "Closed")
-        case .completed: return t("Выполнен", "Completed")
-        case .notPlanned: return t("Не планируется", "Not planned")
+        case .open, .issueOpen: return "Open"
+        case .draft: return "Draft"
+        case .merged: return "Merged"
+        case .closed: return "Closed"
+        case .completed: return "Completed"
+        case .notPlanned: return "Not planned"
         }
     }
 }
@@ -250,7 +245,7 @@ struct ErrorStateView: View {
         VStack(spacing: 10) {
             IconTile(systemImage: "exclamationmark.triangle.fill", color: .syAmber, size: 44)
             Text(message).multilineTextAlignment(.center).textSelection(.enabled).foregroundStyle(Color.syMuted)
-            if let retry { Button(t("Повторить", "Retry"), action: retry) }
+            if let retry { Button("Retry", action: retry) }
         }
         .padding(30)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -43,7 +43,7 @@ struct FixWithClaudeSheet: View {
             HStack(spacing: 10) {
                 IconTile(systemImage: "sparkles", color: .syCoral, size: 30)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(t("Исправить с Claude Code", "Fix with Claude Code")).font(.headline).foregroundStyle(Color.syText)
+                    Text("Fix with Claude Code").font(.headline).foregroundStyle(Color.syText)
                     HStack(spacing: 6) {
                         Text("#\(pr.number)").foregroundStyle(Color.syViolet).fontWeight(.semibold)
                         Text(pr.title).foregroundStyle(Color.syMuted).lineLimit(1)
@@ -54,9 +54,9 @@ struct FixWithClaudeSheet: View {
             sourcePicker
             if source == .composed { composedOptions }
             HStack(spacing: 16) {
-                Toggle(t("Коммит", "Commit"), isOn: $options.commit)
-                Toggle(t("Пуш", "Push"), isOn: $options.push)
-                Toggle(t("Ответить в тредах и решить", "Reply & resolve threads"), isOn: $options.replyAndResolve)
+                Toggle("Commit", isOn: $options.commit)
+                Toggle("Push", isOn: $options.push)
+                Toggle("Reply & resolve threads", isOn: $options.replyAndResolve)
                     .disabled(!options.push)
             }
             .toggleStyle(.checkbox)
@@ -89,13 +89,13 @@ struct FixWithClaudeSheet: View {
     private var sourcePicker: some View {
         if let found {
             Picker("", selection: $source) {
-                Text(t("Fix prompt от @\(found.author)", "Fix prompt by @\(found.author)") + (found.date.map { " · \(Fmt.rel($0))" } ?? "")).tag(FixSource.reviewer)
-                Text(t("Собрать из комментариев", "Build from comments") + " (\(threads.count))").tag(FixSource.composed)
+                Text("Fix prompt by @\(found.author)" + (found.date.map { " · \(Fmt.rel($0))" } ?? "")).tag(FixSource.reviewer)
+                Text("Build from comments" + " (\(threads.count))").tag(FixSource.composed)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
         } else {
-            Label(t("Fix prompt в PR не найден — промпт собран из нерешённых комментариев", "No Fix prompt in this PR — built from unresolved comments"), systemImage: "info.circle")
+            Label("No Fix prompt in this PR — built from unresolved comments", systemImage: "info.circle")
                 .font(.callout)
                 .foregroundStyle(Color.syMuted)
         }
@@ -104,15 +104,15 @@ struct FixWithClaudeSheet: View {
     private var composedOptions: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(t("Нерешённые комментарии", "Unresolved comments")).font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
+                Text("Unresolved comments").font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
                 Spacer()
-                Button(t("Все", "All")) { selected = Set(threads.map(\.id)) }.buttonStyle(.link).font(.caption)
-                Button(t("Никаких", "None")) { selected = [] }.buttonStyle(.link).font(.caption)
+                Button("All") { selected = Set(threads.map(\.id)) }.buttonStyle(.link).font(.caption)
+                Button("None") { selected = [] }.buttonStyle(.link).font(.caption)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
                     if threads.isEmpty {
-                        Text(t("Нерешённых комментариев нет", "No unresolved comments")).font(.callout).foregroundStyle(Color.syDim)
+                        Text("No unresolved comments").font(.callout).foregroundStyle(Color.syDim)
                     }
                     ForEach(threads) { th in
                         Toggle(isOn: Binding(get: { selected.contains(th.id) }, set: { on in if on { selected.insert(th.id) } else { selected.remove(th.id) } })) {
@@ -122,7 +122,7 @@ struct FixWithClaudeSheet: View {
                                     .foregroundStyle(Color.sySky)
                                     .lineLimit(1)
                                     .truncationMode(.head)
-                                if th.isOutdated { ChipView(text: t("устарело", "outdated"), color: .syAmber) }
+                                if th.isOutdated { ChipView(text: "outdated", color: .syAmber) }
                                 Text("@\(th.comments.nodes.first?.author?.login ?? "?"): \(th.comments.nodes.first?.body.replacingOccurrences(of: "\n", with: " ") ?? "")")
                                     .font(.caption)
                                     .foregroundStyle(Color.syMuted)
@@ -132,7 +132,7 @@ struct FixWithClaudeSheet: View {
                         .toggleStyle(.checkbox)
                     }
                     if !general.isEmpty {
-                        Toggle(t("Общие замечания ревью (\(general.count))", "General review feedback (\(general.count))"), isOn: $options.includeGeneral)
+                        Toggle("General review feedback (\(general.count))", isOn: $options.includeGeneral)
                             .toggleStyle(.checkbox)
                             .font(.caption)
                     }
@@ -148,10 +148,10 @@ struct FixWithClaudeSheet: View {
     private var promptEditor: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(t("Промпт", "Prompt")).font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
+                Text("Prompt").font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
                 if custom != nil {
-                    ChipView(text: t("изменён", "edited"), color: .syAmber)
-                    Button(t("Сбросить", "Reset")) { custom = nil }.buttonStyle(.link).font(.caption)
+                    ChipView(text: "edited", color: .syAmber)
+                    Button("Reset") { custom = nil }.buttonStyle(.link).font(.caption)
                 }
                 Spacer()
                 Text("\(prompt.count)").font(.caption2.monospacedDigit()).foregroundStyle(Color.syDim)
@@ -170,7 +170,7 @@ struct FixWithClaudeSheet: View {
             Image(systemName: "folder.fill").foregroundStyle(Color.syTeal)
             if detecting {
                 ProgressView().controlSize(.small)
-                Text(t("Ищу локальную копию \(model.ref.repo.full)…", "Looking for a local clone of \(model.ref.repo.full)…")).font(.callout).foregroundStyle(Color.syMuted)
+                Text("Looking for a local clone of \(model.ref.repo.full)…").font(.callout).foregroundStyle(Color.syMuted)
             } else if let folder {
                 Text(folder.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"))
                     .font(.system(.callout, design: .monospaced))
@@ -178,18 +178,18 @@ struct FixWithClaudeSheet: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if !folderMatches {
-                    Label(t("remote не совпадает с \(model.ref.repo.full)", "remote doesn't match \(model.ref.repo.full)"), systemImage: "exclamationmark.triangle.fill")
+                    Label("remote doesn't match \(model.ref.repo.full)", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(Color.syAmber)
                 }
             } else {
-                Text(t("Локальная копия не найдена", "No local clone found")).font(.callout).foregroundStyle(Color.syAmber)
-                Button(t("Копировать «gh repo clone»", "Copy “gh repo clone”")) { copyToPasteboard("gh repo clone \(model.ref.repo.full)") }
+                Text("No local clone found").font(.callout).foregroundStyle(Color.syAmber)
+                Button("Copy “gh repo clone”") { copyToPasteboard("gh repo clone \(model.ref.repo.full)") }
                     .buttonStyle(.link)
                     .font(.caption)
             }
             Spacer()
-            Button(t("Выбрать папку…", "Choose folder…")) {
+            Button("Choose folder…") {
                 if let p = LocalRepoStore.choose(model.ref.repo) { folder = p }
             }
             .controlSize(.small)
@@ -201,18 +201,18 @@ struct FixWithClaudeSheet: View {
 
     private var launchRow: some View {
         HStack(spacing: 10) {
-            Picker(t("Где", "Open in"), selection: $target) {
+            Picker("Open in", selection: $target) {
                 ForEach(ClaudeTarget.allCases.filter(\.available)) { Text($0.title).tag($0) }
             }
             .frame(width: 220)
-            Picker(t("Режим", "Mode"), selection: $mode) {
+            Picker("Mode", selection: $mode) {
                 ForEach(ClaudePermissionMode.allCases) { Text($0.title).tag($0) }
             }
             .frame(width: 250)
             .disabled(target == .desktop || target == .copy || target == .app)
             Spacer()
-            Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-            Button(target == .copy ? t("Скопировать", "Copy") : t("Запустить", "Launch")) { launch() }
+            Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+            Button(target == .copy ? "Copy" : "Launch") { launch() }
                 .buttonStyle(.borderedProminent)
                 .tint(Color.syCoral)
                 .keyboardShortcut(.return, modifiers: .command)
@@ -220,7 +220,7 @@ struct FixWithClaudeSheet: View {
         }
         .overlay(alignment: .topLeading) {
             if target == .desktop {
-                Text(t("Промпт будет скопирован — вставьте его в новую сессию (⌘V)", "Prompt will be copied — paste it into the new session (⌘V)"))
+                Text("Prompt will be copied — paste it into the new session (⌘V)")
                     .font(.caption)
                     .foregroundStyle(Color.syMuted)
                     .offset(y: -18)
@@ -255,16 +255,16 @@ struct ClaudeFixBanner: View {
             HStack(spacing: 8) {
                 IconTile(systemImage: "sparkles", color: .syCoral, size: 18)
                 if unresolved > 0 {
-                    Text(tp(unresolved, "нерешённый комментарий", "нерешённых комментария", "нерешённых комментариев", "unresolved comment", "unresolved comments"))
+                    Text(plural(unresolved, "unresolved comment", "unresolved comments"))
                         .foregroundStyle(Color.syText)
                 }
                 if let found {
                     if unresolved > 0 { Text("·").foregroundStyle(Color.syDim) }
-                    Text(t("Fix prompt от @\(found.author)", "Fix prompt by @\(found.author)") + (found.date.map { " · \(Fmt.rel($0))" } ?? ""))
+                    Text("Fix prompt by @\(found.author)" + (found.date.map { " · \(Fmt.rel($0))" } ?? ""))
                         .foregroundStyle(Color.syMuted)
                 }
                 Spacer()
-                Button(t("Исправить с Claude Code", "Fix with Claude Code"), action: action)
+                Button("Fix with Claude Code", action: action)
                     .controlSize(.small)
                     .buttonStyle(.borderedProminent)
                     .tint(Color.syCoral)

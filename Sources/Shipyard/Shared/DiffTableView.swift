@@ -106,11 +106,11 @@ final class DiffLineCell: NSView {
     override func menu(for event: NSEvent) -> NSMenu? {
         guard let line else { return nil }
         let menu = NSMenu()
-        let copy = NSMenuItem(title: t("Копировать строку", "Copy line"), action: #selector(copyLine), keyEquivalent: "")
+        let copy = NSMenuItem(title: "Copy line", action: #selector(copyLine), keyEquivalent: "")
         copy.target = self
         menu.addItem(copy)
         if commentable, line.commentable {
-            let c = NSMenuItem(title: t("Комментировать строку", "Comment on line"), action: #selector(comment), keyEquivalent: "")
+            let c = NSMenuItem(title: "Comment on line", action: #selector(comment), keyEquivalent: "")
             c.target = self
             menu.addItem(c)
         }

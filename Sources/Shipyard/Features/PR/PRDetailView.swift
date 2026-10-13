@@ -53,10 +53,10 @@ struct PRDetailContent: View {
             PRHeaderView(model: model, pr: pr, onMerge: { showMerge = true })
             ClaudeFixBanner(pr: pr) { showFix = true }
             TabStrip(items: [
-                TabItem(id: PRTab.conversation, title: t("Обсуждение", "Conversation"), icon: "bubble.left.and.bubble.right", badge: commentsBadge),
-                TabItem(id: PRTab.commits, title: t("Коммиты", "Commits"), icon: "point.3.connected.trianglepath.dotted", badge: "\(pr.allCommits.totalCount ?? pr.allCommits.nodes.count)"),
-                TabItem(id: PRTab.checks, title: t("Проверки", "Checks"), icon: "checklist", badge: checksSummary, badgeColor: checksColor),
-                TabItem(id: PRTab.files, title: t("Файлы", "Files changed"), icon: "doc.text", badge: "\(pr.changedFiles)")
+                TabItem(id: PRTab.conversation, title: "Conversation", icon: "bubble.left.and.bubble.right", badge: commentsBadge),
+                TabItem(id: PRTab.commits, title: "Commits", icon: "point.3.connected.trianglepath.dotted", badge: "\(pr.allCommits.totalCount ?? pr.allCommits.nodes.count)"),
+                TabItem(id: PRTab.checks, title: "Checks", icon: "checklist", badge: checksSummary, badgeColor: checksColor),
+                TabItem(id: PRTab.files, title: "Files changed", icon: "doc.text", badge: "\(pr.changedFiles)")
             ], selection: $model.tab, shortcuts: true)
             .padding(.top, 6)
             Divider()
@@ -84,14 +84,14 @@ struct PRDetailContent: View {
         .sheet(isPresented: $showReviewers) { ReviewersSheet(model: model) }
         .sheet(isPresented: $showFix) { FixWithClaudeSheet(model: model, pr: pr) }
         .sheet(item: $model.replyThread) { ReplySheet(model: model, thread: $0) }
-        .alert(t("Ошибка", "Error"), isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })) {
+        .alert("Error", isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })) {
             Button("OK") {}
         } message: {
             Text(model.actionError ?? "")
         }
         .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), presenting: confirm) { c in
             Button(confirmButton(c), role: c == .approve ? nil : .destructive) { perform(c) }
-            Button(t("Отмена", "Cancel"), role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -129,20 +129,20 @@ struct PRDetailContent: View {
 
     private var confirmTitle: String {
         switch confirm {
-        case .approve: return t("Одобрить этот PR?", "Approve this pull request?")
-        case .close: return t("Закрыть PR без слияния?", "Close pull request without merging?")
-        case .deleteBranch: return t("Удалить ветку \(pr.headRefName)?", "Delete branch \(pr.headRefName)?")
-        case .disableAutoMerge: return t("Отключить автослияние?", "Disable auto-merge?")
+        case .approve: return "Approve this pull request?"
+        case .close: return "Close pull request without merging?"
+        case .deleteBranch: return "Delete branch \(pr.headRefName)?"
+        case .disableAutoMerge: return "Disable auto-merge?"
         case nil: return ""
         }
     }
 
     private func confirmButton(_ c: PRConfirm) -> String {
         switch c {
-        case .approve: return t("Одобрить", "Approve")
-        case .close: return t("Закрыть PR", "Close pull request")
-        case .deleteBranch: return t("Удалить ветку", "Delete branch")
-        case .disableAutoMerge: return t("Отключить", "Disable")
+        case .approve: return "Approve"
+        case .close: return "Close pull request"
+        case .deleteBranch: return "Delete branch"
+        case .disableAutoMerge: return "Disable"
         }
     }
 
@@ -169,68 +169,68 @@ struct PRDetailContent: View {
             }
             if pr.isOpen {
                 Menu {
-                    Button(t("Написать ревью…", "Write review…")) { showReview = true }
+                    Button("Write review…") { showReview = true }
                     if !pr.viewerDidAuthor {
-                        Button(t("Одобрить", "Approve")) { confirm = .approve }
+                        Button("Approve") { confirm = .approve }
                     }
                 } label: {
-                    Label(model.pending.isEmpty ? t("Ревью", "Review") : t("Ревью (\(model.pending.count))", "Review (\(model.pending.count))"), systemImage: "checkmark.bubble")
+                    Label(model.pending.isEmpty ? "Review" : "Review (\(model.pending.count))", systemImage: "checkmark.bubble")
                 } primaryAction: {
                     showReview = true
                 }
-                .help(t("Отправить ревью", "Submit review"))
+                .help("Submit review")
             }
-            Button { showFix = true } label: { Label(t("Исправить с Claude", "Fix with Claude"), systemImage: "sparkles") }
-                .help(t("Отправить комментарии ревью в новую сессию Claude Code", "Send review comments to a new Claude Code session"))
+            Button { showFix = true } label: { Label("Fix with Claude", systemImage: "sparkles") }
+                .help("Send review comments to a new Claude Code session")
             if canMerge {
-                Button { showMerge = true } label: { Label(t("Слить", "Merge"), systemImage: "arrow.triangle.merge") }
-                    .help(t("Слить pull request", "Merge pull request"))
+                Button { showMerge = true } label: { Label("Merge", systemImage: "arrow.triangle.merge") }
+                    .help("Merge pull request")
             }
             Menu {
                 moreMenu
             } label: {
-                Label(t("Ещё", "More"), systemImage: "ellipsis.circle")
+                Label("More", systemImage: "ellipsis.circle")
             }
-            Button { Task { await model.load() } } label: { Label(t("Обновить", "Refresh"), systemImage: "arrow.clockwise") }
-                .help(t("Обновить", "Refresh"))
-            Button { openInBrowser(pr.url) } label: { Label(t("В браузере", "Open in browser"), systemImage: "safari") }
-                .help(t("Открыть на github.com", "Open on github.com"))
+            Button { Task { await model.load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                .help("Refresh")
+            Button { openInBrowser(pr.url) } label: { Label("Open in browser", systemImage: "safari") }
+                .help("Open on github.com")
         }
     }
 
     @ViewBuilder
     private var moreMenu: some View {
-        Button(t("Копировать ссылку", "Copy link")) { copyToPasteboard(pr.url) }
-        Button(t("Копировать «gh pr checkout \(pr.number)»", "Copy “gh pr checkout \(pr.number)”")) { copyToPasteboard("gh pr checkout \(pr.number) -R \(model.ref.repo.full)") }
-        Button(t("Копировать имя ветки", "Copy branch name")) { copyToPasteboard(pr.headRefName) }
+        Button("Copy link") { copyToPasteboard(pr.url) }
+        Button("Copy “gh pr checkout \(pr.number)”") { copyToPasteboard("gh pr checkout \(pr.number) -R \(model.ref.repo.full)") }
+        Button("Copy branch name") { copyToPasteboard(pr.headRefName) }
         Divider()
         if pr.viewerCanUpdate {
-            Button(t("Редактировать заголовок и описание…", "Edit title and description…")) { showEdit = true }
+            Button("Edit title and description…") { showEdit = true }
         }
         if pr.isOpen {
-            Button(t("Запросить ревью…", "Request review…")) { showReviewers = true }
+            Button("Request review…") { showReviewers = true }
             if pr.viewerCanUpdate {
                 if pr.isDraft {
-                    Button(t("Готово к ревью", "Ready for review")) { Task { await model.simple(Q.readyForReview) } }
+                    Button("Ready for review") { Task { await model.simple(Q.readyForReview) } }
                 } else {
-                    Button(t("Перевести в черновик", "Convert to draft")) { Task { await model.simple(Q.convertToDraft) } }
+                    Button("Convert to draft") { Task { await model.simple(Q.convertToDraft) } }
                 }
             }
             if pr.mergeStateStatus == "BEHIND" || pr.mergeStateStatus == "BLOCKED" || pr.mergeStateStatus == "UNSTABLE" {
-                Button(t("Обновить ветку из \(pr.baseRefName)", "Update branch from \(pr.baseRefName)")) { Task { await model.simple(Q.updateBranch) } }
+                Button("Update branch from \(pr.baseRefName)") { Task { await model.simple(Q.updateBranch) } }
             }
             if pr.autoMergeRequest != nil {
-                Button(t("Отключить автослияние", "Disable auto-merge")) { confirm = .disableAutoMerge }
+                Button("Disable auto-merge") { confirm = .disableAutoMerge }
             }
             Divider()
             if pr.viewerCanUpdate {
-                Button(t("Закрыть PR…", "Close pull request…")) { confirm = .close }
+                Button("Close pull request…") { confirm = .close }
             }
         } else if !pr.merged, pr.viewerCanUpdate {
-            Button(t("Переоткрыть PR", "Reopen pull request")) { Task { await model.simple(Q.reopenPR) } }
+            Button("Reopen pull request") { Task { await model.simple(Q.reopenPR) } }
         }
         if !pr.isOpen, pr.headRef != nil, model.canWrite {
-            Button(t("Удалить ветку \(pr.headRefName)…", "Delete branch \(pr.headRefName)…")) { confirm = .deleteBranch }
+            Button("Delete branch \(pr.headRefName)…") { confirm = .deleteBranch }
         }
     }
 }
@@ -263,13 +263,13 @@ struct PRHeaderView: View {
                 HStack(spacing: 6) {
                     ForEach(pr.labels.nodes, id: \.name) { LabelChip(label: $0) }
                     if !model.reviewers.isEmpty {
-                        Text(t("Ревьюеры:", "Reviewers:")).font(.caption).foregroundStyle(Color.syMuted).padding(.leading, pr.labels.nodes.isEmpty ? 0 : 6)
+                        Text("Reviewers:").font(.caption).foregroundStyle(Color.syMuted).padding(.leading, pr.labels.nodes.isEmpty ? 0 : 6)
                         ForEach(model.reviewers, id: \.login) { r in
                             ReviewerBadge(login: r.login, avatar: r.avatar, state: r.state)
                         }
                     }
                     if !pr.assignees.nodes.isEmpty {
-                        Text(t("Исполнители:", "Assignees:")).font(.caption).foregroundStyle(Color.syMuted).padding(.leading, 6)
+                        Text("Assignees:").font(.caption).foregroundStyle(Color.syMuted).padding(.leading, 6)
                         ForEach(pr.assignees.nodes, id: \.login) { a in
                             Avatar(url: a.avatarUrl, size: 18).help(a.login)
                         }
@@ -303,8 +303,8 @@ struct StackStrip: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "square.stack.3d.up.fill").foregroundStyle(Color.syIndigo)
-                    Text(t("Стек", "Stack")).fontWeight(.semibold)
-                    Text(t("\(index + 1) из \(stack.count)", "\(index + 1) of \(stack.count)")).foregroundStyle(Color.syMuted)
+                    Text("Stack").fontWeight(.semibold)
+                    Text("\(index + 1) of \(stack.count)").foregroundStyle(Color.syMuted)
                     HStack(spacing: 3) {
                         ForEach(stack) { s in
                             Capsule()
@@ -313,8 +313,8 @@ struct StackStrip: View {
                         }
                     }
                     Spacer(minLength: 0)
-                    if index > 0 { navButton(stack[index - 1], icon: "chevron.down", help: t("Ниже в стеке", "Down the stack")) }
-                    if index < stack.count - 1 { navButton(stack[index + 1], icon: "chevron.up", help: t("Выше в стеке", "Up the stack")) }
+                    if index > 0 { navButton(stack[index - 1], icon: "chevron.down", help: "Down the stack") }
+                    if index < stack.count - 1 { navButton(stack[index + 1], icon: "chevron.up", help: "Up the stack") }
                     Image(systemName: "chevron.right")
                         .font(.caption2)
                         .foregroundStyle(Color.syDim)
@@ -384,7 +384,7 @@ struct BranchChip: View {
             .overlay(Capsule().strokeBorder(color.opacity(0.3)))
             .foregroundStyle(color)
             .onTapGesture { copyToPasteboard(name) }
-            .help(t("Нажмите, чтобы скопировать", "Click to copy"))
+            .help("Click to copy")
     }
 }
 
@@ -411,11 +411,11 @@ struct ReviewerBadge: View {
 
     private var stateTitle: String {
         switch state {
-        case "APPROVED": return t("одобрено", "approved")
-        case "CHANGES_REQUESTED": return t("запрошены изменения", "changes requested")
-        case "COMMENTED": return t("комментарии", "commented")
-        case "DISMISSED": return t("отклонено", "dismissed")
-        default: return t("ожидается ревью", "review pending")
+        case "APPROVED": return "approved"
+        case "CHANGES_REQUESTED": return "changes requested"
+        case "COMMENTED": return "commented"
+        case "DISMISSED": return "dismissed"
+        default: return "review pending"
         }
     }
 }
@@ -432,16 +432,16 @@ struct MergeStatusBar: View {
                 Image(systemName: s.icon).foregroundStyle(s.color)
                 Text(s.text).font(.callout)
                 if let auto = pr.autoMergeRequest {
-                    Text(t("· автослияние включено", "· auto-merge enabled") + (auto.mergeMethod.map { " (\(MergeMethod(rawValue: $0)?.title ?? $0))" } ?? ""))
+                    Text("· auto-merge enabled" + (auto.mergeMethod.map { " (\(MergeMethod(rawValue: $0)?.title ?? $0))" } ?? ""))
                         .font(.callout).foregroundStyle(Color.ghGreen)
                 }
                 checksBadge
                 Spacer()
                 if pr.mergeStateStatus == "BEHIND", model.canWrite || pr.viewerCanUpdate {
-                    Button(t("Обновить ветку", "Update branch")) { Task { await model.simple(Q.updateBranch) } }.controlSize(.small)
+                    Button("Update branch") { Task { await model.simple(Q.updateBranch) } }.controlSize(.small)
                 }
                 if model.canWrite, !pr.isDraft {
-                    Button(t("Слить…", "Merge…"), action: onMerge)
+                    Button("Merge…", action: onMerge)
                         .controlSize(.small)
                         .buttonStyle(.borderedProminent)
                         .tint(s.ready ? Color.ghGreen : .gray)
@@ -472,26 +472,37 @@ struct MergeStatusBar: View {
                 .font(.caption)
             }
             .buttonStyle(.plain)
-            .help(t("Проверки", "Checks"))
+            .help("Checks")
         }
     }
 
+    private var failedChecks: Int { pr.checks.filter { $0.outcome == .failure }.count }
+    private var pendingChecks: Int { pr.checks.filter { $0.outcome == .pending }.count }
+    private var failedChecksText: String { failedChecks == 1 ? "1 check failed" : "\(failedChecks) checks failed" }
+    private var pendingChecksText: String { pendingChecks == 1 ? "1 check is still running" : "\(pendingChecks) checks are still running" }
+
     private var status: (icon: String, color: Color, text: String, ready: Bool) {
-        if pr.isDraft { return ("pencil.circle", .secondary, t("Черновик — слияние недоступно", "Draft — merging is unavailable"), false) }
+        if pr.isDraft { return ("pencil.circle", .secondary, "Draft — merging is unavailable", false) }
         if pr.mergeable == "CONFLICTING" || pr.mergeStateStatus == "DIRTY" {
-            return ("exclamationmark.triangle.fill", .ghRed, t("Есть конфликты с \(pr.baseRefName)", "Has conflicts with \(pr.baseRefName)"), false)
+            return ("exclamationmark.triangle.fill", .ghRed, "Has conflicts with \(pr.baseRefName)", false)
         }
         switch pr.mergeStateStatus {
-        case "BEHIND": return ("arrow.down.circle", .ghYellow, t("Ветка отстаёт от \(pr.baseRefName)", "Branch is behind \(pr.baseRefName)"), false)
+        case "BEHIND": return ("arrow.down.circle", .ghYellow, "Branch is behind \(pr.baseRefName)", false)
         case "BLOCKED":
             switch pr.reviewDecision {
-            case "CHANGES_REQUESTED": return ("plusminus.circle.fill", .ghRed, t("Запрошены изменения", "Changes requested"), false)
-            case "REVIEW_REQUIRED": return ("eye.circle", .ghYellow, t("Нужно одобрение ревьюера", "Review required"), false)
-            default: return ("lock.circle", .ghYellow, t("Заблокировано правилами ветки или проверками", "Blocked by branch protection or checks"), false)
+            case "CHANGES_REQUESTED": return ("plusminus.circle.fill", .ghRed, "Changes requested", false)
+            case "REVIEW_REQUIRED": return ("eye.circle", .ghYellow, "Review required", false)
+            default:
+                if failedChecks > 0 { return ("xmark.circle.fill", .ghRed, failedChecksText, false) }
+                if pendingChecks > 0 { return ("clock", .ghYellow, pendingChecksText, false) }
+                return ("lock.circle", .ghYellow, "Blocked by branch protection", false)
             }
-        case "UNSTABLE": return ("exclamationmark.circle", .ghYellow, t("Слияние возможно, но есть непрошедшие проверки", "Can be merged, but some checks failed"), true)
-        case "CLEAN", "HAS_HOOKS": return ("checkmark.circle.fill", .ghGreen, t("Можно сливать", "Ready to merge"), true)
-        default: return ("hourglass", .secondary, t("Проверка возможности слияния…", "Checking mergeability…"), false)
+        case "UNSTABLE":
+            if failedChecks > 0 { return ("exclamationmark.circle", .ghYellow, "Can be merged, but " + failedChecksText.lowercased(), true) }
+            if pendingChecks > 0 { return ("clock", .ghYellow, pendingChecksText, true) }
+            return ("checkmark.circle.fill", .ghGreen, "Ready to merge", true)
+        case "CLEAN", "HAS_HOOKS": return ("checkmark.circle.fill", .ghGreen, "Ready to merge", true)
+        default: return ("hourglass", .secondary, "Checking mergeability…", false)
         }
     }
 }
@@ -507,9 +518,9 @@ struct ConversationTab: View {
             HTMLView(html: model.html, scrollToBottomToken: model.scrollToBottomToken, onAction: handle, onLink: openLink)
             Divider()
             HStack(alignment: .bottom, spacing: 8) {
-                ComposerBox(text: $text, placeholder: t("Комментарий (Markdown) — ⌘↩ отправить", "Comment (Markdown) — ⌘↩ to send"), minHeight: 56).frame(height: 64)
+                ComposerBox(text: $text, placeholder: "Comment (Markdown) — ⌘↩ to send", minHeight: 56).frame(height: 64)
                 VStack(spacing: 6) {
-                    Button(t("Комментировать", "Comment")) { send() }
+                    Button("Comment") { send() }
                         .keyboardShortcut(.return, modifiers: .command)
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy)
                         .buttonStyle(.borderedProminent)
@@ -575,12 +586,12 @@ struct CommitsTab: View {
                     .padding(.vertical, 2)
                 }
                 .contextMenu {
-                    Button(t("Копировать SHA", "Copy SHA")) { copyToPasteboard(c.oid) }
-                    Button(t("Открыть в браузере", "Open in browser")) { openInBrowser(c.url) }
+                    Button("Copy SHA") { copyToPasteboard(c.oid) }
+                    Button("Open in browser") { openInBrowser(c.url) }
                 }
             }
             if (pr.allCommits.totalCount ?? 0) > pr.allCommits.nodes.count {
-                Button(t("Показать все \(pr.allCommits.totalCount ?? 0) коммитов в браузере", "Show all \(pr.allCommits.totalCount ?? 0) commits in browser")) { openInBrowser(pr.url + "/commits") }
+                Button("Show all \(pr.allCommits.totalCount ?? 0) commits in browser") { openInBrowser(pr.url + "/commits") }
             }
         }
     }
@@ -596,13 +607,13 @@ struct ChecksTab: View {
         let failedRuns = Set(checks.filter { $0.outcome == .failure }.compactMap(\.runId))
         List {
             if checks.isEmpty {
-                Text(t("Нет проверок для последнего коммита", "No checks for the latest commit")).foregroundStyle(Color.syMuted)
+                Text("No checks for the latest commit").foregroundStyle(Color.syMuted)
             }
             if !failedRuns.isEmpty, model.canWrite {
                 Button {
                     Task { await model.rerunFailed() }
                 } label: {
-                    Label(t("Перезапустить упавшие jobs (\(failedRuns.count) workflow)", "Re-run failed jobs (\(failedRuns.count) workflow)"), systemImage: "arrow.clockwise")
+                    Label("Re-run failed jobs (\(failedRuns.count) workflow)", systemImage: "arrow.clockwise")
                 }
             }
             ForEach(checks) { c in
@@ -614,12 +625,12 @@ struct ChecksTab: View {
                     }
                     Spacer()
                     if c.isActionsJob, c.outcome != .pending, c.outcome != .skipped {
-                        Button(t("Лог", "Log")) { logTarget = c }.controlSize(.small)
+                        Button("Log") { logTarget = c }.controlSize(.small)
                     }
                     if let link = c.link {
                         Button { openInBrowser(link) } label: { Image(systemName: "arrow.up.right.square") }
                             .buttonStyle(.borderless)
-                            .help(t("Открыть в браузере", "Open in browser"))
+                            .help("Open in browser")
                     }
                 }
                 .padding(.vertical, 2)
@@ -633,11 +644,11 @@ struct ChecksTab: View {
     private func subtitle(_ c: CheckContext) -> String {
         var parts: [String] = []
         switch c.outcome {
-        case .success: parts.append(t("Успешно", "Successful"))
-        case .failure: parts.append(t("Ошибка", "Failed"))
-        case .pending: parts.append(c.status == "QUEUED" ? t("В очереди", "Queued") : t("Выполняется", "In progress"))
-        case .neutral: parts.append(c.conclusion == "CANCELLED" ? t("Отменено", "Cancelled") : t("Нейтрально", "Neutral"))
-        case .skipped: parts.append(t("Пропущено", "Skipped"))
+        case .success: parts.append("Successful")
+        case .failure: parts.append("Failed")
+        case .pending: parts.append(c.status == "QUEUED" ? "Queued" : "In progress")
+        case .neutral: parts.append(c.conclusion == "CANCELLED" ? "Cancelled" : "Neutral")
+        case .skipped: parts.append("Skipped")
         }
         if let d = c.duration { parts.append(d) }
         if let desc = c.description, !desc.isEmpty { parts.append(desc) }

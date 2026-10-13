@@ -152,13 +152,13 @@ struct ChatComposer: View {
                 HStack(spacing: 6) {
                     Image(systemName: "hand.raised.fill").foregroundStyle(Color.syAmber)
                     if pending.toolName == "AskUserQuestion" || pending.toolName == "ExitPlanMode" {
-                        Text(pending.toolName == "AskUserQuestion" ? t("Claude задал вопрос — ответьте выше", "Claude asked a question — answer above") : t("Claude ждёт одобрения плана выше", "Claude is waiting for plan approval above")).font(.callout)
+                        Text(pending.toolName == "AskUserQuestion" ? "Claude asked a question — answer above" : "Claude is waiting for plan approval above").font(.callout)
                         Spacer()
                     } else {
-                        Text(t("Claude ждёт разрешения: \(pending.toolName)", "Claude needs permission: \(pending.toolName)")).font(.callout)
+                        Text("Claude needs permission: \(pending.toolName)").font(.callout)
                         Spacer()
-                        Button(t("Разрешить", "Allow")) { chat.respond(pending, allow: true) }.controlSize(.small).buttonStyle(.borderedProminent)
-                        Button(t("Отклонить", "Deny")) { chat.respond(pending, allow: false) }.controlSize(.small)
+                        Button("Allow") { chat.respond(pending, allow: true) }.controlSize(.small).buttonStyle(.borderedProminent)
+                        Button("Deny") { chat.respond(pending, allow: false) }.controlSize(.small)
                     }
                 }
                 .padding(.horizontal, 14)
@@ -192,7 +192,7 @@ struct ChatComposer: View {
                     })
                     .frame(height: height)
                     if text.isEmpty {
-                        Text(chat.busy ? t("Сообщение будет добавлено в очередь…", "Message will be queued…") : t("Спросите Claude или опишите задачу…", "Ask Claude or describe a task…"))
+                        Text(chat.busy ? "Message will be queued…" : "Ask Claude or describe a task…")
                             .foregroundStyle(Color.syDim)
                             .padding(.leading, 9)
                             .padding(.top, 6)
@@ -232,7 +232,7 @@ struct ChatComposer: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help(t("Режим разрешений (⇧⇥ — переключить)", "Permission mode (⇧⇥ to cycle)"))
+            .help("Permission mode (⇧⇥ to cycle)")
             Menu {
                 ForEach(chat.models) { m in
                     Button { chat.setModel(m.value) } label: { checked("\(m.displayName) — \(m.description)", chat.modelValue == m.value) }
@@ -245,7 +245,7 @@ struct ChatComposer: View {
             .disabled(chat.models.isEmpty)
             if !effortLevels.isEmpty {
                 Menu {
-                    Button { chat.setEffort("") } label: { checked(t("По умолчанию", "Default"), chat.effort.isEmpty) }
+                    Button { chat.setEffort("") } label: { checked("Default", chat.effort.isEmpty) }
                     ForEach(effortLevels, id: \.self) { e in
                         Button { chat.setEffort(e) } label: { checked(e, chat.effort == e) }
                     }
@@ -258,7 +258,7 @@ struct ChatComposer: View {
             Button { attachImage() } label: { Image(systemName: "photo.badge.plus") }
                 .buttonStyle(.borderless)
                 .foregroundStyle(Color.syMuted)
-                .help(t("Прикрепить изображение", "Attach image"))
+                .help("Attach image")
             Spacer()
             UsageRingButton(chat: chat)
             if chat.busy {
@@ -266,14 +266,14 @@ struct ChatComposer: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.syRed)
                     .controlSize(.small)
-                    .help(t("Остановить (Esc)", "Stop (Esc)"))
+                    .help("Stop (Esc)")
             }
             Button { submit() } label: { Image(systemName: "arrow.up") }
                 .buttonStyle(.borderedProminent)
                 .tint(.syCoral)
                 .controlSize(.small)
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && images.isEmpty)
-                .help(t("Отправить (↩)", "Send (↩)"))
+                .help("Send (↩)")
         }
         .font(.caption)
         .controlSize(.small)
@@ -291,7 +291,7 @@ struct ChatComposer: View {
     }
 
     private var modelTitle: String {
-        chat.models.first { $0.value == chat.modelValue }?.displayName ?? (chat.model.isEmpty ? t("Модель", "Model") : chat.model.replacingOccurrences(of: "claude-", with: ""))
+        chat.models.first { $0.value == chat.modelValue }?.displayName ?? (chat.model.isEmpty ? "Model" : chat.model.replacingOccurrences(of: "claude-", with: ""))
     }
 
     private var effortLevels: [String] {
@@ -373,7 +373,7 @@ struct ChatComposer: View {
     private var completionItems: [CompletionItem] {
         switch completion {
         case .slash:
-            let builtin: [ChatCommand] = [ChatCommand(name: "compact", description: t("Сжать контекст", "Compact the conversation")), ChatCommand(name: "clear", description: t("Новая сессия", "Start a new session"))]
+            let builtin: [ChatCommand] = [ChatCommand(name: "compact", description: "Compact the conversation"), ChatCommand(name: "clear", description: "Start a new session")]
             let all = builtin + chat.commands.filter { $0.name != "compact" && $0.name != "clear" }
             let q = query.lowercased()
             return all.filter { q.isEmpty || $0.name.lowercased().contains(q) }

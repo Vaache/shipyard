@@ -229,7 +229,7 @@ struct CodeBlockView: View {
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
                 } label: {
-                    Label(copied ? t("Скопировано", "Copied") : t("Копировать", "Copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
+                    Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)

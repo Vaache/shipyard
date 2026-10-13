@@ -31,24 +31,24 @@ enum TokenFormat {
     static func resets(_ date: Date?) -> String {
         guard let date else { return "" }
         let interval = date.timeIntervalSinceNow
-        if interval <= 0 { return t("Сбрасывается", "Resetting") }
+        if interval <= 0 { return "Resetting" }
         if interval < 24 * 3600 {
             let h = Int(interval) / 3600, m = (Int(interval) % 3600) / 60
-            return h > 0 ? t("Сброс через \(h) ч \(m) мин", "Resets in \(h) hr \(m) min") : t("Сброс через \(m) мин", "Resets in \(m) min")
+            return h > 0 ? "Resets in \(h) hr \(m) min" : "Resets in \(m) min"
         }
         let f = DateFormatter()
-        f.locale = Loc.shared.lang.locale
+        f.locale = .app
         f.setLocalizedDateFormatFromTemplate("EEE jj:mm")
-        return t("Сброс ", "Resets ") + f.string(from: date)
+        return "Resets " + f.string(from: date)
     }
 
     static func windowTitle(_ key: String) -> String {
         switch key {
-        case "five_hour": return t("Лимит сессии (5 ч)", "Session limit")
-        case "seven_day": return t("Неделя · все модели", "Weekly · all models")
+        case "five_hour": return "Session limit"
+        case "seven_day": return "Weekly · all models"
         default:
             let model = key.replacingOccurrences(of: "seven_day_", with: "").replacingOccurrences(of: "_", with: " ").capitalized
-            return key.hasPrefix("seven_day") ? t("Неделя · \(model)", "Weekly · \(model)") : key.replacingOccurrences(of: "_", with: " ").capitalized
+            return key.hasPrefix("seven_day") ? "Weekly · \(model)" : key.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
 }
@@ -75,7 +75,7 @@ struct UsageRingButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(t("Контекст \(pct)% — нажмите, чтобы посмотреть лимиты", "Context \(pct)% — click for usage and limits"))
+        .help("Context \(pct)% — click for usage and limits")
         .popover(isPresented: $open, arrowEdge: .top) {
             UsageOverlay(chat: chat)
         }
@@ -100,11 +100,11 @@ struct UsageOverlay: View {
                 .padding(12)
                 .card(radius: 10)
             HStack {
-                Button(detailed ? t("Скрыть разбивку", "Hide breakdown") : t("Подробная разбивка", "See detailed breakdown")) { detailed.toggle() }
+                Button(detailed ? "Hide breakdown" : "See detailed breakdown") { detailed.toggle() }
                     .controlSize(.small)
                 Spacer()
                 if chat.totalCost > 0 {
-                    Text(t("Сессия: ", "Session: ") + String(format: "$%.2f", chat.totalCost))
+                    Text("Session: " + String(format: "$%.2f", chat.totalCost))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(Color.syMuted)
                 }
@@ -124,7 +124,7 @@ struct UsageOverlay: View {
         if let ctx = chat.context {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text(t("Окно контекста", "Context window")).fontWeight(.medium).foregroundStyle(Color.syText)
+                    Text("Context window").fontWeight(.medium).foregroundStyle(Color.syText)
                     Spacer()
                     Text("\(TokenFormat.short(ctx.total)) / \(TokenFormat.short(ctx.max)) (\(ctx.percentage)%)")
                         .monospacedDigit()
@@ -134,12 +134,12 @@ struct UsageOverlay: View {
                 ContextBar(ctx: ctx)
                 HStack {
                     if ctx.autoCompactEnabled, let threshold = ctx.autoCompactThreshold, threshold > ctx.total {
-                        Text(t("\(TokenFormat.short(threshold - ctx.total)) до auto-compact", "\(TokenFormat.short(threshold - ctx.total)) until auto-compact"))
+                        Text("\(TokenFormat.short(threshold - ctx.total)) until auto-compact")
                     } else if !ctx.autoCompactEnabled {
-                        Text(t("Auto-compact выключен", "Auto-compact is off")).foregroundStyle(Color.syMuted)
+                        Text("Auto-compact is off").foregroundStyle(Color.syMuted)
                     }
                     Spacer()
-                    Button(t("Сжать сессию", "Compact session")) { chat.compact() }
+                    Button("Compact session") { chat.compact() }
                         .controlSize(.small)
                         .disabled(!chat.running || chat.busy)
                 }
@@ -147,9 +147,9 @@ struct UsageOverlay: View {
             }
         } else {
             HStack {
-                Text(t("Окно контекста", "Context window")).foregroundStyle(Color.syMuted)
+                Text("Context window").foregroundStyle(Color.syMuted)
                 Spacer()
-                Text(chat.running ? t("загрузка…", "loading…") : t("сессия спит", "session is sleeping")).foregroundStyle(Color.syDim)
+                Text(chat.running ? "loading…" : "session is sleeping").foregroundStyle(Color.syDim)
             }
             .font(.callout)
         }
@@ -159,15 +159,15 @@ struct UsageOverlay: View {
     private var limitsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(t("Лимиты", "Your usage limits") + (usage.subscription.map { " · \($0)" } ?? "")).fontWeight(.medium).foregroundStyle(Color.syText)
+                Text("Your usage limits" + (usage.subscription.map { " · \($0)" } ?? "")).fontWeight(.medium).foregroundStyle(Color.syText)
                 Spacer()
                 Button { openInBrowser("https://claude.ai/settings/usage") } label: { Image(systemName: "arrow.up.right") }
                     .buttonStyle(.borderless)
-                    .help(t("Открыть страницу использования", "Open usage page"))
+                    .help("Open usage page")
             }
             .font(.callout)
             if usage.windows.isEmpty {
-                Text(t("Данные появятся после первого ответа Claude", "Shows up after Claude's first reply")).font(.caption).foregroundStyle(Color.syDim)
+                Text("Shows up after Claude's first reply").font(.caption).foregroundStyle(Color.syDim)
             }
             ForEach(usage.windows) { w in
                 VStack(alignment: .leading, spacing: 4) {
@@ -196,7 +196,7 @@ struct UsageOverlay: View {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(c.kind == "free" ? Color.syLineStrong : TokenFormat.color(c.color, kind: c.kind))
                             .frame(width: 10, height: 10)
-                        Text(c.name + (c.kind == "deferred" ? t(" (отложено)", " (deferred)") : ""))
+                        Text(c.name + (c.kind == "deferred" ? " (deferred)" : ""))
                             .foregroundStyle(c.kind == "used" ? Color.syText : Color.syMuted)
                         Spacer()
                         Text(TokenFormat.short(c.tokens)).monospacedDigit().foregroundStyle(Color.syMuted)

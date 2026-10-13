@@ -29,7 +29,7 @@ struct PlainDiffList: View {
             if f.hasPatch {
                 for l in f.lines { out.append(.line(f, l)) }
             } else {
-                out.append(.note(f, t("Diff недоступен (бинарный или большой файл)", "Diff unavailable (binary or large file)")))
+                out.append(.note(f, "Diff unavailable (binary or large file)"))
             }
         }
         return out
@@ -65,7 +65,7 @@ struct PlainDiffList: View {
             if let onOpenFile {
                 Button { onOpenFile(f.id) } label: { Image(systemName: "arrow.up.forward.square") }
                     .buttonStyle(.borderless)
-                    .help(t("Открыть файл", "Open file"))
+                    .help("Open file")
             }
         }
         .padding(.horizontal, 12)
@@ -77,7 +77,7 @@ struct PlainDiffList: View {
             if isCollapsed { collapsed.remove(f.id) } else { collapsed.insert(f.id) }
         }
         .contextMenu {
-            Button(t("Копировать путь", "Copy path")) { copyToPasteboard(f.id) }
+            Button("Copy path") { copyToPasteboard(f.id) }
         }
         .padding(.top, 6)
     }

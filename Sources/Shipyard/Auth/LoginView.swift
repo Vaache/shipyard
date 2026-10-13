@@ -19,18 +19,18 @@ struct LoginView: View {
                         .frame(width: 104, height: 104)
                         .shadow(color: Color.syAccent.opacity(0.25), radius: 18, y: 6)
                     Text("Shipyard").font(.largeTitle.weight(.bold)).foregroundStyle(Color.syText)
-                    Text(t("Быстрый просмотр PR без браузера", "Fast PR browsing without a browser")).foregroundStyle(Color.syMuted)
+                    Text("Fast PR browsing without a browser").foregroundStyle(Color.syMuted)
                 }
                 .padding(.bottom, 6)
 
                 if GHCLI.binary != nil {
                     card {
                         cardTitle("GitHub CLI", icon: "terminal.fill", color: .sySky)
-                        Text(t("Использовать токен, под которым вы вошли в `gh`.", "Use the token you're signed in with in `gh`.")).font(.callout).foregroundStyle(Color.syMuted)
+                        Text("Use the token you're signed in with in `gh`.").font(.callout).foregroundStyle(Color.syMuted)
                         Button {
                             run { try await app.login(token: try await GHCLI.token()) }
                         } label: {
-                            Label(t("Войти через gh", "Sign in with gh"), systemImage: "terminal").frame(maxWidth: .infinity)
+                            Label("Sign in with gh", systemImage: "terminal").frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
@@ -39,16 +39,16 @@ struct LoginView: View {
 
                 card {
                     cardTitle("Personal Access Token", icon: "key.fill", color: .syAmber)
-                    Text(t("Нужны права: repo, read:org, read:project, project, notifications, workflow.", "Required scopes: repo, read:org, read:project, project, notifications, workflow.")).font(.callout).foregroundStyle(Color.syMuted)
+                    Text("Required scopes: repo, read:org, read:project, project, notifications, workflow.").font(.callout).foregroundStyle(Color.syMuted)
                     HStack {
-                        SecureField(t("ghp_… или github_pat_…", "ghp_… or github_pat_…"), text: $token)
+                        SecureField("ghp_… or github_pat_…", text: $token)
                             .textFieldStyle(.roundedBorder)
                             .onSubmit(loginWithToken)
-                        Button(t("Войти", "Sign in"), action: loginWithToken)
+                        Button("Sign in", action: loginWithToken)
                             .buttonStyle(.borderedProminent)
                             .disabled(token.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
-                    Button(t("Создать токен на github.com", "Create a token on github.com")) {
+                    Button("Create a token on github.com") {
                         openInBrowser("https://github.com/settings/tokens/new?scopes=repo,read:org,read:project,project,notifications,workflow&description=Shipyard")
                     }
                     .buttonStyle(.link)
@@ -57,7 +57,7 @@ struct LoginView: View {
                 card {
                     DisclosureGroup(isExpanded: $showDevice) {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(t("Нужен Client ID своего OAuth App (Settings → Developer settings → OAuth Apps, включите «Enable Device Flow»).", "Requires the Client ID of your own OAuth App (Settings → Developer settings → OAuth Apps, enable “Enable Device Flow”)."))
+                            Text("Requires the Client ID of your own OAuth App (Settings → Developer settings → OAuth Apps, enable “Enable Device Flow”).")
                                 .font(.callout).foregroundStyle(Color.syMuted)
                             TextField("Client ID", text: $clientID).textFieldStyle(.roundedBorder)
                             if let device {
@@ -69,22 +69,22 @@ struct LoginView: View {
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 4)
                                         .card(radius: 8, fill: .sySunken)
-                                    Button(t("Скопировать и открыть", "Copy and open")) {
+                                    Button("Copy and open") {
                                         copyToPasteboard(device.userCode)
                                         openInBrowser(device.verificationUri)
                                     }
                                     .buttonStyle(.borderedProminent)
                                     ProgressView().controlSize(.small)
                                 }
-                                Text(t("Введите код на github.com/login/device — вход произойдёт автоматически.", "Enter the code at github.com/login/device — you'll be signed in automatically.")).font(.caption).foregroundStyle(Color.syMuted)
+                                Text("Enter the code at github.com/login/device — you'll be signed in automatically.").font(.caption).foregroundStyle(Color.syMuted)
                             } else {
-                                Button(t("Получить код", "Get code")) { startDevice() }
+                                Button("Get code") { startDevice() }
                                     .disabled(clientID.trimmingCharacters(in: .whitespaces).isEmpty)
                             }
                         }
                         .padding(.top, 6)
                     } label: {
-                        cardTitle(t("Вход через браузер (OAuth Device Flow)", "Sign in via browser (OAuth Device Flow)"), icon: "globe", color: .syIndigo)
+                        cardTitle("Sign in via browser (OAuth Device Flow)", icon: "globe", color: .syIndigo)
                     }
                 }
 
@@ -102,17 +102,6 @@ struct LoginView: View {
             .padding(40)
             .frame(maxWidth: 520)
             .frame(maxWidth: .infinity)
-        }
-        .overlay(alignment: .topTrailing) {
-            Picker("", selection: Binding(get: { Loc.shared.lang }, set: { Loc.shared.set($0) })) {
-                ForEach(AppLanguage.allCases) { l in
-                    Text(l.title).tag(l)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 160)
-            .padding(12)
         }
         .onDisappear { deviceTask?.cancel() }
     }

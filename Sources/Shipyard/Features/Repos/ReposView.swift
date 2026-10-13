@@ -21,20 +21,20 @@ struct ReposView: View {
                 RepoRow(repo: r)
                     .tag(Route.repo(r.ref ?? RepoRef(owner: "", name: "")))
                     .contextMenu {
-                        Button(t("Открыть в браузере", "Open in browser")) { openInBrowser(r.url) }
-                        Button(t("Копировать ссылку", "Copy link")) { copyToPasteboard(r.url) }
-                        Button(t("Копировать «gh repo clone»", "Copy “gh repo clone”")) { copyToPasteboard("gh repo clone \(r.nameWithOwner)") }
+                        Button("Open in browser") { openInBrowser(r.url) }
+                        Button("Copy link") { copyToPasteboard(r.url) }
+                        Button("Copy “gh repo clone”") { copyToPasteboard("gh repo clone \(r.nameWithOwner)") }
                     }
                     .onAppear { if r.id == repos.last?.id { Task { await loadMore() } } }
             }
         }
         .overlay { if loading && repos.isEmpty { ProgressView().controlSize(.small) } }
-        .searchable(text: $text, placement: .toolbar, prompt: t("Фильтр репозиториев", "Filter repositories"))
-        .navigationTitle(t("Репозитории", "Repositories"))
+        .searchable(text: $text, placement: .toolbar, prompt: "Filter repositories")
+        .navigationTitle("Repositories")
         .toolbar {
             ToolbarItem {
-                Toggle(isOn: $hideArchived) { Label(t("Скрыть архивные", "Hide archived"), systemImage: "archivebox") }
-                    .help(t("Скрыть архивные", "Hide archived"))
+                Toggle(isOn: $hideArchived) { Label("Hide archived", systemImage: "archivebox") }
+                    .help("Hide archived")
             }
         }
         .task(id: app.api != nil) { if repos.isEmpty { await load() } }
@@ -90,7 +90,7 @@ struct RepoRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
                     Text(repo.nameWithOwner).fontWeight(.semibold).foregroundStyle(Color.syText).lineLimit(1)
-                    if repo.isArchived { ChipView(text: t("архив", "archived"), color: .syAmber) }
+                    if repo.isArchived { ChipView(text: "archived", color: .syAmber) }
                     if repo.isFork { Image(systemName: "tuningfork").font(.caption2).foregroundStyle(Color.syDim) }
                 }
                 if let d = repo.description, !d.isEmpty {
@@ -153,9 +153,9 @@ struct RepoDetailView: View {
         .navigationSubtitle(repo.owner)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button { copyToPasteboard("gh repo clone \(repo.full)") } label: { Label(t("Копировать clone", "Copy clone"), systemImage: "terminal") }
-                    .help(t("Копировать «gh repo clone»", "Copy “gh repo clone”"))
-                Button { openInBrowser(code?.webURL ?? "https://github.com/\(repo.full)") } label: { Label(t("В браузере", "Open in browser"), systemImage: "safari") }
+                Button { copyToPasteboard("gh repo clone \(repo.full)") } label: { Label("Copy clone", systemImage: "terminal") }
+                    .help("Copy “gh repo clone”")
+                Button { openInBrowser(code?.webURL ?? "https://github.com/\(repo.full)") } label: { Label("Open in browser", systemImage: "safari") }
             }
         }
         .task(id: repo) {
@@ -181,7 +181,7 @@ struct RepoDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
                         Text(repo.full).font(.title2.weight(.semibold)).foregroundStyle(Color.syText).textSelection(.enabled)
-                        if info?.isPrivate == true { ChipView(text: t("приватный", "private"), color: .syAmber, icon: "lock.fill") }
+                        if info?.isPrivate == true { ChipView(text: "private", color: .syAmber, icon: "lock.fill") }
                     }
                     if let d = info?.description, !d.isEmpty { Text(d).foregroundStyle(Color.syMuted).lineLimit(2) }
                     if let info {
@@ -200,7 +200,7 @@ struct RepoDetailView: View {
             .card(radius: 12)
             HStack {
                 TabStrip(items: [
-                    TabItem(id: RepoTab.code, title: t("Код", "Code"), icon: "chevron.left.forwardslash.chevron.right"),
+                    TabItem(id: RepoTab.code, title: "Code", icon: "chevron.left.forwardslash.chevron.right"),
                     TabItem(id: RepoTab.pr, title: "Pull requests", icon: "arrow.triangle.pull", badge: info.map { "\($0.pullRequests.totalCount)" }),
                     TabItem(id: RepoTab.issue, title: "Issues", icon: "smallcircle.filled.circle", badge: info.map { "\($0.issues.totalCount)" })
                 ], selection: $tab)
@@ -227,7 +227,7 @@ struct RepoDetailView: View {
                     .contextMenu { ItemContextMenu(item: item) }
                     .onAppear { if item.id == model.items.last?.id { Task { await model.loadMore(api: app.api) } } }
             }
-            if model.items.isEmpty, !model.loading { Text(t("Ничего нет", "Nothing here")).foregroundStyle(Color.syMuted) }
+            if model.items.isEmpty, !model.loading { Text("Nothing here").foregroundStyle(Color.syMuted) }
         }
         .overlay { if model.loading && model.items.isEmpty { ProgressView().controlSize(.small) } }
     }

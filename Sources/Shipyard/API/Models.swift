@@ -268,7 +268,7 @@ struct CheckContext: Decodable, Identifiable {
     var duration: String? {
         guard let s = startedAt, let e = completedAt else { return nil }
         let secs = Int(e.timeIntervalSince(s))
-        return secs >= 60 ? t("\(secs / 60)м \(secs % 60)с", "\(secs / 60)m \(secs % 60)s") : t("\(secs)с", "\(secs)s")
+        return secs >= 60 ? "\(secs / 60)m \(secs % 60)s" : "\(secs)s"
     }
 }
 

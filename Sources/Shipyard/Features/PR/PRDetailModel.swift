@@ -55,6 +55,7 @@ final class PRDetailModel {
     }
     var visitedTabs: Set<PRTab> = [.conversation]
     var stack: [StackPR] = []
+    private var mergeStateRetried = false
     var html = ""
     var scrollToBottomToken = 0
 
@@ -116,6 +117,13 @@ final class PRDetailModel {
             indexThreads(pr.reviewThreads.nodes)
             error = nil
             Task(priority: .utility) { await self.loadStack() }
+            if pr.mergeStateStatus == "UNKNOWN", pr.isOpen, !mergeStateRetried {
+                mergeStateRetried = true
+                Task {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    await self.load()
+                }
+            }
             if filesLoaded {
                 await loadFiles(force: true)
             } else if !filesLoading {
@@ -168,7 +176,7 @@ final class PRDetailModel {
     }
 
     func flatRows(filter: String) -> [FlatDiffRow] {
-        let key = "\(filter)|\(filesVersion)|\(collapsed.sorted().joined(separator: ","))|\(pending.map { $0.id.uuidString }.joined())|\(composer.map { "\($0.path):\($0.side):\($0.line)" } ?? "")|\(threadsVersion)|\(Loc.shared.lang.rawValue)"
+        let key = "\(filter)|\(filesVersion)|\(collapsed.sorted().joined(separator: ","))|\(pending.map { $0.id.uuidString }.joined())|\(composer.map { "\($0.path):\($0.side):\($0.line)" } ?? "")|\(threadsVersion)"
         if key == flatCacheKey { return flatCache }
         var out: [FlatDiffRow] = []
         for file in files where filter.isEmpty || file.id.localizedCaseInsensitiveContains(filter) {
@@ -186,7 +194,7 @@ final class PRDetailModel {
     }
 
     func rows(for file: DiffFile) -> [DiffRow] {
-        guard file.hasPatch else { return [.note(t("Diff недоступен (бинарный или слишком большой файл)", "Diff unavailable (binary or too large)"))] }
+        guard file.hasPatch else { return [.note("Diff unavailable (binary or too large)")] }
         var rows: [DiffRow] = []
         rows.reserveCapacity(file.lines.count + 4)
         let filePending = pending.filter { $0.path == file.id }
@@ -203,7 +211,7 @@ final class PRDetailModel {
             }
         }
         if let outdated = outdatedByPath[file.id], !outdated.isEmpty {
-            rows.append(.note(t("Устаревшие комментарии", "Outdated comments")))
+            rows.append(.note("Outdated comments"))
             outdated.forEach { rows.append(.thread($0)) }
         }
         return rows

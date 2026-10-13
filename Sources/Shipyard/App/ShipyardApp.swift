@@ -31,19 +31,19 @@ struct ShipyardApp: App {
                 CheckForUpdatesButton()
             }
             CommandGroup(after: .toolbar) {
-                Button(t("Обновить", "Refresh")) { app.refresh() }
+                Button("Refresh") { app.refresh() }
                     .keyboardShortcut("r")
-                Button(t("Открыть по ссылке…", "Open by Link…")) { app.showOpenLink = true }
+                Button("Open by Link…") { app.showOpenLink = true }
                     .keyboardShortcut("l")
                 Divider()
-                Button(t("Ждут моего ревью", "Review Requests")) { app.section = .prs(.reviewRequested) }.keyboardShortcut("1")
-                Button(t("Мои PR", "My Pull Requests")) { app.section = .prs(.mine) }.keyboardShortcut("2")
-                Button(t("Уведомления", "Notifications")) { app.section = .notifications }.keyboardShortcut("3")
-                Button(t("Репозитории", "Repositories")) { app.section = .repos }.keyboardShortcut("4")
-                Button(t("Проекты", "Projects")) { app.section = .projects }.keyboardShortcut("5")
+                Button("Review Requests") { app.section = .prs(.reviewRequested) }.keyboardShortcut("1")
+                Button("My Pull Requests") { app.section = .prs(.mine) }.keyboardShortcut("2")
+                Button("Notifications") { app.section = .notifications }.keyboardShortcut("3")
+                Button("Repositories") { app.section = .repos }.keyboardShortcut("4")
+                Button("Projects") { app.section = .projects }.keyboardShortcut("5")
                 Button("Claude Code") { app.section = .claude }.keyboardShortcut("6")
                 Divider()
-                Button(t("Назад", "Back")) { if !app.detailPath.isEmpty { app.detailPath.removeLast() } }
+                Button("Back") { if !app.detailPath.isEmpty { app.detailPath.removeLast() } }
                     .keyboardShortcut("[")
             }
         }
@@ -55,7 +55,7 @@ struct ShipyardApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window(t("Обновление ПО", "Software Update"), id: "update") {
+        Window("Software Update", id: "update") {
             ThemedRoot { UpdateView() }
         }
         .windowResizability(.contentSize)

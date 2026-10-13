@@ -52,11 +52,11 @@ struct ChatView: View {
             if chat.sleeping && !chat.running {
                 HStack(spacing: 8) {
                     Image(systemName: "moon.zzz.fill").foregroundStyle(Color.syIndigo)
-                    Text(t("Сессия спит — процесс остановлен, память освобождена. Новое сообщение продолжит её.", "Session is sleeping — process stopped, memory freed. A new message resumes it."))
+                    Text("Session is sleeping — process stopped, memory freed. A new message resumes it.")
                         .font(.callout)
                         .foregroundStyle(Color.syMuted)
                     Spacer()
-                    Button(t("Разбудить", "Wake up")) { chat.wake() }.controlSize(.small)
+                    Button("Wake up") { chat.wake() }.controlSize(.small)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 6)
@@ -96,7 +96,7 @@ struct ChatWelcome: View {
                 IconTile(systemImage: "sparkles", color: .syCoral, size: 24)
                 Text("Claude Code").font(.title3.weight(.semibold)).foregroundStyle(Color.syText)
             }
-            Text(t("Опишите задачу — Claude прочитает код, предложит изменения и попросит разрешение на действия.", "Describe a task — Claude will read the code, propose changes and ask before acting."))
+            Text("Describe a task — Claude will read the code, propose changes and ask before acting.")
                 .foregroundStyle(Color.syMuted)
             HStack(spacing: 8) {
                 ForEach(suggestions, id: \.self) { s in
@@ -105,7 +105,7 @@ struct ChatWelcome: View {
                         .controlSize(.small)
                 }
             }
-            Text(t("/ — команды · @ — файлы · ⇧↩ — новая строка · вставьте скриншот ⌘V", "/ commands · @ files · ⇧↩ new line · paste a screenshot ⌘V"))
+            Text("/ commands · @ files · ⇧↩ new line · paste a screenshot ⌘V")
                 .font(.caption)
                 .foregroundStyle(Color.syDim)
         }
@@ -115,9 +115,9 @@ struct ChatWelcome: View {
     }
 
     private var suggestions: [String] {
-        [t("Объясни структуру проекта", "Explain the project structure"),
-         t("Найди и исправь баги в последних изменениях", "Find bugs in the latest changes"),
-         t("Напиши тесты для изменённого кода", "Write tests for the changed code")]
+        ["Explain the project structure",
+         "Find bugs in the latest changes",
+         "Write tests for the changed code"]
     }
 }
 
@@ -128,13 +128,13 @@ struct WorkingIndicator: View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text(chat.status ?? (chat.pendingCount > 0 ? t("Ждёт вашего ответа", "Waiting for you") : t("Работаю…", "Working…")))
+                Text(chat.status ?? (chat.pendingCount > 0 ? "Waiting for you" : "Working…"))
                     .foregroundStyle(Color.syMuted)
                 if let start = chat.turnStartedAt {
                     Text("\(Int(ctx.date.timeIntervalSince(start)))s").font(.caption.monospacedDigit()).foregroundStyle(Color.syDim)
                 }
                 Spacer()
-                Button(t("Стоп", "Stop")) { chat.interrupt() }
+                Button("Stop") { chat.interrupt() }
                     .controlSize(.small)
                     .keyboardShortcut(.escape, modifiers: [])
             }
@@ -156,9 +156,9 @@ struct ErrorBanner: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(text, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Color.syAmber).textSelection(.enabled)
             HStack {
-                Button(t("Перезапустить сессию", "Restart session"), action: retry).controlSize(.small)
+                Button("Restart session", action: retry).controlSize(.small)
                 if looksLikeAuth {
-                    Button(t("Проверить вход в Claude", "Check Claude sign-in")) {
+                    Button("Check Claude sign-in") {
                         Task { await ClaudeAccountStore.shared.refresh() }
                     }
                     .controlSize(.small)
@@ -221,7 +221,7 @@ struct UserBubble: View {
                     .lineLimit(expanded ? nil : 12)
                     .fixedSize(horizontal: false, vertical: true)
                 if text.split(separator: "\n").count > 12 {
-                    Button(expanded ? t("Свернуть", "Collapse") : t("Показать всё", "Show all")) { expanded.toggle() }
+                    Button(expanded ? "Collapse" : "Show all") { expanded.toggle() }
                         .buttonStyle(.link)
                         .font(.caption)
                 }
@@ -255,7 +255,7 @@ struct ThinkingView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "chevron.right").font(.caption2).rotationEffect(.degrees(open ? 90 : 0))
                         Image(systemName: "brain").foregroundStyle(Color.syViolet)
-                        Text(t("Размышления", "Thinking"))
+                        Text("Thinking")
                     }
                     .font(.caption)
                     .foregroundStyle(Color.syMuted)
@@ -424,7 +424,7 @@ struct ToolDetails: View {
                     HStack {
                         Text(ToolPresentation.relative(path, folder)).font(.caption.monospaced()).foregroundStyle(Color.syMuted)
                         Spacer()
-                        Button(t("Открыть", "Open")) { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+                        Button("Open") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
                             .buttonStyle(.link).font(.caption)
                     }
                 }
@@ -453,9 +453,9 @@ struct ToolDetails: View {
                 }
             default:
                 if !call.input.isEmpty, let data = try? JSONSerialization.data(withJSONObject: call.input, options: [.prettyPrinted, .sortedKeys]) {
-                    outputView(String(decoding: data, as: UTF8.self), title: t("Параметры", "Input"))
+                    outputView(String(decoding: data, as: UTF8.self), title: "Input")
                 }
-                outputView(call.resultText, title: t("Результат", "Result"))
+                outputView(call.resultText, title: "Result")
             }
         }
     }
@@ -534,7 +534,7 @@ struct InlineDiff: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(shown) { DiffLineView(line: $0).equatable() }
             if lines.count > 60 && !showAll {
-                Button(t("Показать ещё \(lines.count - 60) строк", "Show \(lines.count - 60) more lines")) { showAll = true }
+                Button("Show \(lines.count - 60) more lines") { showAll = true }
                     .buttonStyle(.link).font(.caption).padding(6)
             }
         }
@@ -577,20 +577,20 @@ struct PermissionCard: View {
             case "AskUserQuestion":
                 questionView
             case "ExitPlanMode":
-                Text(t("Claude подготовил план. Начать выполнение?", "Claude has a plan. Start implementing?")).font(.callout.weight(.semibold))
+                Text("Claude has a plan. Start implementing?").font(.callout.weight(.semibold))
                 HStack {
-                    Button(t("Да, и принимать правки", "Yes, auto-accept edits")) {
+                    Button("Yes, auto-accept edits") {
                         chat.respond(request, allow: true)
                         chat.setPermissionMode("acceptEdits")
                     }
                     .buttonStyle(.borderedProminent)
-                    Button(t("Да, спрашивать про правки", "Yes, ask before edits")) {
+                    Button("Yes, ask before edits") {
                         chat.respond(request, allow: true)
                         chat.setPermissionMode("default")
                     }
                     Spacer()
                 }
-                denyRow(placeholder: t("Что изменить в плане…", "What to change in the plan…"))
+                denyRow(placeholder: "What to change in the plan…")
             default:
                 Text(question).font(.callout.weight(.semibold))
                 if let d = request.description, !d.isEmpty { Text(d).font(.callout).foregroundStyle(Color.syMuted) }
@@ -599,19 +599,19 @@ struct PermissionCard: View {
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Button { chat.respond(request, allow: true) } label: {
-                        Label(t("Да, разрешить", "Yes, allow"), systemImage: "checkmark").frame(maxWidth: .infinity, alignment: .leading)
+                        Label("Yes, allow", systemImage: "checkmark").frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: [.command])
                     ForEach(Array(request.suggestions.enumerated()), id: \.offset) { _, s in
                         Button { chat.respond(request, allow: true, always: s) } label: {
-                            Label(t("Да, и больше не спрашивать: ", "Yes, and don't ask again for: ") + s.label, systemImage: "checkmark.seal")
+                            Label("Yes, and don't ask again for: " + s.label, systemImage: "checkmark.seal")
                                 .lineLimit(1)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 }
-                denyRow(placeholder: t("Нет — сказать Claude, что сделать иначе…", "No — tell Claude what to do instead…"))
+                denyRow(placeholder: "No — tell Claude what to do instead…")
             }
         }
         .padding(12)
@@ -622,11 +622,11 @@ struct PermissionCard: View {
 
     private var question: String {
         switch request.toolName {
-        case "Bash": return t("Выполнить команду?", "Run this command?")
-        case "Edit", "MultiEdit": return t("Внести правку в файл?", "Make this edit?")
-        case "Write": return t("Создать/перезаписать файл?", "Write this file?")
-        case "WebFetch": return t("Открыть страницу?", "Fetch this URL?")
-        default: return t("Разрешить \(request.toolName)?", "Allow \(request.toolName)?")
+        case "Bash": return "Run this command?"
+        case "Edit", "MultiEdit": return "Make this edit?"
+        case "Write": return "Write this file?"
+        case "WebFetch": return "Fetch this URL?"
+        default: return "Allow \(request.toolName)?"
         }
     }
 
@@ -635,7 +635,7 @@ struct PermissionCard: View {
             TextField(placeholder, text: $feedback)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { chat.respond(request, allow: false, message: feedback) }
-            Button(t("Отклонить", "Deny")) { chat.respond(request, allow: false, message: feedback) }
+            Button("Deny") { chat.respond(request, allow: false, message: feedback) }
         }
     }
 
@@ -665,19 +665,19 @@ struct PermissionCard: View {
                     }
                     .buttonStyle(.plain)
                 }
-                TextField(t("Свой ответ…", "Other…"), text: Binding(get: { options.contains { $0["label"] as? String == answers[text] } ? "" : (answers[text] ?? "") }, set: { answers[text] = $0 }))
+                TextField("Other…", text: Binding(get: { options.contains { $0["label"] as? String == answers[text] } ? "" : (answers[text] ?? "") }, set: { answers[text] = $0 }))
                     .textFieldStyle(.roundedBorder)
             }
         }
         HStack {
-            Button(t("Ответить", "Submit")) {
+            Button("Submit") {
                 var input = request.input
                 input["answers"] = answers
                 chat.respond(request, allow: true, updatedInput: input)
             }
             .buttonStyle(.borderedProminent)
             .disabled(answers.count < questions.count)
-            Button(t("Пропустить", "Skip")) { chat.respond(request, allow: false, message: t("Пользователь пропустил вопрос", "The user skipped the question")) }
+            Button("Skip") { chat.respond(request, allow: false, message: "The user skipped the question") }
         }
     }
 }

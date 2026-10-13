@@ -8,11 +8,11 @@ enum ClaudeTarget: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .app: return t("В приложении", "In this app")
+        case .app: return "In this app"
         case .terminal: return "Terminal"
         case .iterm: return "iTerm"
         case .desktop: return "Claude Desktop"
-        case .copy: return t("Только скопировать", "Copy only")
+        case .copy: return "Copy only"
         }
     }
 
@@ -33,9 +33,9 @@ enum ClaudePermissionMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .standard: return t("Обычный (спрашивать)", "Default (ask)")
-        case .acceptEdits: return t("Принимать правки", "Accept edits")
-        case .plan: return t("Сначала план", "Plan first")
+        case .standard: return "Default (ask)"
+        case .acceptEdits: return "Accept edits"
+        case .plan: return "Plan first"
         }
     }
 }
@@ -57,7 +57,7 @@ enum ClaudeLauncher {
             return
         }
         if target == .desktop {
-            guard let bin = claudeBinary else { throw APIError(message: t("claude CLI не найден", "claude CLI not found")) }
+            guard let bin = claudeBinary else { throw APIError(message: "claude CLI not found") }
             copyToPasteboard(prompt)
             let p = Process()
             p.executableURL = URL(fileURLWithPath: bin)
@@ -101,7 +101,7 @@ enum ClaudeLauncher {
 
         let bundleID = target == .iterm ? "com.googlecode.iterm2" : "com.apple.Terminal"
         guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            throw APIError(message: t("Приложение терминала не найдено", "Terminal app not found"))
+            throw APIError(message: "Terminal app not found")
         }
         let config = NSWorkspace.OpenConfiguration()
         config.activates = true

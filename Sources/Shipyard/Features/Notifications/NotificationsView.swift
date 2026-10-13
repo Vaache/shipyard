@@ -11,8 +11,8 @@ struct NotificationsView: View {
     var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $showAll) {
-                Text(t("Непрочитанные", "Unread")).tag(false)
-                Text(t("Все", "All")).tag(true)
+                Text("Unread").tag(false)
+                Text("All").tag(true)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -25,15 +25,15 @@ struct NotificationsView: View {
                     NotificationRow(item: n)
                         .tag(n.id)
                         .contextMenu {
-                            if n.unread { Button(t("Отметить прочитанным", "Mark as read")) { Task { await markRead(n) } } }
-                            Button(t("Готово (убрать из входящих)", "Done (remove from inbox)")) { Task { await markDone(n) } }
-                            Button(t("Открыть в браузере", "Open in browser")) { openInBrowser(n.webURL) }
+                            if n.unread { Button("Mark as read") { Task { await markRead(n) } } }
+                            Button("Done (remove from inbox)") { Task { await markDone(n) } }
+                            Button("Open in browser") { openInBrowser(n.webURL) }
                         }
                 }
                 if items.isEmpty, !loading, error == nil {
                     VStack(spacing: 8) {
                         IconTile(systemImage: showAll ? "tray.fill" : "checkmark", color: showAll ? .sySlate : .syGreen, size: 40)
-                        Text(showAll ? t("Уведомлений нет", "No notifications") : t("Всё прочитано", "All caught up")).foregroundStyle(Color.syMuted)
+                        Text(showAll ? "No notifications" : "All caught up").foregroundStyle(Color.syMuted)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 30)
@@ -41,11 +41,11 @@ struct NotificationsView: View {
             }
             .overlay { if loading && items.isEmpty { ProgressView().controlSize(.small) } }
         }
-        .navigationTitle(t("Уведомления", "Notifications"))
+        .navigationTitle("Notifications")
         .toolbar {
             ToolbarItem {
-                Button { Task { await markAll() } } label: { Label(t("Прочитать все", "Mark all read"), systemImage: "checkmark.circle") }
-                    .help(t("Отметить все прочитанными", "Mark all as read"))
+                Button { Task { await markAll() } } label: { Label("Mark all read", systemImage: "checkmark.circle") }
+                    .help("Mark all as read")
                     .disabled(!items.contains { $0.unread })
             }
         }
@@ -159,17 +159,17 @@ struct NotificationRow: View {
 
     private var reason: String {
         switch item.reason {
-        case "review_requested": return t("запрошено ревью", "review requested")
-        case "mention": return t("упоминание", "mention")
-        case "team_mention": return t("упоминание команды", "team mention")
-        case "author": return t("вы автор", "author")
-        case "comment": return t("комментарий", "comment")
-        case "assign": return t("назначено", "assigned")
-        case "state_change": return t("смена статуса", "state change")
-        case "subscribed": return t("подписка", "subscribed")
+        case "review_requested": return "review requested"
+        case "mention": return "mention"
+        case "team_mention": return "team mention"
+        case "author": return "author"
+        case "comment": return "comment"
+        case "assign": return "assigned"
+        case "state_change": return "state change"
+        case "subscribed": return "subscribed"
         case "ci_activity": return "CI"
-        case "manual": return t("подписка", "subscribed")
-        case "security_alert": return t("безопасность", "security alert")
+        case "manual": return "subscribed"
+        case "security_alert": return "security alert"
         default: return item.reason
         }
     }

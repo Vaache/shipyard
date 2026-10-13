@@ -6,7 +6,7 @@ enum GHCLI {
     }
 
     static func token() async throws -> String {
-        guard let bin = binary else { throw APIError(message: t("GitHub CLI (gh) не найден", "GitHub CLI (gh) not found")) }
+        guard let bin = binary else { throw APIError(message: "GitHub CLI (gh) not found") }
         return try await Task.detached {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: bin)
@@ -19,7 +19,7 @@ enum GHCLI {
             let token = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             guard p.terminationStatus == 0, !token.isEmpty else {
                 let e = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                throw APIError(message: e.isEmpty ? t("gh не вернул токен. Выполните gh auth login", "gh returned no token. Run gh auth login") : e)
+                throw APIError(message: e.isEmpty ? "gh returned no token. Run gh auth login" : e)
             }
             return token
         }.value
@@ -47,7 +47,7 @@ enum DeviceFlow {
         req.httpBody = c.percentEncodedQuery?.data(using: .utf8)
         let (data, _) = try await URLSession.shared.data(for: req)
         guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw APIError(message: t("Неверный ответ GitHub", "Invalid response from GitHub"))
+            throw APIError(message: "Invalid response from GitHub")
         }
         return obj
     }
@@ -56,7 +56,7 @@ enum DeviceFlow {
         let obj = try await post("https://github.com/login/device/code", ["client_id": clientID, "scope": scopes])
         if let e = obj["error_description"] as? String ?? obj["error"] as? String { throw APIError(message: e) }
         guard let dc = obj["device_code"] as? String, let uc = obj["user_code"] as? String, let uri = obj["verification_uri"] as? String else {
-            throw APIError(message: t("Device flow недоступен для этого Client ID", "Device flow is not available for this Client ID"))
+            throw APIError(message: "Device flow is not available for this Client ID")
         }
         return DeviceCode(deviceCode: dc, userCode: uc, verificationUri: uri, expiresIn: obj["expires_in"] as? Int ?? 900, interval: obj["interval"] as? Int ?? 5)
     }
@@ -76,9 +76,9 @@ enum DeviceFlow {
             case "authorization_pending": continue
             case "slow_down": interval += 5
             case let e?: throw APIError(message: obj["error_description"] as? String ?? e)
-            default: throw APIError(message: t("Неизвестный ответ GitHub", "Unexpected response from GitHub"))
+            default: throw APIError(message: "Unexpected response from GitHub")
             }
         }
-        throw APIError(message: t("Время ожидания истекло", "Timed out"))
+        throw APIError(message: "Timed out")
     }
 }

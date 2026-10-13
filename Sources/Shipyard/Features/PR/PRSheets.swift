@@ -36,27 +36,27 @@ struct ReviewSheet: View {
     @State private var event = "COMMENT"
 
     var body: some View {
-        SheetFrame(title: t("Ревью #\(pr.number)", "Review #\(pr.number)")) {
+        SheetFrame(title: "Review #\(pr.number)") {
             if !model.pending.isEmpty {
-                Label(t("Будет отправлено комментариев в коде: \(model.pending.count)", "Inline comments to be submitted: \(model.pending.count)"), systemImage: "text.bubble")
+                Label("Inline comments to be submitted: \(model.pending.count)", systemImage: "text.bubble")
                     .foregroundStyle(Color.syMuted)
             }
-            ComposerBox(text: $text, placeholder: t("Общий комментарий к ревью (необязательно для одобрения)", "Review summary (optional when approving)"), minHeight: 140)
+            ComposerBox(text: $text, placeholder: "Review summary (optional when approving)", minHeight: 140)
                 .frame(maxHeight: 260)
             Picker("", selection: $event) {
-                Text(t("Комментарий — без решения", "Comment — without approval")).tag("COMMENT")
-                Text(t("Одобрить", "Approve")).tag("APPROVE").disabled(pr.viewerDidAuthor)
-                Text(t("Запросить изменения", "Request changes")).tag("REQUEST_CHANGES").disabled(pr.viewerDidAuthor)
+                Text("Comment — without approval").tag("COMMENT")
+                Text("Approve").tag("APPROVE").disabled(pr.viewerDidAuthor)
+                Text("Request changes").tag("REQUEST_CHANGES").disabled(pr.viewerDidAuthor)
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
             HStack {
                 if !model.pending.isEmpty {
-                    Button(t("Удалить черновые комментарии", "Discard pending comments"), role: .destructive) { model.pending.removeAll() }
+                    Button("Discard pending comments", role: .destructive) { model.pending.removeAll() }
                 }
                 Spacer()
-                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(t("Отправить ревью", "Submit review")) {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Submit review") {
                     let body = text, ev = event
                     Task { if await model.submitReview(event: ev, body: body) { dismiss() } }
                 }
@@ -89,29 +89,29 @@ struct MergeSheet: View {
     }
 
     var body: some View {
-        SheetFrame(title: t("Слить #\(pr.number) в \(pr.baseRefName)", "Merge #\(pr.number) into \(pr.baseRefName)")) {
-            Picker(t("Способ", "Method"), selection: $method) {
+        SheetFrame(title: "Merge #\(pr.number) into \(pr.baseRefName)") {
+            Picker("Method", selection: $method) {
                 ForEach(allowed) { Text($0.title).tag($0) }
             }
             .onChange(of: method) { _, m in prefill(m) }
             if method != .REBASE {
-                TextField(t("Заголовок коммита (по умолчанию от GitHub)", "Commit title (GitHub default)"), text: $title)
-                ComposerBox(text: $message, placeholder: t("Описание коммита (необязательно)", "Commit description (optional)"), minHeight: 80)
+                TextField("Commit title (GitHub default)", text: $title)
+                ComposerBox(text: $message, placeholder: "Commit description (optional)", minHeight: 80)
                     .frame(maxHeight: 160)
             }
             if !(model.repo?.deleteBranchOnMerge ?? false), pr.headRepository?.nameWithOwner == model.ref.repo.full {
-                Toggle(t("Удалить ветку \(pr.headRefName) после слияния", "Delete branch \(pr.headRefName) after merge"), isOn: $deleteBranch)
+                Toggle("Delete branch \(pr.headRefName) after merge", isOn: $deleteBranch)
             }
             HStack {
                 if model.repo?.autoMergeAllowed == true, pr.autoMergeRequest == nil, pr.mergeStateStatus != "CLEAN" {
-                    Button(t("Включить автослияние", "Enable auto-merge")) {
+                    Button("Enable auto-merge") {
                         Task { if await model.enableAutoMerge(method: method.rawValue) { dismiss() } }
                     }
-                    .help(t("Слить автоматически, когда проверки и ревью пройдут", "Merge automatically when checks and reviews pass"))
+                    .help("Merge automatically when checks and reviews pass")
                 }
                 Spacer()
-                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(t("Слить", "Merge")) {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Merge") {
                     let t = title.trimmingCharacters(in: .whitespaces)
                     let b = message.trimmingCharacters(in: .whitespacesAndNewlines)
                     let del = deleteBranch && !(model.repo?.deleteBranchOnMerge ?? false) && pr.headRepository?.nameWithOwner == model.ref.repo.full
@@ -148,14 +148,14 @@ struct EditPRSheet: View {
     @State private var text = ""
 
     var body: some View {
-        SheetFrame(title: t("Редактировать #\(pr.number)", "Edit #\(pr.number)")) {
-            TextField(t("Заголовок", "Title"), text: $title).textFieldStyle(.roundedBorder)
-            ComposerBox(text: $text, placeholder: t("Описание (Markdown)", "Description (Markdown)"), minHeight: 260)
+        SheetFrame(title: "Edit #\(pr.number)") {
+            TextField("Title", text: $title).textFieldStyle(.roundedBorder)
+            ComposerBox(text: $text, placeholder: "Description (Markdown)", minHeight: 260)
                 .frame(maxHeight: 420)
             HStack {
                 Spacer()
-                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(t("Сохранить", "Save")) {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") {
                     let t = title, b = text
                     Task { if await model.edit(title: t, body: b) { dismiss() } }
                 }
@@ -178,12 +178,12 @@ struct ReviewersSheet: View {
     @State private var logins = ""
 
     var body: some View {
-        SheetFrame(title: t("Запросить ревью", "Request review")) {
-            TextField(t("Логины через запятую, например: alice, bob", "Comma-separated logins, e.g. alice, bob"), text: $logins).textFieldStyle(.roundedBorder)
+        SheetFrame(title: "Request review") {
+            TextField("Comma-separated logins, e.g. alice, bob", text: $logins).textFieldStyle(.roundedBorder)
             HStack {
                 Spacer()
-                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(t("Запросить", "Request")) {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Request") {
                     let list = logins.split(whereSeparator: { $0 == "," || $0 == " " }).map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "@ ")) }.filter { !$0.isEmpty }
                     Task { if await model.requestReviewers(list) { dismiss() } }
                 }
@@ -202,7 +202,7 @@ struct ReplySheet: View {
     @State private var text = ""
 
     var body: some View {
-        SheetFrame(title: t("Ответ в обсуждении", "Reply to thread")) {
+        SheetFrame(title: "Reply to thread") {
             Text("\(thread.path)\(thread.line.map { ":\($0)" } ?? "")").font(.system(.caption, design: .monospaced)).foregroundStyle(Color.syMuted)
             if let last = thread.comments.nodes.last {
                 HStack(alignment: .top, spacing: 8) {
@@ -212,15 +212,15 @@ struct ReplySheet: View {
                 .padding(8)
                 .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.5)))
             }
-            ComposerBox(text: $text, placeholder: t("Ответ (Markdown)", "Reply (Markdown)"), minHeight: 120).frame(maxHeight: 240)
+            ComposerBox(text: $text, placeholder: "Reply (Markdown)", minHeight: 120).frame(maxHeight: 240)
             HStack {
                 if thread.viewerCanResolve, !thread.isResolved {
-                    Button(t("Ответить и решить", "Reply and resolve")) { send(resolve: true) }
+                    Button("Reply and resolve") { send(resolve: true) }
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy)
                 }
                 Spacer()
-                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(t("Ответить", "Reply")) { send(resolve: false) }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Reply") { send(resolve: false) }
                     .keyboardShortcut(.return, modifiers: .command)
                     .buttonStyle(.borderedProminent)
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy)
@@ -255,10 +255,10 @@ struct JobLogSheet: View {
                 OutcomeIcon(outcome: check.outcome)
                 Text(check.workflowName.map { "\($0) / \(check.title)" } ?? check.title).font(.headline).lineLimit(1)
                 Spacer()
-                Toggle(t("Только ошибки", "Errors only"), isOn: $errorsOnly).toggleStyle(.checkbox)
-                if let log { Button(t("Копировать", "Copy")) { copyToPasteboard(log) } }
-                if let link = check.link { Button(t("В браузере", "Open in browser")) { openInBrowser(link) } }
-                Button(t("Закрыть", "Close")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Toggle("Errors only", isOn: $errorsOnly).toggleStyle(.checkbox)
+                if let log { Button("Copy") { copyToPasteboard(log) } }
+                if let link = check.link { Button("Open in browser") { openInBrowser(link) } }
+                Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
             }
             .padding(12)
             Divider()
@@ -291,7 +291,7 @@ struct JobLogSheet: View {
             if let last = keep.last, last == "…" {} else if !keep.isEmpty { keep.append("…") }
             keep += lines[from...i]
         }
-        return keep.isEmpty ? t("Строк с ошибками не найдено", "No error lines found") : keep.joined(separator: "\n")
+        return keep.isEmpty ? "No error lines found" : keep.joined(separator: "\n")
     }
 
     nonisolated static func clean(_ raw: String) -> String {

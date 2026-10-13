@@ -15,8 +15,8 @@ enum ClaudeLoginMethod: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .claudeai: return t("Подписка Claude (Pro, Max, Team)", "Claude subscription (Pro, Max, Team)")
-        case .console: return t("Anthropic Console (оплата по API)", "Anthropic Console (API billing)")
+        case .claudeai: return "Claude subscription (Pro, Max, Team)"
+        case .console: return "Anthropic Console (API billing)"
         case .sso: return "SSO"
         }
     }
@@ -159,7 +159,7 @@ final class ClaudeAccountStore {
         loginInput = nil
         if code != 0 && code != 15 {
             let tail = output.components(separatedBy: "\n").filter { !$0.contains("http") && !$0.trimmingCharacters(in: .whitespaces).isEmpty }.suffix(3).joined(separator: "\n")
-            loginError = tail.isEmpty ? t("Не удалось войти (код \(code))", "Sign-in failed (code \(code))") : tail
+            loginError = tail.isEmpty ? "Sign-in failed (code \(code))" : tail
         }
         Task { await refresh() }
     }
@@ -211,8 +211,8 @@ struct ClaudeAuthView: View {
 
     private var installCard: some View {
         card {
-            Text(t("Claude Code не установлен", "Claude Code isn't installed")).font(.headline).foregroundStyle(Color.syText)
-            Text(t("Установите CLI командой в терминале, затем нажмите «Проверить снова».", "Install the CLI from Terminal, then press “Check again”."))
+            Text("Claude Code isn't installed").font(.headline).foregroundStyle(Color.syText)
+            Text("Install the CLI from Terminal, then press “Check again”.")
                 .font(.callout).foregroundStyle(Color.syMuted)
             Text(Self.installCommand)
                 .font(.system(.callout, design: .monospaced))
@@ -221,57 +221,57 @@ struct ClaudeAuthView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .card(radius: 8, fill: .sySunken)
             HStack {
-                Button(t("Копировать команду", "Copy command")) { copyToPasteboard(Self.installCommand) }
-                Button(t("Документация", "Docs")) { openInBrowser("https://code.claude.com/docs/en/setup") }
+                Button("Copy command") { copyToPasteboard(Self.installCommand) }
+                Button("Docs") { openInBrowser("https://code.claude.com/docs/en/setup") }
                 Spacer()
-                Button(t("Проверить снова", "Check again")) { Task { await store.refresh() } }.buttonStyle(.borderedProminent).tint(.syCoral)
+                Button("Check again") { Task { await store.refresh() } }.buttonStyle(.borderedProminent).tint(.syCoral)
             }
         }
     }
 
     private var loginCard: some View {
         card {
-            Text(t("Войдите в Claude", "Sign in to Claude")).font(.headline).foregroundStyle(Color.syText)
-            Text(t("Вход откроется в браузере. Аккаунт общий с Claude Code в терминале.", "Sign-in opens in your browser. The account is shared with Claude Code in Terminal."))
+            Text("Sign in to Claude").font(.headline).foregroundStyle(Color.syText)
+            Text("Sign-in opens in your browser. The account is shared with Claude Code in Terminal.")
                 .font(.callout).foregroundStyle(Color.syMuted)
             if store.loggingIn {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
-                        Text(t("Подтвердите вход в браузере…", "Confirm the sign-in in your browser…"))
+                        Text("Confirm the sign-in in your browser…")
                     }
                     if let url = store.fallbackURL {
-                        Text(t("Браузер не открылся или вход показал код?", "Browser didn't open, or the page shows a code?")).font(.caption).foregroundStyle(Color.syMuted)
+                        Text("Browser didn't open, or the page shows a code?").font(.caption).foregroundStyle(Color.syMuted)
                         HStack {
-                            Button(t("Открыть ссылку входа", "Open sign-in link")) { LinkBrowser.open(url) }
-                            Button(t("Копировать ссылку", "Copy link")) { copyToPasteboard(url.absoluteString) }
+                            Button("Open sign-in link") { LinkBrowser.open(url) }
+                            Button("Copy link") { copyToPasteboard(url.absoluteString) }
                         }
                         .controlSize(.small)
                         HStack {
-                            SecureField(t("Вставьте код со страницы", "Paste the code from the page"), text: $code)
+                            SecureField("Paste the code from the page", text: $code)
                                 .textFieldStyle(.roundedBorder)
                                 .onSubmit { store.submitCode(code); code = "" }
-                            Button(t("Отправить", "Submit")) { store.submitCode(code); code = "" }
+                            Button("Submit") { store.submitCode(code); code = "" }
                                 .buttonStyle(.borderedProminent)
                                 .tint(.syCoral)
                                 .disabled(code.isEmpty)
                         }
                     }
-                    Button(t("Отмена", "Cancel"), role: .cancel) { store.cancelLogin() }
+                    Button("Cancel", role: .cancel) { store.cancelLogin() }
                 }
             } else {
-                Picker(t("Способ входа", "Sign-in method"), selection: $method) {
+                Picker("Sign-in method", selection: $method) {
                     ForEach(ClaudeLoginMethod.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.radioGroup)
-                TextField(t("Email (необязательно)", "Email (optional)"), text: $email)
+                TextField("Email (optional)", text: $email)
                     .textFieldStyle(.roundedBorder)
                 HStack {
                     Spacer()
                     Button {
                         store.login(method: method, email: email)
                     } label: {
-                        Label(t("Войти через браузер", "Sign in with browser"), systemImage: "person.badge.key")
+                        Label("Sign in with browser", systemImage: "person.badge.key")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.syCoral)
@@ -307,7 +307,7 @@ struct ClaudeAccountCard: View {
             ProfileBadge(profile: profile, size: compact ? 26 : 34)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
-                    Text(info.email ?? t("Вход выполнен", "Signed in")).font(compact ? .callout.weight(.medium) : .headline).foregroundStyle(Color.syText).lineLimit(1)
+                    Text(info.email ?? "Signed in").font(compact ? .callout.weight(.medium) : .headline).foregroundStyle(Color.syText).lineLimit(1)
                     if ClaudeProfiles.shared.profiles.count > 1 {
                         Text(profile.label).font(.caption2.weight(.semibold)).foregroundStyle(Color.syMuted)
                             .padding(.horizontal, 5).background(Capsule().fill(Color.syMuted.opacity(0.14)))
@@ -334,10 +334,10 @@ struct ClaudeAccountCard: View {
             Menu {
                 ClaudeProfileMenuItems(showAdd: $showAdd, removeTarget: $removeTarget)
                 Divider()
-                Button(t("Выйти из этого аккаунта…", "Sign out of this account…"), role: .destructive) { confirmLogout = true }
+                Button("Sign out of this account…", role: .destructive) { confirmLogout = true }
                 Divider()
-                Button(t("Страница использования", "Usage page")) { openInBrowser("https://claude.ai/settings/usage") }
-                Button(t("Обновить статус", "Refresh status")) { Task { await store.refresh() } }
+                Button("Usage page") { openInBrowser("https://claude.ai/settings/usage") }
+                Button("Refresh status") { Task { await store.refresh() } }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -348,11 +348,11 @@ struct ClaudeAccountCard: View {
         .padding(compact ? 8 : 14)
         .card(radius: 10)
         .modifier(ProfileSheets(showAdd: $showAdd, removeTarget: $removeTarget))
-        .confirmationDialog(t("Выйти из Claude Code?", "Sign out of Claude Code?"), isPresented: $confirmLogout) {
-            Button(t("Выйти", "Sign out"), role: .destructive) { Task { await store.logout() } }
-            Button(t("Отмена", "Cancel"), role: .cancel) {}
+        .confirmationDialog("Sign out of Claude Code?", isPresented: $confirmLogout) {
+            Button("Sign out", role: .destructive) { Task { await store.logout() } }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text(ClaudeProfiles.shared.active.isDefault ? t("Вход сбросится и для Claude Code в терминале. Потом можно войти снова — в том числе под другим аккаунтом.", "This also signs out Claude Code in Terminal. You can sign in again afterwards, including with another account.") : t("Выход только из аккаунта «\(ClaudeProfiles.shared.active.label)». Остальные аккаунты не затронуты.", "Signs out only “\(ClaudeProfiles.shared.active.label)”. Other accounts are not affected."))
+            Text(ClaudeProfiles.shared.active.isDefault ? "This also signs out Claude Code in Terminal. You can sign in again afterwards, including with another account." : "Signs out only “\(ClaudeProfiles.shared.active.label)”. Other accounts are not affected.")
         }
     }
 }

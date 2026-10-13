@@ -27,9 +27,9 @@ struct CommitDetailView: View {
         .navigationSubtitle(repo.full)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button { copyToPasteboard(sha) } label: { Label(t("Копировать SHA", "Copy SHA"), systemImage: "doc.on.doc") }
+                Button { copyToPasteboard(sha) } label: { Label("Copy SHA", systemImage: "doc.on.doc") }
                 if let url = commit?.htmlUrl {
-                    Button { openInBrowser(url) } label: { Label(t("В браузере", "Open in browser"), systemImage: "safari") }
+                    Button { openInBrowser(url) } label: { Label("Open in browser", systemImage: "safari") }
                 }
             }
         }

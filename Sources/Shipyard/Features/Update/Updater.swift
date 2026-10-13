@@ -28,17 +28,17 @@ enum UpdateError: LocalizedError {
         switch self {
         case .http(let code):
             return code == 403 || code == 429
-                ? t("GitHub временно ограничил запросы. Попробуйте позже.", "GitHub rate limit reached. Try again later.")
-                : t("GitHub ответил с ошибкой \(code).", "GitHub responded with error \(code).")
-        case .noReleases: return t("Релизы не найдены.", "No releases found.")
-        case .noAsset: return t("В релизе нет файла Shipyard.dmg.", "The release has no Shipyard.dmg file.")
-        case .download(let s): return t("Не удалось скачать обновление: \(s)", "Couldn't download the update: \(s)")
-        case .mount(let s): return t("Не удалось открыть образ диска: \(s)", "Couldn't mount the disk image: \(s)")
-        case .noApp: return t("В образе диска нет Shipyard.app.", "Shipyard.app wasn't found in the disk image.")
-        case .copy: return t("Не удалось скопировать новую версию.", "Couldn't copy the new version.")
-        case .bundleMismatch: return t("Идентификатор приложения в образе не совпадает.", "The app in the disk image has a different bundle identifier.")
-        case .versionMismatch(let expected, let found): return t("Ожидалась версия \(expected), в образе \(found).", "Expected version \(expected), found \(found).")
-        case .install(let s): return t("Не удалось запустить установку: \(s)", "Couldn't start the installation: \(s)")
+                ? "GitHub rate limit reached. Try again later."
+                : "GitHub responded with error \(code)."
+        case .noReleases: return "No releases found."
+        case .noAsset: return "The release has no Shipyard.dmg file."
+        case .download(let s): return "Couldn't download the update: \(s)"
+        case .mount(let s): return "Couldn't mount the disk image: \(s)"
+        case .noApp: return "Shipyard.app wasn't found in the disk image."
+        case .copy: return "Couldn't copy the new version."
+        case .bundleMismatch: return "The app in the disk image has a different bundle identifier."
+        case .versionMismatch(let expected, let found): return "Expected version \(expected), found \(found)."
+        case .install(let s): return "Couldn't start the installation: \(s)"
         }
     }
 }
@@ -382,7 +382,7 @@ final class DMGDownloader: NSObject, URLSessionDownloadDelegate {
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error { finish(.failure(UpdateError.download(error.localizedDescription))) }
-        else { finish(.failure(UpdateError.download(t("загрузка прервана", "the download was interrupted")))) }
+        else { finish(.failure(UpdateError.download("the download was interrupted"))) }
     }
 
     private func finish(_ result: Result<URL, Error>) {

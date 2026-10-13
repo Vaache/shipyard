@@ -204,7 +204,7 @@ final class ChatSession {
     func start(resume: String? = nil, fork: Bool = false, model: String?, effort: String?, mode: String?, initialPrompt: String? = nil) {
         guard process == nil, let bin = ClaudeLauncher.claudeBinary else {
             if process != nil { return }
-            if ClaudeLauncher.claudeBinary == nil { lastError = t("claude CLI не найден", "claude CLI not found") }
+            if ClaudeLauncher.claudeBinary == nil { lastError = "claude CLI not found" }
             return
         }
         var args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
@@ -288,7 +288,7 @@ final class ChatSession {
         pendingPermissions.removeAll()
         if code != 0 && code != 15 {
             let tail = stderrTail.trimmingCharacters(in: .whitespacesAndNewlines)
-            lastError = t("Claude завершился с кодом \(code)", "Claude exited with code \(code)") + (tail.isEmpty ? "" : "\n" + String(tail.suffix(600)))
+            lastError = "Claude exited with code \(code)" + (tail.isEmpty ? "" : "\n" + String(tail.suffix(600)))
         }
     }
 
@@ -353,7 +353,7 @@ final class ChatSession {
             response = ["behavior": "allow", "updatedInput": updatedInput ?? req.input]
             if let always { response["updatedPermissions"] = [always.raw] }
         } else {
-            response = ["behavior": "deny", "message": message?.isEmpty == false ? message! : t("Пользователь отклонил", "The user declined this action")]
+            response = ["behavior": "deny", "message": message?.isEmpty == false ? message! : "The user declined this action"]
         }
         write(["type": "control_response", "response": ["subtype": "success", "request_id": req.id, "response": response]])
         pendingPermissions.removeAll { $0.resolved }
@@ -400,9 +400,9 @@ final class ChatSession {
             }
         case "status":
             let s = o["status"] as? String
-            status = s == "compacting" ? t("Сжатие контекста…", "Compacting context…") : (s == "requesting" ? nil : s)
+            status = s == "compacting" ? "Compacting context…" : (s == "requesting" ? nil : s)
         case "compact_boundary":
-            items.append(.notice(id: UUID().uuidString, text: t("Контекст сжат", "Context compacted"), isError: false))
+            items.append(.notice(id: UUID().uuidString, text: "Context compacted", isError: false))
         case "permission_denied":
             if let id = o["tool_use_id"] as? String, let tool = tools[id] {
                 tool.status = .denied
@@ -526,7 +526,7 @@ final class ChatSession {
         for t in tools.values where t.status == .running && t.parentToolUseId == nil { t.status = .done }
         if o["is_error"] as? Bool == true {
             let sub = o["subtype"] as? String ?? ""
-            let text = sub == "error_during_execution" ? t("Остановлено", "Stopped") : (o["result"] as? String ?? sub)
+            let text = sub == "error_during_execution" ? "Stopped" : (o["result"] as? String ?? sub)
             items.append(.notice(id: UUID().uuidString, text: text, isError: sub != "error_during_execution"))
         }
         control("get_context_usage", [:])
@@ -550,9 +550,9 @@ final class ChatSession {
                 return PermissionSuggestion(raw: s, label: rules.joined(separator: ", "))
             case "addDirectories":
                 let dirs = (s["directories"] as? [String] ?? []).map { ($0 as NSString).lastPathComponent }
-                return PermissionSuggestion(raw: s, label: t("доступ к папке ", "access to ") + dirs.joined(separator: ", "))
+                return PermissionSuggestion(raw: s, label: "access to " + dirs.joined(separator: ", "))
             case "setMode":
-                return PermissionSuggestion(raw: s, label: t("режим ", "mode ") + (s["mode"] as? String ?? ""))
+                return PermissionSuggestion(raw: s, label: "mode " + (s["mode"] as? String ?? ""))
             default:
                 return nil
             }
@@ -591,7 +591,7 @@ final class ChatSession {
             .sorted { (order[$0.key] ?? 9, $0.key) < (order[$1.key] ?? 9, $1.key) }
         }
         if info["status"] as? String == "rejected" || info["status"] as? String == "allowed_warning" {
-            store.overageNote = info["status"] as? String == "rejected" ? t("Лимит исчерпан", "Limit reached") : t("Близко к лимиту", "Close to the limit")
+            store.overageNote = info["status"] as? String == "rejected" ? "Limit reached" : "Close to the limit"
         } else {
             store.overageNote = nil
         }
@@ -695,12 +695,12 @@ final class ChatSession {
         let tail = Array(loaded.suffix(limit))
         for case .tool(let c) in tail { tools[c.id] = c }
         if loaded.count > limit {
-            items = [.notice(id: "older", text: t("Показаны последние \(limit) сообщений", "Showing the last \(limit) messages"), isError: false)] + tail
+            items = [.notice(id: "older", text: "Showing the last \(limit) messages", isError: false)] + tail
         } else {
             items = tail
         }
         if !items.isEmpty {
-            items.append(.notice(id: "resumed", text: t("Сессия продолжена", "Session resumed"), isError: false))
+            items.append(.notice(id: "resumed", text: "Session resumed", isError: false))
         }
     }
 }

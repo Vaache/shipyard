@@ -52,13 +52,13 @@ struct ClaudeProjectsColumn: View {
                     ClaudeAccountCard(info: info, compact: true)
                         .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
                 case .loggedOut:
-                    Label(t("Вход в Claude не выполнен — войдите справа", "Not signed in to Claude — sign in on the right"), systemImage: "person.crop.circle.badge.exclamationmark")
+                    Label("Not signed in to Claude — sign in on the right", systemImage: "person.crop.circle.badge.exclamationmark")
                         .foregroundStyle(Color.syAmber)
                     if ClaudeProfiles.shared.profiles.count > 1 {
                         ClaudeProfileSwitcher()
                     }
                 case .notInstalled:
-                    Label(t("claude CLI не найден — инструкция справа", "claude CLI not found — see the right side"), systemImage: "exclamationmark.triangle")
+                    Label("claude CLI not found — see the right side", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(Color.syAmber)
                 default:
                     EmptyView()
@@ -73,7 +73,7 @@ struct ClaudeProjectsColumn: View {
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     Image(systemName: "lock.fill").font(.title3).foregroundStyle(Color.syDim)
-                    Text(t("История сессий и проекты появятся после входа в Claude.", "Session history and projects appear after you sign in to Claude."))
+                    Text("Session history and projects appear after you sign in to Claude.")
                         .font(.callout)
                         .foregroundStyle(Color.syMuted)
                 }
@@ -83,14 +83,14 @@ struct ClaudeProjectsColumn: View {
         .listStyle(.inset)
         .surface(.list)
         .overlay { if ws.loadingProjects && ws.projects.isEmpty { ProgressView().controlSize(.small) } }
-        .searchable(text: $query, placement: .toolbar, prompt: t("Поиск по сессиям", "Search sessions"))
+        .searchable(text: $query, placement: .toolbar, prompt: "Search sessions")
         .navigationTitle("Claude Code")
         .toolbar {
             ToolbarItemGroup {
-                Button { openFolder() } label: { Label(t("Открыть папку", "Open folder"), systemImage: "folder.badge.plus") }
+                Button { openFolder() } label: { Label("Open folder", systemImage: "folder.badge.plus") }
                     .disabled(!ClaudeAccountStore.shared.isLoggedIn)
-                    .help(t("Новая сессия в папке…", "New session in folder…"))
-                Button { Task { await ws.reloadProjects() } } label: { Label(t("Обновить", "Refresh"), systemImage: "arrow.clockwise") }
+                    .help("New session in folder…")
+                Button { Task { await ws.reloadProjects() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -115,31 +115,31 @@ struct ClaudeProjectsColumn: View {
                             .listRowBackground(ClaudeRowHighlight(selected: ws.selectedTabID == tab.id))
                             .contextMenu {
                                 if tab.running {
-                                    Button(t("Освободить память (усыпить)", "Free memory (sleep)")) { tab.sleepNow() }
+                                    Button("Free memory (sleep)") { tab.sleepNow() }
                                         .disabled(tab.state == .working || tab.state == .waiting)
                                 } else {
-                                    Button(t("Разбудить", "Wake up")) { ws.restart(tab) }
+                                    Button("Wake up") { ws.restart(tab) }
                                 }
-                                Button(t("Закрыть", "Close")) { ws.close(tab) }
+                                Button("Close") { ws.close(tab) }
                             }
                     }
                 } header: {
                     HStack(spacing: 6) {
-                        Text(t("Открытые", "Open"))
+                        Text("Open")
                         Spacer()
                         Image(systemName: "memorychip").imageScale(.small)
-                        Text(ws.totalMemory > 0 ? ProcessMemory.format(ws.totalMemory) : "0 " + t("МБ", "MB"))
+                        Text(ws.totalMemory > 0 ? ProcessMemory.format(ws.totalMemory) : "0 " + "MB")
                             .monospacedDigit()
                         if ws.awakeCount > 0 {
-                            Button(t("Усыпить все", "Sleep all")) { ws.sleepAll() }
+                            Button("Sleep all") { ws.sleepAll() }
                                 .buttonStyle(.link)
-                                .help(t("Остановить простаивающие процессы и освободить память", "Stop idle processes and free memory"))
+                                .help("Stop idle processes and free memory")
                         }
                     }
                     .font(.caption)
                     .foregroundStyle(Color.syMuted)
                     .textCase(nil)
-                    .help(t("Память, которую сейчас занимают процессы Claude", "Memory used by running Claude processes"))
+                    .help("Memory used by running Claude processes")
                 }
             }
             ForEach(filtered) { project in
@@ -161,27 +161,27 @@ struct ClaudeProjectsColumn: View {
                 }
             }
             if ws.projects.isEmpty, !ws.loadingProjects {
-                Text(t("Сессий Claude Code пока нет", "No Claude Code sessions yet")).foregroundStyle(Color.syMuted)
+                Text("No Claude Code sessions yet").foregroundStyle(Color.syMuted)
             }
     }
 
     @ViewBuilder
     private func sessionMenu(_ s: ClaudeSessionInfo) -> some View {
-        Button(t("Продолжить как чат", "Resume as chat")) { ws.resume(s, kind: .chat) }
-        Button(t("Продолжить в терминале", "Resume in terminal")) { ws.resume(s, kind: .terminal) }
-        Button(t("Ответвить сессию (fork)", "Fork session")) { ws.resume(s, fork: true) }
+        Button("Resume as chat") { ws.resume(s, kind: .chat) }
+        Button("Resume in terminal") { ws.resume(s, kind: .terminal) }
+        Button("Fork session") { ws.resume(s, fork: true) }
         Divider()
-        Button(t("Копировать ID сессии", "Copy session ID")) { copyToPasteboard(s.id) }
-        Button(t("Копировать команду resume", "Copy resume command")) { copyToPasteboard("cd \(ClaudeLauncher.shellQuote(s.cwd)) && claude --resume \(s.id)") }
-        Button(t("Показать транскрипт в Finder", "Reveal transcript in Finder")) { NSWorkspace.shared.activateFileViewerSelecting([s.file]) }
-        if let pr = s.prURL { Button(t("Открыть PR", "Open PR")) { if let r = GitHubURL.parse(pr) { app.section = .prs(.mine); app.open(r) } } }
+        Button("Copy session ID") { copyToPasteboard(s.id) }
+        Button("Copy resume command") { copyToPasteboard("cd \(ClaudeLauncher.shellQuote(s.cwd)) && claude --resume \(s.id)") }
+        Button("Reveal transcript in Finder") { NSWorkspace.shared.activateFileViewerSelecting([s.file]) }
+        if let pr = s.prURL { Button("Open PR") { if let r = GitHubURL.parse(pr) { app.section = .prs(.mine); app.open(r) } } }
     }
 
     private func openFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
-        panel.prompt = t("Открыть", "Open")
+        panel.prompt = "Open"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         ws.newSession(folder: url.path)
     }
@@ -214,7 +214,7 @@ struct ProjectHeader: View {
             Button(action: onNew) { Image(systemName: "plus") }
                 .buttonStyle(.borderless)
                 .foregroundStyle(Color.syCoral)
-                .help(t("Новая сессия", "New session"))
+                .help("New session")
                 .disabled(!project.exists)
         }
         .contentShape(Rectangle())
@@ -237,7 +237,7 @@ struct SessionRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     if open {
-                        Image(systemName: "bubble.left.fill").font(.caption2).foregroundStyle(Color.ghGreen).help(t("Открыта", "Open"))
+                        Image(systemName: "bubble.left.fill").font(.caption2).foregroundStyle(Color.ghGreen).help("Open")
                     }
                     Text(session.title).lineLimit(2).fontWeight(open ? .semibold : .regular).foregroundStyle(Color.syText)
                 }
@@ -351,13 +351,13 @@ struct ClaudeWorkspaceView: View {
                                     if !tab.running {
                                         VStack(spacing: 10) {
                                             if tab.terminalSleeping {
-                                                Label(t("Сессия спит — память освобождена", "Session is sleeping — memory freed"), systemImage: "moon.zzz.fill").foregroundStyle(Color.syIndigo)
+                                                Label("Session is sleeping — memory freed", systemImage: "moon.zzz.fill").foregroundStyle(Color.syIndigo)
                                             } else {
-                                                Text(t("Сессия завершена", "Session ended") + (tab.exitCode.map { " (\($0))" } ?? "")).foregroundStyle(Color.syMuted)
+                                                Text("Session ended" + (tab.exitCode.map { " (\($0))" } ?? "")).foregroundStyle(Color.syMuted)
                                             }
                                             HStack {
-                                                Button(t("Продолжить сессию", "Resume session")) { ws.restart(tab) }.buttonStyle(.borderedProminent).tint(.syCoral)
-                                                Button(t("Закрыть вкладку", "Close tab")) { ws.close(tab) }
+                                                Button("Resume session") { ws.restart(tab) }.buttonStyle(.borderedProminent).tint(.syCoral)
+                                                Button("Close tab") { ws.close(tab) }
                                             }
                                         }
                                         .padding(16)
@@ -389,8 +389,8 @@ struct ClaudeWorkspaceView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if ws.selectedTab != nil {
-                    Button { ws.showInspector.toggle() } label: { Label(t("Инспектор", "Inspector"), systemImage: "sidebar.right") }
-                        .help(t("Показать/скрыть панель изменений", "Toggle changes panel"))
+                    Button { ws.showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.right") }
+                        .help("Toggle changes panel")
                 }
             }
         }
@@ -405,7 +405,7 @@ struct ClaudeEmptyState: View {
         VStack(spacing: 16) {
             IconTile(systemImage: "sparkles", color: .syCoral, size: 56)
             Text("Claude Code").font(.title2.weight(.semibold)).foregroundStyle(Color.syText)
-            Text(t("Начните новую сессию в проекте или продолжите сессию из истории слева.", "Start a new session in a project or resume one from the history on the left."))
+            Text("Start a new session in a project or resume one from the history on the left.")
                 .foregroundStyle(Color.syMuted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
@@ -454,7 +454,7 @@ struct ClaudeTabBar: View {
                         Button { ws.close(tab) } label: { Image(systemName: "xmark").font(.caption2.weight(.bold)) }
                             .buttonStyle(.borderless)
                             .foregroundStyle(Color.syDim)
-                            .help(t("Закрыть", "Close"))
+                            .help("Close")
                     }
                     .font(.callout)
                     .padding(.horizontal, 10)
@@ -466,8 +466,8 @@ struct ClaudeTabBar: View {
                 }
                 Menu {
                     if let current = ws.selectedTab {
-                        Button(t("Чат в \(current.projectName)", "Chat in \(current.projectName)")) { ws.newSession(folder: current.folder, kind: .chat) }
-                        Button(t("Терминал в \(current.projectName)", "Terminal in \(current.projectName)")) { ws.newSession(folder: current.folder, kind: .terminal) }
+                        Button("Chat in \(current.projectName)") { ws.newSession(folder: current.folder, kind: .chat) }
+                        Button("Terminal in \(current.projectName)") { ws.newSession(folder: current.folder, kind: .terminal) }
                         Divider()
                     }
                     ForEach(ws.projects.filter(\.exists).prefix(12)) { p in
@@ -479,7 +479,7 @@ struct ClaudeTabBar: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .help(t("Новая сессия", "New session"))
+                .help("New session")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -506,12 +506,12 @@ struct ClaudeControlBar: View {
             .layoutPriority(1)
             Spacer(minLength: 8)
             if tab.kind == .terminal {
-            ControlMenu(icon: "cpu", title: ws.model.title, help: t("Модель", "Model")) {
+            ControlMenu(icon: "cpu", title: ws.model.title, help: "Model") {
                 ForEach(ClaudeModelOption.allCases) { m in
                     Button { ws.model = m } label: { checkLabel(m.title, ws.model == m) }
                 }
                 Divider()
-                Button(t("Применить к текущей сессии (/model)", "Apply to current session (/model)")) { ws.applyModelToCurrent() }
+                Button("Apply to current session (/model)") { ws.applyModelToCurrent() }
                     .disabled(!tab.running || ws.model == .standard)
             }
             ControlMenu(icon: "gauge.with.dots.needle.50percent", title: ws.effort == .standard ? "Effort" : ws.effort.rawValue, help: "Effort") {
@@ -519,7 +519,7 @@ struct ClaudeControlBar: View {
                     Button { ws.effort = e } label: { checkLabel(e.title, ws.effort == e) }
                 }
             }
-            ControlMenu(icon: "hand.raised", title: ws.mode.title, help: t("Режим разрешений", "Permission mode")) {
+            ControlMenu(icon: "hand.raised", title: ws.mode.title, help: "Permission mode") {
                 ForEach(ClaudeMode.allCases) { m in
                     Button { ws.mode = m } label: { checkLabel(m.title, ws.mode == m) }
                 }
@@ -538,29 +538,29 @@ struct ClaudeControlBar: View {
             .labelsHidden()
             .fixedSize()
             .disabled(tab.sessionId.isEmpty)
-            .help(t("Чат или терминал (та же сессия)", "Chat or terminal (same session)"))
+            .help("Chat or terminal (same session)")
             Menu {
-                Button(t("Перезапустить с новыми настройками", "Restart with new settings")) {
+                Button("Restart with new settings") {
                     if tab.kind == .chat { tab.chat?.stop() } else if tab.running { tab.terminal.terminate() }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ws.restart(tab) }
                 }
-                Button(t("Освободить память сейчас", "Free memory now")) { tab.sleepNow() }
+                Button("Free memory now") { tab.sleepNow() }
                     .disabled(!tab.running || tab.state == .working || tab.state == .waiting)
-                Menu(t("Усыплять после простоя", "Sleep after idle")) {
+                Menu("Sleep after idle") {
                     ForEach([0, 5, 15, 30, 60], id: \.self) { m in
-                        Button { ws.idleMinutes = m } label: { checkLabel(m == 0 ? t("Никогда", "Never") : t("\(m) мин", "\(m) min"), ws.idleMinutes == m) }
+                        Button { ws.idleMinutes = m } label: { checkLabel(m == 0 ? "Never" : "\(m) min", ws.idleMinutes == m) }
                     }
                 }
-                Menu(t("Новые сессии открывать как", "Open new sessions as")) {
-                    Button { ws.preferredKind = .chat } label: { checkLabel(t("Чат", "Chat"), ws.preferredKind == .chat) }
-                    Button { ws.preferredKind = .terminal } label: { checkLabel(t("Терминал", "Terminal"), ws.preferredKind == .terminal) }
+                Menu("Open new sessions as") {
+                    Button { ws.preferredKind = .chat } label: { checkLabel("Chat", ws.preferredKind == .chat) }
+                    Button { ws.preferredKind = .terminal } label: { checkLabel("Terminal", ws.preferredKind == .terminal) }
                 }
                 Divider()
-                Button(t("Продолжить в Terminal", "Continue in Terminal")) {
+                Button("Continue in Terminal") {
                     try? ClaudeLauncher.launch(prompt: "", folder: tab.folder, target: .terminal, mode: .standard, sessionName: tab.title, resumeId: tab.sessionId, configDir: tab.configDir)
                 }
-                Button(t("Показать в Finder", "Reveal in Finder")) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: tab.folder)]) }
-                Button(t("Копировать ID сессии", "Copy session ID")) { copyToPasteboard(tab.sessionId) }
+                Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: tab.folder)]) }
+                Button("Copy session ID") { copyToPasteboard(tab.sessionId) }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -599,7 +599,7 @@ struct ControlMenu<Content: View>: View {
         .buttonStyle(.bordered)
         .controlSize(.small)
         .fixedSize()
-        .help(help + " — " + t("применяется к новым и перезапущенным сессиям", "applies to new and restarted sessions"))
+        .help(help + " — " + "applies to new and restarted sessions")
     }
 }
 
@@ -615,8 +615,8 @@ struct ClaudeInspector: View {
     var body: some View {
         VStack(spacing: 0) {
             TabStrip(items: [
-                TabItem(id: InspectorTab.changes, title: t("Изменения", "Changes"), icon: "plusminus", badge: tab.git.changes.isEmpty ? nil : "\(tab.git.changes.count)", badgeColor: .syAmber),
-                TabItem(id: InspectorTab.files, title: t("Файлы", "Files"), icon: "folder"),
+                TabItem(id: InspectorTab.changes, title: "Changes", icon: "plusminus", badge: tab.git.changes.isEmpty ? nil : "\(tab.git.changes.count)", badgeColor: .syAmber),
+                TabItem(id: InspectorTab.files, title: "Files", icon: "folder"),
                 TabItem(id: InspectorTab.pr, title: "PR", icon: "arrow.triangle.pull")
             ], selection: $selection)
             .padding(.top, 4)
@@ -642,7 +642,7 @@ struct ChangesPanel: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 if git.loading { ProgressView().controlSize(.mini) }
-                Text(git.changes.isEmpty ? t("Нет незакоммиченных изменений", "No uncommitted changes") : tp(git.changes.count, "файл изменён", "файла изменено", "файлов изменено", "file changed", "files changed"))
+                Text(git.changes.isEmpty ? "No uncommitted changes" : plural(git.changes.count, "file changed", "files changed"))
                     .font(.caption).foregroundStyle(Color.syMuted)
                 if !git.changes.isEmpty {
                     DiffStat(additions: git.changes.reduce(0) { $0 + $1.additions }, deletions: git.changes.reduce(0) { $0 + $1.deletions })
@@ -650,13 +650,13 @@ struct ChangesPanel: View {
                 Spacer()
                 Button { Task { await git.refresh() } } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
-                    .help(t("Обновить", "Refresh"))
+                    .help("Refresh")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             if !git.unpushed.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(t("Неотправленные коммиты", "Unpushed commits") + " · \(git.unpushed.count)").font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
+                    Text("Unpushed commits" + " · \(git.unpushed.count)").font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
                     ForEach(git.unpushed.prefix(6)) { c in
                         HStack(spacing: 6) {
                             Text(c.short).font(.system(.caption, design: .monospaced)).foregroundStyle(Color.syMuted)
@@ -672,7 +672,7 @@ struct ChangesPanel: View {
             if git.changes.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "checkmark.circle").font(.largeTitle).foregroundStyle(Color.syGreen.opacity(0.6))
-                    Text(t("Изменения, которые сделает Claude, появятся здесь автоматически", "Changes Claude makes will show up here automatically"))
+                    Text("Changes Claude makes will show up here automatically")
                         .font(.callout).foregroundStyle(Color.syMuted).multilineTextAlignment(.center)
                 }
                 .padding(24)
@@ -723,9 +723,9 @@ struct LocalFilesPanel: View {
                 if let file, let content {
                     CodeTextView(text: content, ext: (file as NSString).pathExtension.isEmpty ? (file as NSString).lastPathComponent : (file as NSString).pathExtension)
                 } else if file != nil {
-                    Text(t("Бинарный или большой файл", "Binary or large file")).foregroundStyle(Color.syMuted).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Text("Binary or large file").foregroundStyle(Color.syMuted).frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Text(t("Выберите файл", "Pick a file")).foregroundStyle(Color.syDim).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Text("Pick a file").foregroundStyle(Color.syDim).frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .frame(minHeight: 160)
@@ -762,9 +762,9 @@ enum PRListScope: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .open: return t("Открытые", "Open")
-        case .merged: return t("Слитые", "Merged")
-        case .mine: return t("Мои", "Mine")
+        case .open: return "Open"
+        case .merged: return "Merged"
+        case .mine: return "Mine"
         }
     }
 }
@@ -789,7 +789,7 @@ struct BranchPRPanel: View {
             } else if repo == nil {
                 VStack(spacing: 8) {
                     Image(systemName: "link.badge.plus").font(.title2).foregroundStyle(Color.syDim)
-                    Text(t("Папка не связана с репозиторием GitHub", "Folder isn't linked to a GitHub repository")).foregroundStyle(Color.syMuted)
+                    Text("Folder isn't linked to a GitHub repository").foregroundStyle(Color.syMuted)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -804,10 +804,10 @@ struct BranchPRPanel: View {
             Section {
                 if branchPRs.isEmpty && linked == nil {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(t("Для ветки \(tab.git.branch ?? "?") PR нет", "No PR for branch \(tab.git.branch ?? "?")"))
+                        Text("No PR for branch \(tab.git.branch ?? "?")")
                             .font(.callout).foregroundStyle(Color.syMuted)
                         if let repo, let b = tab.git.branch, b != "HEAD" {
-                            Button(t("Создать PR в браузере", "Create PR in browser")) { openInBrowser("https://github.com/\(repo.full)/pull/new/\(b)") }
+                            Button("Create PR in browser") { openInBrowser("https://github.com/\(repo.full)/pull/new/\(b)") }
                                 .controlSize(.small)
                         }
                     }
@@ -815,11 +815,11 @@ struct BranchPRPanel: View {
                 }
                 ForEach(branchPRs) { item in row(item) }
                 if let linked, !branchPRs.contains(where: { $0.number == linked.number }) {
-                    row(linked, note: t("из этой сессии", "from this session"))
+                    row(linked, note: "from this session")
                 }
             } header: {
                 HStack(spacing: 6) {
-                    Text(t("Эта ветка", "This branch"))
+                    Text("This branch")
                     if let b = tab.git.branch { BranchTag(name: b) }
                 }
                 .textCase(nil)
@@ -833,7 +833,7 @@ struct BranchPRPanel: View {
                 .listRowSeparator(.hidden)
                 if let error { Text(error).font(.caption).foregroundStyle(Color.syRed) }
                 if list.isEmpty, !loading {
-                    Text(t("Ничего нет", "Nothing here")).font(.callout).foregroundStyle(Color.syDim)
+                    Text("Nothing here").font(.callout).foregroundStyle(Color.syDim)
                 }
                 ForEach(list) { item in row(item) }
             } header: {
@@ -872,9 +872,9 @@ struct BranchPRPanel: View {
         .contentShape(Rectangle())
         .onTapGesture { selected = item.ref }
         .contextMenu {
-            Button(t("Открыть в разделе PR", "Open in PR section")) { app.section = .prs(.mine); app.open(item.route) }
-            Button(t("Открыть в браузере", "Open in browser")) { openInBrowser(item.url) }
-            Button(t("Копировать ссылку", "Copy link")) { copyToPasteboard(item.url) }
+            Button("Open in PR section") { app.section = .prs(.mine); app.open(item.route) }
+            Button("Open in browser") { openInBrowser(item.url) }
+            Button("Copy link") { copyToPasteboard(item.url) }
         }
     }
 
@@ -918,13 +918,13 @@ struct InspectorPRDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Button(action: onBack) { Label(t("Назад", "Back"), systemImage: "chevron.left") }
+                Button(action: onBack) { Label("Back", systemImage: "chevron.left") }
                     .buttonStyle(.borderless)
                 Spacer()
                 Button { openInBrowser("https://github.com/\(ref.repo.full)/pull/\(ref.number)") } label: { Image(systemName: "safari") }
                     .buttonStyle(.borderless)
-                    .help(t("В браузере", "Open in browser"))
-                Button(t("Открыть полностью", "Open full")) { app.section = .prs(.mine); app.open(.pr(ref)) }
+                    .help("Open in browser")
+                Button("Open full") { app.section = .prs(.mine); app.open(.pr(ref)) }
                     .controlSize(.small)
             }
             .padding(10)
@@ -971,7 +971,7 @@ struct InspectorPRDetail: View {
                     .foregroundStyle(checks.contains { $0.outcome == .failure } ? Color.syRed : Color.syMuted)
                 Label("\(unresolved.count)", systemImage: "text.bubble")
                     .foregroundStyle(unresolved.isEmpty ? Color.syMuted : Color.syAmber)
-                    .help(t("Нерешённые комментарии", "Unresolved comments"))
+                    .help("Unresolved comments")
                 if !model!.reviewers.isEmpty {
                     HStack(spacing: 3) {
                         ForEach(model!.reviewers, id: \.login) { ReviewerBadge(login: $0.login, avatar: $0.avatar, state: $0.state) }
@@ -981,26 +981,26 @@ struct InspectorPRDetail: View {
             .font(.caption)
             if tab.chat != nil || tab.running {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(t("Отправить в эту сессию", "Send to this session")).font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
+                    Text("Send to this session").font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
                     if let fix {
                         Button {
                             app.claude.send(FixPromptExtractor.wrap(fix, pr: pr, options: FixOptions()), to: tab)
                         } label: {
-                            Label(t("Fix prompt от @\(fix.author)", "Fix prompt by @\(fix.author)"), systemImage: "wand.and.stars")
+                            Label("Fix prompt by @\(fix.author)", systemImage: "wand.and.stars")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     Button {
                         app.claude.send(FixPrompt.build(pr: pr, repo: ref.repo, threads: unresolved, general: FixPrompt.generalFeedback(pr), options: FixOptions()), to: tab)
                     } label: {
-                        Label(t("Нерешённые комментарии (\(unresolved.count))", "Unresolved comments (\(unresolved.count))"), systemImage: "text.bubble")
+                        Label("Unresolved comments (\(unresolved.count))", systemImage: "text.bubble")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .disabled(unresolved.isEmpty)
                     Button {
-                        app.claude.send(t("Посмотри PR #\(pr.number) (\(pr.url)) и кратко расскажи, что в нём сделано и есть ли проблемы.", "Review PR #\(pr.number) (\(pr.url)) and briefly summarize what it does and any problems."), to: tab)
+                        app.claude.send("Review PR #\(pr.number) (\(pr.url)) and briefly summarize what it does and any problems.", to: tab)
                     } label: {
-                        Label(t("Попросить Claude разобрать PR", "Ask Claude to review this PR"), systemImage: "sparkles")
+                        Label("Ask Claude to review this PR", systemImage: "sparkles")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .tint(.syCoral)
@@ -1009,7 +1009,7 @@ struct InspectorPRDetail: View {
             }
             if !unresolved.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(t("Нерешённые комментарии", "Unresolved comments")).font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
+                    Text("Unresolved comments").font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
                     ForEach(unresolved) { th in
                         VStack(alignment: .leading, spacing: 3) {
                             Text("\(th.path)\((th.line ?? th.originalLine).map { ":\($0)" } ?? "")")
@@ -1044,7 +1044,7 @@ struct InspectorPRDetail: View {
                 }
                 .padding(.top, 4)
             } label: {
-                Text(t("Изменённые файлы · \(pr.changedFiles)", "Files changed · \(pr.changedFiles)")).font(.caption.weight(.semibold))
+                Text("Files changed · \(pr.changedFiles)").font(.caption.weight(.semibold))
             }
             .onChange(of: showFiles) { _, open in if open { Task { await model?.loadFiles() } } }
         }

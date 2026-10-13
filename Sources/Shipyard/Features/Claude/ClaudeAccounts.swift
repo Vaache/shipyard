@@ -30,7 +30,7 @@ final class ClaudeProfiles {
             list = decoded
         }
         if !list.contains(where: { $0.id == Self.defaultID }) {
-            list.insert(ClaudeProfile(id: Self.defaultID, label: t("Основной", "Main"), configDir: nil), at: 0)
+            list.insert(ClaudeProfile(id: Self.defaultID, label: "Main", configDir: nil), at: 0)
         }
         profiles = list
         let saved = UserDefaults.standard.string(forKey: Self.activeKey) ?? Self.defaultID
@@ -90,7 +90,7 @@ final class ClaudeProfiles {
             }
         }
         let name = label.trimmingCharacters(in: .whitespaces)
-        let profile = ClaudeProfile(id: id, label: name.isEmpty ? t("Аккаунт \(profiles.count + 1)", "Account \(profiles.count + 1)") : name, configDir: dir.path)
+        let profile = ClaudeProfile(id: id, label: name.isEmpty ? "Account \(profiles.count + 1)" : name, configDir: dir.path)
         profiles.append(profile)
         save()
         return profile
@@ -150,7 +150,7 @@ struct ClaudeProfileMenuItems: View {
 
     var body: some View {
         let profiles = ClaudeProfiles.shared
-        Section(t("Аккаунты Claude", "Claude accounts")) {
+        Section("Claude accounts") {
             ForEach(profiles.profiles) { p in
                 Button {
                     app.switchClaudeProfile(to: p.id)
@@ -160,9 +160,9 @@ struct ClaudeProfileMenuItems: View {
                 }
             }
         }
-        Button(t("Добавить аккаунт…", "Add account…")) { showAdd = true }
+        Button("Add account…") { showAdd = true }
         if !profiles.active.isDefault {
-            Button(t("Убрать «\(profiles.active.label)»…", "Remove “\(profiles.active.label)”…"), role: .destructive) { removeTarget = profiles.active }
+            Button("Remove “\(profiles.active.label)”…", role: .destructive) { removeTarget = profiles.active }
         }
     }
 }
@@ -187,7 +187,7 @@ struct ClaudeProfileSwitcher: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help(t("Переключить аккаунт Claude", "Switch Claude account"))
+        .help("Switch Claude account")
         .modifier(ProfileSheets(showAdd: $showAdd, removeTarget: $removeTarget))
     }
 }
@@ -200,11 +200,11 @@ struct ProfileSheets: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: $showAdd) { AddClaudeProfileSheet() }
-            .confirmationDialog(t("Убрать аккаунт?", "Remove account?"), isPresented: Binding(get: { removeTarget != nil }, set: { if !$0 { removeTarget = nil } }), presenting: removeTarget) { p in
-                Button(t("Выйти и убрать «\(p.label)»", "Sign out and remove “\(p.label)”"), role: .destructive) { app.removeClaudeProfile(p.id) }
-                Button(t("Отмена", "Cancel"), role: .cancel) {}
+            .confirmationDialog("Remove account?", isPresented: Binding(get: { removeTarget != nil }, set: { if !$0 { removeTarget = nil } }), presenting: removeTarget) { p in
+                Button("Sign out and remove “\(p.label)”", role: .destructive) { app.removeClaudeProfile(p.id) }
+                Button("Cancel", role: .cancel) {}
             } message: { p in
-                Text(t("Приложение выйдет из этого аккаунта и уберёт его из списка. Папка с его историей останется: \(p.configDir ?? "")", "The app signs out of this account and removes it from the list. Its history folder stays on disk: \(p.configDir ?? "")"))
+                Text("The app signs out of this account and removes it from the list. Its history folder stays on disk: \(p.configDir ?? "")")
             }
     }
 }
@@ -233,20 +233,20 @@ struct AddClaudeProfileSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(t("Новый аккаунт Claude", "New Claude account")).font(.headline)
-            Text(t("У аккаунта будет свой вход, своя история сессий и свои лимиты. После создания откроется вход.", "The account gets its own sign-in, session history and limits. Sign-in opens right after."))
+            Text("New Claude account").font(.headline)
+            Text("The account gets its own sign-in, session history and limits. Sign-in opens right after.")
                 .font(.callout)
                 .foregroundStyle(Color.syMuted)
-            TextField(t("Название, например «Личный» или «Работа»", "Name, e.g. “Personal” or “Work”"), text: $label)
+            TextField("Name, e.g. “Personal” or “Work”", text: $label)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(create)
-            Toggle(t("Использовать мои настройки, CLAUDE.md, скиллы и плагины из основного аккаунта", "Use my settings, CLAUDE.md, skills and plugins from the main account"), isOn: $share)
+            Toggle("Use my settings, CLAUDE.md, skills and plugins from the main account", isOn: $share)
                 .toggleStyle(.checkbox)
             if let error { Text(error).font(.caption).foregroundStyle(Color.syRed) }
             HStack {
                 Spacer()
-                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(t("Создать и войти", "Create and sign in"), action: create)
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Create and sign in", action: create)
                 .buttonStyle(.borderedProminent)
                 .tint(.syCoral)
                 .keyboardShortcut(.defaultAction)

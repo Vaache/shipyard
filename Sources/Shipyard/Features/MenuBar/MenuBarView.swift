@@ -29,25 +29,25 @@ struct MenuBarView: View {
                 Spacer()
                 Button { Task { await app.refreshBadges() } } label: { Image(systemName: "arrow.clockwise").foregroundStyle(Color.syMuted) }
                     .buttonStyle(.borderless)
-                    .help(t("Обновить", "Refresh"))
+                    .help("Refresh")
             }
             .padding(12)
             .background(Theme.isBrand ? Color.syBar : Color.clear)
             Rectangle().fill(Color.syLine).frame(height: 1)
             if app.phase != .loggedIn {
-                Button(t("Войти…", "Sign in…")) { show(nil) }.padding(12)
+                Button("Sign in…") { show(nil) }.padding(12)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
-                        section(t("Ждут моего ревью", "Review requests"), count: app.reviewRequestCount, items: app.reviewRequests, filter: .reviewRequested)
-                        section(t("Мои открытые PR", "My open PRs"), count: app.myPRCount, items: app.myPRs, filter: .mine)
+                        section("Review requests", count: app.reviewRequestCount, items: app.reviewRequests, filter: .reviewRequested)
+                        section("My open PRs", count: app.myPRCount, items: app.myPRs, filter: .mine)
                         Button {
                             app.section = .notifications
                             show(nil)
                         } label: {
                             HStack(spacing: 8) {
                                 IconTile(systemImage: "bell.fill", color: .syAmber, size: 16)
-                                Text(t("Уведомления", "Notifications")).foregroundStyle(Color.syText)
+                                Text("Notifications").foregroundStyle(Color.syText)
                                 Spacer()
                                 if app.unreadCount > 0 { ChipView(text: app.unreadCount >= 50 ? "50+" : "\(app.unreadCount)", color: .syAmber) }
                             }
@@ -61,9 +61,9 @@ struct MenuBarView: View {
             }
             Rectangle().fill(Color.syLine).frame(height: 1)
             HStack {
-                Button(t("Открыть окно", "Open window")) { show(nil) }
+                Button("Open window") { show(nil) }
                 Spacer()
-                Button(t("Выйти", "Quit")) { NSApp.terminate(nil) }.foregroundStyle(Color.syMuted)
+                Button("Quit") { NSApp.terminate(nil) }.foregroundStyle(Color.syMuted)
             }
             .buttonStyle(.borderless)
             .padding(12)
@@ -89,7 +89,7 @@ struct MenuBarView: View {
         }
         .buttonStyle(MenuRowStyle())
         if items.isEmpty {
-            Text(t("Пусто", "Nothing here")).font(.callout).foregroundStyle(Color.syDim).padding(.horizontal, 8).padding(.bottom, 6)
+            Text("Nothing here").font(.callout).foregroundStyle(Color.syDim).padding(.horizontal, 8).padding(.bottom, 6)
         }
         ForEach(items) { item in
             Button { show(item.route) } label: {

@@ -86,7 +86,7 @@ final class RepoCodeModel {
             guard path == dir else { return }
             guard let list = obj?.entries else {
                 entries = []
-                dirError = t("Папка не найдена в этой ветке", "Folder not found on this branch")
+                dirError = "Folder not found on this branch"
                 return
             }
             entries = list.sorted { a, b in
@@ -129,13 +129,13 @@ final class RepoCodeModel {
         let ext = (path as NSString).pathExtension.lowercased()
         do {
             if Self.imageExts.contains(ext) {
-                guard let data = try await api.rawFile(repo, ref: ref, path: path) else { throw APIError(message: t("Файл не найден", "File not found")) }
+                guard let data = try await api.rawFile(repo, ref: ref, path: path) else { throw APIError(message: "File not found") }
                 guard selectedFile == path else { return }
                 fileSize = data.count
                 if let img = NSImage(data: data) { file = .image(img) } else { file = .binary(data.count) }
                 return
             }
-            guard let obj = try await api.gitObject(repo, ref: ref, path: path) else { throw APIError(message: t("Файл не найден", "File not found")) }
+            guard let obj = try await api.gitObject(repo, ref: ref, path: path) else { throw APIError(message: "File not found") }
             guard selectedFile == path else { return }
             fileSize = obj.byteSize
             if obj.isBinary == true {

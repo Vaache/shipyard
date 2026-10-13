@@ -52,7 +52,7 @@ enum ClaudeModelOption: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .standard: return t("По умолчанию", "Default")
+        case .standard: return "Default"
         case .opus: return "Opus"
         case .sonnet: return "Sonnet"
         case .haiku: return "Haiku"
@@ -64,7 +64,7 @@ enum ClaudeModelOption: String, CaseIterable, Identifiable {
 enum ClaudeEffort: String, CaseIterable, Identifiable {
     case standard = "", low, medium, high, xhigh, max
     var id: String { rawValue }
-    var title: String { self == .standard ? t("По умолчанию", "Default") : rawValue }
+    var title: String { self == .standard ? "Default" : rawValue }
 }
 
 enum ClaudeMode: String, CaseIterable, Identifiable {
@@ -73,9 +73,9 @@ enum ClaudeMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .standard: return t("Спрашивать", "Ask")
-        case .acceptEdits: return t("Принимать правки", "Accept edits")
-        case .plan: return t("План", "Plan")
+        case .standard: return "Ask"
+        case .acceptEdits: return "Accept edits"
+        case .plan: return "Plan"
         case .auto: return "Auto"
         }
     }
@@ -275,7 +275,7 @@ final class ClaudeWorkspace {
     @discardableResult
     func newSession(folder: String, prompt: String? = nil, name: String? = nil, mode: ClaudeMode? = nil, kind: ClaudeTabKind? = nil) -> ClaudeTab {
         let kind = kind ?? preferredKind
-        let title = name ?? prompt.map { String($0.prefix(48)) } ?? t("Новая сессия", "New session")
+        let title = name ?? prompt.map { String($0.prefix(48)) } ?? "New session"
         if kind == .chat {
             let tab = makeTab(folder: folder, kind: .chat, title: title, sessionId: "")
             startChat(tab, resume: nil, prompt: prompt, mode: mode)

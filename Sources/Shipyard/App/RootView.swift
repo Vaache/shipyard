@@ -23,7 +23,7 @@ struct RootView: View {
         }
         .task { await Updater.shared.checkOnLaunch() }
         .onChange(of: Updater.shared.presentRequest) { openWindow(id: "update") }
-        .environment(\.locale, Loc.shared.lang.locale)
+        .environment(\.locale, .app)
     }
 }
 
@@ -76,8 +76,8 @@ struct MainView: View {
                                 VStack(spacing: 12) {
                                     IconTile(systemImage: "arrow.triangle.pull", color: .syViolet, size: 56)
                                         .opacity(0.9)
-                                    Text(t("Выберите pull request, issue или проект", "Select a pull request, issue or project")).foregroundStyle(Color.syMuted)
-                                    Text(t("⌘L — открыть по ссылке", "⌘L — open by link")).font(.caption).foregroundStyle(Color.syDim)
+                                    Text("Select a pull request, issue or project").foregroundStyle(Color.syMuted)
+                                    Text("⌘L — open by link").font(.caption).foregroundStyle(Color.syDim)
                                 }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 .transition(.opacity)
@@ -122,8 +122,8 @@ struct SidebarView: View {
     var body: some View {
         @Bindable var app = app
         List(selection: $app.section) {
-            Section(t("Входящие", "Inbox")) {
-                SidebarRow(title: t("Уведомления", "Notifications"), icon: "bell.fill", color: .syAmber)
+            Section("Inbox") {
+                SidebarRow(title: "Notifications", icon: "bell.fill", color: .syAmber)
                     .badge(app.unreadCount)
                     .tag(SidebarSection.notifications)
             }
@@ -139,9 +139,9 @@ struct SidebarView: View {
                     SidebarRow(title: f.title, icon: f.tileIcon, color: f.tint).tag(SidebarSection.issues(f))
                 }
             }
-            Section(t("Код", "Code")) {
-                SidebarRow(title: t("Репозитории", "Repositories"), icon: "book.closed.fill", color: .syTeal).tag(SidebarSection.repos)
-                SidebarRow(title: t("Проекты", "Projects"), icon: "rectangle.split.3x1.fill", color: .syIndigo).tag(SidebarSection.projects)
+            Section("Code") {
+                SidebarRow(title: "Repositories", icon: "book.closed.fill", color: .syTeal).tag(SidebarSection.repos)
+                SidebarRow(title: "Projects", icon: "rectangle.split.3x1.fill", color: .syIndigo).tag(SidebarSection.projects)
             }
             Section("AI") {
                 SidebarRow(title: "Claude Code", icon: "sparkles", color: .syCoral)
@@ -251,7 +251,7 @@ struct ContentColumn: View {
         case .claude:
             ClaudeProjectsColumn()
         case nil:
-            Text(t("Выберите раздел", "Select a section")).foregroundStyle(Color.syMuted)
+            Text("Select a section").foregroundStyle(Color.syMuted)
         }
     }
 }
@@ -263,15 +263,15 @@ struct OpenLinkSheet: View {
     @State private var invalid = false
 
     var body: some View {
-        SheetFrame(title: t("Открыть по ссылке", "Open by link")) {
-            TextField(t("https://github.com/org/repo/pull/123 или org/repo#123", "https://github.com/org/repo/pull/123 or org/repo#123"), text: $text)
+        SheetFrame(title: "Open by link") {
+            TextField("https://github.com/org/repo/pull/123 or org/repo#123", text: $text)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(open)
-            if invalid { Text(t("Не удалось распознать ссылку", "Couldn't recognize the link")).font(.caption).foregroundStyle(.red) }
+            if invalid { Text("Couldn't recognize the link").font(.caption).foregroundStyle(.red) }
             HStack {
                 Spacer()
-                Button(t("Отмена", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(t("Открыть", "Open"), action: open).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Open", action: open).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
             }
         }
         .onAppear {
@@ -296,8 +296,8 @@ struct ClipboardBanner: View {
         if let route = app.clipboardRoute {
             HStack(spacing: 10) {
                 Image(systemName: "doc.on.clipboard")
-                Text(t("В буфере: \(title(route))", "In clipboard: \(title(route))")).lineLimit(1)
-                Button(t("Открыть", "Open")) {
+                Text("In clipboard: \(title(route))").lineLimit(1)
+                Button("Open") {
                     app.open(route)
                     app.clipboardRoute = nil
                 }

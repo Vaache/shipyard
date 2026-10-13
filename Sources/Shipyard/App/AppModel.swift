@@ -8,11 +8,11 @@ enum PRFilter: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .reviewRequested: return t("Ждут моего ревью", "Review requests")
-        case .mine: return t("Мои", "Created by me")
-        case .assigned: return t("Назначены мне", "Assigned to me")
-        case .mentioned: return t("Упоминания", "Mentioned")
-        case .reviewed: return t("Я проверял", "Reviewed by me")
+        case .reviewRequested: return "Review requests"
+        case .mine: return "Created by me"
+        case .assigned: return "Assigned to me"
+        case .mentioned: return "Mentioned"
+        case .reviewed: return "Reviewed by me"
         }
     }
 
@@ -44,9 +44,9 @@ enum IssueFilter: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .assigned: return t("Назначены мне", "Assigned to me")
-        case .mine: return t("Мои", "Created by me")
-        case .mentioned: return t("Упоминания", "Mentioned")
+        case .assigned: return "Assigned to me"
+        case .mine: return "Created by me"
+        case .mentioned: return "Mentioned"
         }
     }
 

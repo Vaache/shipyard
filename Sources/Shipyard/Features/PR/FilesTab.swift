@@ -31,9 +31,9 @@ struct FilesTab: View {
     private var fileList: some View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
-                TextField(t("Фильтр файлов", "Filter files"), text: $filter).textFieldStyle(.roundedBorder).controlSize(.small)
+                TextField("Filter files", text: $filter).textFieldStyle(.roundedBorder).controlSize(.small)
                 Text("\(model.viewedPaths.intersection(model.files.map(\.id)).count)/\(model.files.count)")
-                    .font(.caption.monospacedDigit()).foregroundStyle(Color.syMuted).help(t("Просмотрено", "Viewed"))
+                    .font(.caption.monospacedDigit()).foregroundStyle(Color.syMuted).help("Viewed")
             }
             .padding(8)
             List(visibleFiles, selection: Binding(get: { model.scrollTarget }, set: { p in if let p { model.revealFile(p) } })) { f in
@@ -139,14 +139,14 @@ struct FileHeader: View {
             .textSelection(.enabled)
             DiffStat(additions: file.additions, deletions: file.deletions)
             Spacer()
-            Toggle(t("Просмотрено", "Viewed"), isOn: Binding(get: { model.viewedPaths.contains(file.id) }, set: { _ in Task { await model.toggleViewed(file.id) } }))
+            Toggle("Viewed", isOn: Binding(get: { model.viewedPaths.contains(file.id) }, set: { _ in Task { await model.toggleViewed(file.id) } }))
                 .toggleStyle(.checkbox)
                 .controlSize(.small)
             Menu {
-                Button(t("Копировать путь", "Copy path")) { copyToPasteboard(file.id) }
-                Button(showList ? t("Скрыть список файлов", "Hide file list") : t("Показать список файлов", "Show file list")) { showList.toggle() }
-                Button(t("Свернуть все", "Collapse all")) { model.collapsed = Set(model.files.map(\.id)) }
-                Button(t("Развернуть все", "Expand all")) { model.collapsed = [] }
+                Button("Copy path") { copyToPasteboard(file.id) }
+                Button(showList ? "Hide file list" : "Show file list") { showList.toggle() }
+                Button("Collapse all") { model.collapsed = Set(model.files.map(\.id)) }
+                Button("Expand all") { model.collapsed = [] }
             } label: {
                 Image(systemName: "ellipsis")
             }
@@ -242,14 +242,14 @@ struct InlineThreadView: View {
                 }
                 .buttonStyle(.plain)
                 Image(systemName: "text.bubble")
-                Text(tp(thread.comments.nodes.count, "комментарий", "комментария", "комментариев", "comment", "comments")).font(.caption)
-                if thread.isOutdated { Text(t("устарело", "outdated")).font(.caption2).foregroundStyle(Color.syMuted) }
-                if thread.isResolved { Text(t("решено", "resolved")).font(.caption2).foregroundStyle(Color.ghGreen) }
+                Text(plural(thread.comments.nodes.count, "comment", "comments")).font(.caption)
+                if thread.isOutdated { Text("outdated").font(.caption2).foregroundStyle(Color.syMuted) }
+                if thread.isResolved { Text("resolved").font(.caption2).foregroundStyle(Color.ghGreen) }
                 Spacer()
                 if thread.isResolved, thread.viewerCanUnresolve {
-                    Button(t("Переоткрыть", "Unresolve")) { Task { await model.setResolved(thread.id, false) } }.controlSize(.small)
+                    Button("Unresolve") { Task { await model.setResolved(thread.id, false) } }.controlSize(.small)
                 } else if !thread.isResolved, thread.viewerCanResolve {
-                    Button(t("Решено", "Resolve")) { Task { await model.setResolved(thread.id, true) } }.controlSize(.small)
+                    Button("Resolve") { Task { await model.setResolved(thread.id, true) } }.controlSize(.small)
                 }
             }
             .padding(.horizontal, 10)
@@ -276,10 +276,10 @@ struct InlineThreadView: View {
                     Divider()
                     if replying {
                         VStack(alignment: .trailing, spacing: 6) {
-                            ComposerBox(text: $reply, placeholder: t("Ответ", "Reply"), minHeight: 50).frame(maxHeight: 120)
+                            ComposerBox(text: $reply, placeholder: "Reply", minHeight: 50).frame(maxHeight: 120)
                             HStack {
-                                Button(t("Отмена", "Cancel")) { replying = false; reply = "" }
-                                Button(t("Ответить", "Reply")) {
+                                Button("Cancel") { replying = false; reply = "" }
+                                Button("Reply") {
                                     let body = reply
                                     Task { if await model.reply(thread.id, body: body) { reply = ""; replying = false } }
                                 }
@@ -291,7 +291,7 @@ struct InlineThreadView: View {
                         }
                         .padding(8)
                     } else {
-                        Button(t("Ответить…", "Reply…")) { replying = true }
+                        Button("Reply…") { replying = true }
                             .buttonStyle(.borderless)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
@@ -314,7 +314,7 @@ struct PendingCommentView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Text(t("черновик", "pending")).font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
+            Text("pending").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
                 .background(Capsule().fill(Color.ghYellow.opacity(0.25)))
             MarkdownText(text: comment.body).font(.callout)
             Spacer()
@@ -324,7 +324,7 @@ struct PendingCommentView: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
-            .help(t("Удалить черновой комментарий", "Delete pending comment"))
+            .help("Delete pending comment")
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.ghYellow.opacity(0.08)))
@@ -344,17 +344,17 @@ struct InlineComposer: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
-            ComposerBox(text: $text, placeholder: t("Комментарий к строке \(anchor.line) (Markdown)", "Comment on line \(anchor.line) (Markdown)"), minHeight: 70)
+            ComposerBox(text: $text, placeholder: "Comment on line \(anchor.line) (Markdown)", minHeight: 70)
                 .frame(maxHeight: 160)
                 .focused($focused)
             HStack {
-                Button(t("Отмена", "Cancel")) { model.composer = nil }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { model.composer = nil }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button(t("Добавить в ревью", "Add to review")) { submit(immediately: false) }
+                Button("Add to review") { submit(immediately: false) }
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(empty)
-                    .help(t("Сохранить как черновик и отправить вместе с ревью", "Save as pending and submit with the review"))
-                Button(t("Отправить сразу", "Add single comment")) { submit(immediately: true) }
+                    .help("Save as pending and submit with the review")
+                Button("Add single comment") { submit(immediately: true) }
                     .buttonStyle(.borderedProminent)
                     .disabled(empty || model.busy)
             }

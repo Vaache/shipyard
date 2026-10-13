@@ -41,7 +41,6 @@ A browser tab with GitHub can use a gigabyte of memory just to show one diff. Sh
 - Menu bar badge with the number of pending review requests
 - Shipyard theme in light and dark, or the native macOS look
 - Open any GitHub link inside the app (`⌘L`)
-- English and Russian interface
 - Built-in updates: **Shipyard → Check for Updates…** downloads and installs new releases
 
 **Claude Code workspace**

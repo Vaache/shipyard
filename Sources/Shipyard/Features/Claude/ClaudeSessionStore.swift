@@ -156,7 +156,7 @@ enum ClaudeSessionParser {
                 break
             }
         }
-        let display = title?.isEmpty == false ? title! : (firstPrompt ?? lastPrompt.flatMap(cleanPrompt) ?? t("Без названия", "Untitled"))
+        let display = title?.isEmpty == false ? title! : (firstPrompt ?? lastPrompt.flatMap(cleanPrompt) ?? "Untitled")
         return ClaudeSessionInfo(
             id: file.deletingPathExtension().lastPathComponent,
             file: file,
