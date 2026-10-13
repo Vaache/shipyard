@@ -86,6 +86,7 @@ final class ClaudeTab: Identifiable {
     var startedAt = Date()
     let git: GitWorkingCopy
     let chat: ChatSession?
+    let configDir: String?
     @ObservationIgnored private var _terminal: ClaudeTerminalView?
     @ObservationIgnored var restartChat: (() -> Void)?
     @ObservationIgnored var openNewChat: (() -> Void)?
@@ -96,7 +97,8 @@ final class ClaudeTab: Identifiable {
         self.title = title
         self.sessionId = sessionId
         self.git = git
-        chat = kind == .chat ? ChatSession(folder: folder) : nil
+        configDir = ClaudeProfiles.shared.activeOverride
+        chat = kind == .chat ? ChatSession(folder: folder, configDir: ClaudeProfiles.shared.activeOverride) : nil
     }
 
     var terminal: ClaudeTerminalView {
@@ -215,6 +217,16 @@ final class ClaudeWorkspace {
         }
     }
 
+    func closeAllForProfileSwitch() {
+        for tab in tabs {
+            tab.chat?.stop()
+            if tab.terminalRunning { tab.terminal.terminate() }
+        }
+        tabs.removeAll()
+        selectedTabID = nil
+        projects = []
+    }
+
     func sleepAll() {
         for tab in tabs where tab.running && tab.state != .working && tab.state != .waiting { tab.sleepNow() }
     }
@@ -237,7 +249,11 @@ final class ClaudeWorkspace {
     func reloadProjects() async {
         loadingProjects = true
         defer { loadingProjects = false }
-        projects = await Task.detached(priority: .userInitiated) { ClaudeSessionParser.loadAll() }.value
+        let root = URL(fileURLWithPath: ClaudeProfiles.shared.configDir()).appendingPathComponent("projects", isDirectory: true)
+        let profileID = ClaudeProfiles.shared.activeID
+        let loaded = await Task.detached(priority: .userInitiated) { ClaudeSessionParser.loadAll(root: root) }.value
+        guard profileID == ClaudeProfiles.shared.activeID else { return }
+        projects = loaded
     }
 
     func tab(forSession id: String) -> ClaudeTab? {
@@ -404,6 +420,7 @@ final class ClaudeWorkspace {
         for key in env.keys where key == "GHLITE_TOKEN" || key == "CLAUDECODE" || key.hasPrefix("CLAUDE_CODE_") {
             env.removeValue(forKey: key)
         }
+        ClaudeProfiles.apply(tab.configDir, to: &env)
 
         tab.terminalRunning = true
         tab.exitCode = nil

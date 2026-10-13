@@ -51,8 +51,9 @@ final class ClaudeAccountStore {
         return nil
     }
 
-    private static func environment() -> [String: String] {
+    private static func environment(configDir: String?? = .none) -> [String: String] {
         var env = ProcessInfo.processInfo.environment
+        ClaudeProfiles.apply(configDir ?? ClaudeProfiles.shared.activeOverride, to: &env)
         for key in env.keys where key == "GHLITE_TOKEN" || key == "CLAUDECODE" || key.hasPrefix("CLAUDE_CODE_") { env.removeValue(forKey: key) }
         if let bin = ClaudeLauncher.claudeBinary {
             env["PATH"] = [(bin as NSString).deletingLastPathComponent, "/opt/homebrew/bin", "/usr/local/bin", env["PATH"] ?? "/usr/bin:/bin"].joined(separator: ":")
@@ -87,6 +88,7 @@ final class ClaudeAccountStore {
             return
         }
         if json["loggedIn"] as? Bool == true {
+            ClaudeProfiles.shared.updateCachedInfo(email: json["email"] as? String, plan: (json["subscriptionType"] as? String)?.capitalized)
             status = .loggedIn(ClaudeAccountInfo(
                 email: json["email"] as? String,
                 orgName: json["orgName"] as? String,
@@ -162,9 +164,9 @@ final class ClaudeAccountStore {
         Task { await refresh() }
     }
 
-    func logout() async {
+    func logout(configDir: String? = nil) async {
         guard let bin = ClaudeLauncher.claudeBinary else { return }
-        let env = Self.environment()
+        let env = configDir.map { Self.environment(configDir: .some($0)) } ?? Self.environment()
         await Task.detached {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: bin)
@@ -191,6 +193,7 @@ struct ClaudeAuthView: View {
             VStack(spacing: 18) {
                 Image(systemName: "sparkles").font(.system(size: 40)).foregroundStyle(Color.accentColor)
                 Text("Claude Code").font(.title.weight(.bold))
+                ClaudeProfileSwitcher()
                 switch store.status {
                 case .notInstalled: installCard
                 case .unknown, .checking: ProgressView().controlSize(.small)
@@ -291,17 +294,22 @@ struct ClaudeAccountCard: View {
     let info: ClaudeAccountInfo
     var compact = false
     @State private var confirmLogout = false
+    @State private var showAdd = false
+    @State private var removeTarget: ClaudeProfile?
     private var store: ClaudeAccountStore { ClaudeAccountStore.shared }
 
     var body: some View {
+        let profile = ClaudeProfiles.shared.active
         HStack(spacing: 10) {
-            ZStack {
-                Circle().fill(Color.orange.opacity(0.18))
-                Text(String((info.email ?? "C").prefix(1)).uppercased()).font(.system(size: compact ? 12 : 15, weight: .bold, design: .rounded)).foregroundStyle(.orange)
-            }
-            .frame(width: compact ? 26 : 34, height: compact ? 26 : 34)
+            ProfileBadge(profile: profile, size: compact ? 26 : 34)
             VStack(alignment: .leading, spacing: 1) {
-                Text(info.email ?? t("Вход выполнен", "Signed in")).font(compact ? .callout.weight(.medium) : .headline).lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(info.email ?? t("Вход выполнен", "Signed in")).font(compact ? .callout.weight(.medium) : .headline).lineLimit(1)
+                    if ClaudeProfiles.shared.profiles.count > 1 {
+                        Text(profile.label).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                            .padding(.horizontal, 5).background(Capsule().fill(Color.secondary.opacity(0.15)))
+                    }
+                }
                 HStack(spacing: 5) {
                     if let org = info.orgName { Text(org).lineLimit(1) }
                     if let plan = info.subscription {
@@ -320,8 +328,9 @@ struct ClaudeAccountCard: View {
             }
             Spacer(minLength: 4)
             Menu {
-                Button(t("Сменить аккаунт…", "Switch account…")) { confirmLogout = true }
-                Button(t("Выйти из Claude Code…", "Sign out of Claude Code…"), role: .destructive) { confirmLogout = true }
+                ClaudeProfileMenuItems(showAdd: $showAdd, removeTarget: $removeTarget)
+                Divider()
+                Button(t("Выйти из этого аккаунта…", "Sign out of this account…"), role: .destructive) { confirmLogout = true }
                 Divider()
                 Button(t("Страница использования", "Usage page")) { openInBrowser("https://claude.ai/settings/usage") }
                 Button(t("Обновить статус", "Refresh status")) { Task { await store.refresh() } }
@@ -334,11 +343,12 @@ struct ClaudeAccountCard: View {
         }
         .padding(compact ? 8 : 14)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+        .modifier(ProfileSheets(showAdd: $showAdd, removeTarget: $removeTarget))
         .confirmationDialog(t("Выйти из Claude Code?", "Sign out of Claude Code?"), isPresented: $confirmLogout) {
             Button(t("Выйти", "Sign out"), role: .destructive) { Task { await store.logout() } }
             Button(t("Отмена", "Cancel"), role: .cancel) {}
         } message: {
-            Text(t("Вход сбросится и для Claude Code в терминале. Потом можно войти снова — в том числе под другим аккаунтом.", "This also signs out Claude Code in Terminal. You can sign in again afterwards, including with another account."))
+            Text(ClaudeProfiles.shared.active.isDefault ? t("Вход сбросится и для Claude Code в терминале. Потом можно войти снова — в том числе под другим аккаунтом.", "This also signs out Claude Code in Terminal. You can sign in again afterwards, including with another account.") : t("Выход только из аккаунта «\(ClaudeProfiles.shared.active.label)». Остальные аккаунты не затронуты.", "Signs out only “\(ClaudeProfiles.shared.active.label)”. Other accounts are not affected."))
         }
     }
 }

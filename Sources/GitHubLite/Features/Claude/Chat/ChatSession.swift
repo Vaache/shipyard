@@ -139,6 +139,7 @@ struct ChatCommand: Identifiable, Hashable {
 @MainActor
 final class ChatSession {
     let folder: String
+    let configDir: String?
     var sessionId: String?
     var items: [ChatItem] = []
     var running = false
@@ -173,8 +174,9 @@ final class ChatSession {
     @ObservationIgnored var onSessionId: ((String) -> Void)?
     @ObservationIgnored var onTurnFinished: (() -> Void)?
 
-    init(folder: String) {
+    init(folder: String, configDir: String?) {
         self.folder = folder
+        self.configDir = configDir
     }
 
     var pendingCount: Int { pendingPermissions.filter { !$0.resolved }.count }
@@ -221,6 +223,7 @@ final class ChatSession {
         p.currentDirectoryURL = URL(fileURLWithPath: folder)
         var env = ProcessInfo.processInfo.environment
         for key in env.keys where key == "GHLITE_TOKEN" || key == "CLAUDECODE" || key.hasPrefix("CLAUDE_CODE_") { env.removeValue(forKey: key) }
+        ClaudeProfiles.apply(configDir, to: &env)
         env["PATH"] = [(bin as NSString).deletingLastPathComponent, "/opt/homebrew/bin", "/usr/local/bin", env["PATH"] ?? "/usr/bin:/bin"].joined(separator: ":")
         if let browser = LinkBrowser.helperScript() { env["BROWSER"] = browser }
         p.environment = env

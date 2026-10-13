@@ -51,7 +51,7 @@ enum ClaudeLauncher {
             .first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    static func launch(prompt: String, folder: String, target: ClaudeTarget, mode: ClaudePermissionMode, sessionName: String, resumeId: String? = nil) throws {
+    static func launch(prompt: String, folder: String, target: ClaudeTarget, mode: ClaudePermissionMode, sessionName: String, resumeId: String? = nil, configDir: String? = nil) throws {
         if target == .copy {
             copyToPasteboard(prompt)
             return
@@ -65,6 +65,7 @@ enum ClaudeLauncher {
             p.currentDirectoryURL = URL(fileURLWithPath: folder)
             var env = ProcessInfo.processInfo.environment
             env["PATH"] = (bin as NSString).deletingLastPathComponent + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+            ClaudeProfiles.apply(configDir, to: &env)
             p.environment = env
             p.standardOutput = FileHandle.nullDevice
             p.standardError = FileHandle.nullDevice
@@ -78,6 +79,7 @@ enum ClaudeLauncher {
         let scriptURL = dir.appendingPathComponent("fix-\(id).command")
         try prompt.write(to: promptURL, atomically: true, encoding: .utf8)
 
+        let configExport = configDir.map { "export CLAUDE_CONFIG_DIR=\(shellQuote($0))" } ?? ""
         var args = ""
         if mode != .standard { args += " --permission-mode \(mode.rawValue)" }
         if let resumeId { args += " --resume \(shellQuote(resumeId))" } else { args += " -n \(shellQuote(sessionName))" }
@@ -85,6 +87,7 @@ enum ClaudeLauncher {
         #!/bin/bash
         export PATH="$HOME/.local/bin:$HOME/.claude/local:/opt/homebrew/bin:/usr/local/bin:$PATH"
         unset CLAUDECODE $(env | grep -o '^CLAUDE_CODE_[A-Z_]*')
+        \(configExport)
         cd \(shellQuote(folder)) || { echo "Folder not found: \(folder.replacingOccurrences(of: "\"", with: ""))"; exit 1; }
         PROMPT="$(cat \(shellQuote(promptURL.path)))"
         rm -f \(shellQuote(promptURL.path)) "$0"

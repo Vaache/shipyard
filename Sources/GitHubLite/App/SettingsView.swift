@@ -5,6 +5,9 @@ struct SettingsView: View {
     @AppStorage("pollInterval") private var pollInterval = 120.0
     @AppStorage("oauthClientID") private var clientID = ""
     @State private var browserTick = 0
+    @State private var confirmClaudeLogout = false
+    @State private var loggingOut = false
+    @State private var showAddProfile = false
 
     var body: some View {
         Form {
@@ -55,9 +58,23 @@ struct SettingsView: View {
                 .onChange(of: pollInterval) { app.startPolling() }
             }
             Section("Claude Code") {
+                HStack {
+                    Picker(t("Аккаунт", "Account"), selection: Binding(get: { ClaudeProfiles.shared.activeID }, set: { app.switchClaudeProfile(to: $0) })) {
+                        ForEach(ClaudeProfiles.shared.profiles) { p in
+                            Text(p.label + (p.email.map { " — \($0)" } ?? "")).tag(p.id)
+                        }
+                    }
+                    Button(t("Добавить…", "Add…")) { showAddProfile = true }
+                }
                 switch ClaudeAccountStore.shared.status {
                 case .loggedIn(let info):
                     ClaudeAccountCard(info: info, compact: true)
+                    HStack {
+                        Button(t("Выйти из Claude Code", "Sign out of Claude Code"), role: .destructive) { confirmClaudeLogout = true }
+                        Spacer()
+                        if loggingOut { ProgressView().controlSize(.small) }
+                    }
+                    .disabled(loggingOut)
                 case .notInstalled:
                     Text(t("claude CLI не установлен", "claude CLI isn't installed")).foregroundStyle(.secondary)
                 default:
@@ -87,6 +104,20 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .task { await ClaudeAccountStore.shared.refresh() }
+        .sheet(isPresented: $showAddProfile) { AddClaudeProfileSheet().environment(app) }
+        .confirmationDialog(t("Выйти из Claude Code?", "Sign out of Claude Code?"), isPresented: $confirmClaudeLogout) {
+            Button(t("Выйти", "Sign out"), role: .destructive) {
+                loggingOut = true
+                Task {
+                    app.claude.sleepAll()
+                    await ClaudeAccountStore.shared.logout()
+                    loggingOut = false
+                }
+            }
+            Button(t("Отмена", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(t("Вход сбросится и для Claude Code в терминале. Открытые сессии уснут. Войти снова (в том числе под другим аккаунтом) можно здесь же или в разделе Claude Code.", "This also signs out Claude Code in Terminal. Open sessions will go to sleep. You can sign in again (including with another account) here or in the Claude Code section."))
+        }
         .frame(width: 500, height: 560)
         .padding(.vertical, 10)
     }

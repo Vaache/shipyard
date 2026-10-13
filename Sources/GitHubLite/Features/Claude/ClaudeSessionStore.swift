@@ -45,7 +45,7 @@ enum ClaudeSessionParser {
         return cwd
     }
 
-    static func loadAll() -> [ClaudeProject] {
+    static func loadAll(root: URL = root) -> [ClaudeProject] {
         let fm = FileManager.default
         guard let dirs = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return [] }
         var byProject: [String: [ClaudeSessionInfo]] = [:]

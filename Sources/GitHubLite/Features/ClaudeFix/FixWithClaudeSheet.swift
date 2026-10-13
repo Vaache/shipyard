@@ -221,7 +221,7 @@ struct FixWithClaudeSheet: View {
             return
         }
         do {
-            try ClaudeLauncher.launch(prompt: prompt, folder: folder ?? "", target: target, mode: mode, sessionName: "Fix PR #\(pr.number): \(pr.title)")
+            try ClaudeLauncher.launch(prompt: prompt, folder: folder ?? "", target: target, mode: mode, sessionName: "Fix PR #\(pr.number): \(pr.title)", configDir: ClaudeProfiles.shared.activeOverride)
             dismiss()
         } catch {
             self.error = error.localizedDescription

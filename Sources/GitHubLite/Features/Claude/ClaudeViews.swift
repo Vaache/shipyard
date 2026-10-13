@@ -53,6 +53,9 @@ struct ClaudeProjectsColumn: View {
                 case .loggedOut:
                     Label(t("Вход в Claude не выполнен — войдите справа", "Not signed in to Claude — sign in on the right"), systemImage: "person.crop.circle.badge.exclamationmark")
                         .foregroundStyle(.orange)
+                    if ClaudeProfiles.shared.profiles.count > 1 {
+                        ClaudeProfileSwitcher()
+                    }
                 case .notInstalled:
                     Label(t("claude CLI не найден — инструкция справа", "claude CLI not found — see the right side"), systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
@@ -60,6 +63,47 @@ struct ClaudeProjectsColumn: View {
                     EmptyView()
                 }
             }
+            if ClaudeAccountStore.shared.isLoggedIn {
+                historyContent
+            } else if case .checking = ClaudeAccountStore.shared.status {
+                HStack { Spacer(); ProgressView().controlSize(.small); Spacer() }
+            } else if case .unknown = ClaudeAccountStore.shared.status {
+                HStack { Spacer(); ProgressView().controlSize(.small); Spacer() }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Image(systemName: "lock.fill").font(.title3).foregroundStyle(.tertiary)
+                    Text(t("История сессий и проекты появятся после входа в Claude.", "Session history and projects appear after you sign in to Claude."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 8)
+            }
+        }
+        .listStyle(.inset)
+        .overlay { if ws.loadingProjects && ws.projects.isEmpty { ProgressView().controlSize(.small) } }
+        .searchable(text: $query, placement: .toolbar, prompt: t("Поиск по сессиям", "Search sessions"))
+        .navigationTitle("Claude Code")
+        .toolbar {
+            ToolbarItemGroup {
+                Button { openFolder() } label: { Label(t("Открыть папку", "Open folder"), systemImage: "folder.badge.plus") }
+                    .disabled(!ClaudeAccountStore.shared.isLoggedIn)
+                    .help(t("Новая сессия в папке…", "New session in folder…"))
+                Button { Task { await ws.reloadProjects() } } label: { Label(t("Обновить", "Refresh"), systemImage: "arrow.clockwise") }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await ClaudeAccountStore.shared.refresh() }
+        }
+        .task {
+            await ClaudeAccountStore.shared.refresh()
+            await ws.reloadProjects()
+            if expanded.isEmpty, let first = ws.projects.first { expanded.insert(first.id) }
+        }
+        .onChange(of: app.refreshTick) { Task { await ws.reloadProjects() } }
+    }
+
+    @ViewBuilder
+    private var historyContent: some View {
             if !ws.tabs.isEmpty {
                 Section {
                     ForEach(ws.tabs) { tab in
@@ -117,27 +161,6 @@ struct ClaudeProjectsColumn: View {
             if ws.projects.isEmpty, !ws.loadingProjects {
                 Text(t("Сессий Claude Code пока нет", "No Claude Code sessions yet")).foregroundStyle(.secondary)
             }
-        }
-        .listStyle(.inset)
-        .overlay { if ws.loadingProjects && ws.projects.isEmpty { ProgressView().controlSize(.small) } }
-        .searchable(text: $query, placement: .toolbar, prompt: t("Поиск по сессиям", "Search sessions"))
-        .navigationTitle("Claude Code")
-        .toolbar {
-            ToolbarItemGroup {
-                Button { openFolder() } label: { Label(t("Открыть папку", "Open folder"), systemImage: "folder.badge.plus") }
-                    .help(t("Новая сессия в папке…", "New session in folder…"))
-                Button { Task { await ws.reloadProjects() } } label: { Label(t("Обновить", "Refresh"), systemImage: "arrow.clockwise") }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            Task { await ClaudeAccountStore.shared.refresh() }
-        }
-        .task {
-            await ClaudeAccountStore.shared.refresh()
-            await ws.reloadProjects()
-            if expanded.isEmpty, let first = ws.projects.first { expanded.insert(first.id) }
-        }
-        .onChange(of: app.refreshTick) { Task { await ws.reloadProjects() } }
     }
 
     @ViewBuilder
@@ -490,7 +513,7 @@ struct ClaudeControlBar: View {
                 }
                 Divider()
                 Button(t("Продолжить в Terminal", "Continue in Terminal")) {
-                    try? ClaudeLauncher.launch(prompt: "", folder: tab.folder, target: .terminal, mode: .standard, sessionName: tab.title, resumeId: tab.sessionId)
+                    try? ClaudeLauncher.launch(prompt: "", folder: tab.folder, target: .terminal, mode: .standard, sessionName: tab.title, resumeId: tab.sessionId, configDir: tab.configDir)
                 }
                 Button(t("Показать в Finder", "Reveal in Finder")) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: tab.folder)]) }
                 Button(t("Копировать ID сессии", "Copy session ID")) { copyToPasteboard(tab.sessionId) }
