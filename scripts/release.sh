@@ -14,22 +14,17 @@ UNIVERSAL=1 ./scripts/build.sh
 APP="build/Shipyard.app"
 DMG="build/Shipyard-$VERSION.dmg"
 LATEST="build/Shipyard.dmg"
-STAGE="build/dmg"
-rm -rf "$STAGE" "$DMG"
-mkdir -p "$STAGE"
-cp -R "$APP" "$STAGE/"
-ln -s /Applications "$STAGE/Applications"
-hdiutil create -volname "Shipyard $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
-rm -rf "$STAGE"
+rm -f "$DMG"
+python3 -m dmgbuild -s scripts/dmg_settings.py -D app="$APP" -D readme="Resources/DMG/How to Install.rtf" "Shipyard" "$DMG" >/dev/null
 cp "$DMG" "$LATEST"
 echo "DMG: $DMG ($(du -h "$DMG" | cut -f1))"
 
 if [ "${2:-}" = "--publish" ]; then
     NOTES="Universal build (Apple Silicon + Intel), macOS 14+.
 
-Install: open the DMG and drag **Shipyard** to Applications.
+Install: open the DMG and drag **Shipyard** to Applications. From now on, updates install right from **Shipyard → Check for Updates…**
 
-The app is not notarized. On first launch macOS will block it — open **System Settings → Privacy & Security** and click **Open Anyway**, or run:
+The app is not notarized. On first launch macOS will block it — open **System Settings → Privacy & Security** and click **Open Anyway** (the DMG has a *How to Install* guide), or run:
 \`\`\`
 xattr -dr com.apple.quarantine /Applications/Shipyard.app
 \`\`\`"

@@ -36,6 +36,65 @@ extension GitHubAPI {
         return r.repository?.pullRequests.nodes ?? []
     }
 
+    func pullRequestStack(_ ref: ItemRef) async throws -> [StackPR] {
+        struct R: Decodable {
+            struct Entry: Decodable { let position: Int; let pullRequest: StackPR }
+            struct Stack: Decodable { let entries: Nodes<Entry> }
+            struct PR: Decodable {
+                let number: Int
+                let title: String
+                let state: String
+                let isDraft: Bool
+                let headRefName: String
+                let baseRefName: String
+                let stack: Stack?
+            }
+            struct Repo: Decodable {
+                let defaultBranchRef: RepoName.Branch?
+                let pullRequest: PR?
+            }
+            let repository: Repo?
+        }
+        let r: R = try await graphQL(Q.prStack, ["o": ref.repo.owner, "n": ref.repo.name, "num": ref.number])
+        guard let pr = r.repository?.pullRequest else { return [] }
+        if let entries = pr.stack?.entries.nodes, entries.count > 1 {
+            return entries.sorted { $0.position < $1.position }.map(\.pullRequest)
+        }
+        let main = r.repository?.defaultBranchRef?.name
+        let current = StackPR(number: pr.number, title: pr.title, state: pr.state, isDraft: pr.isDraft, headRefName: pr.headRefName, baseRefName: pr.baseRefName)
+        var below: [StackPR] = []
+        var above: [StackPR] = []
+        var seen: Set<Int> = [current.number]
+        var node = current
+        for _ in 0..<8 where node.baseRefName != main {
+            let n = try await stackNeighbors(ref.repo, node)
+            guard let parent = (n.parents.first { $0.state == "OPEN" } ?? n.parents.first), seen.insert(parent.number).inserted else { break }
+            below.insert(parent, at: 0)
+            node = parent
+        }
+        node = current
+        for _ in 0..<8 {
+            let n = try await stackNeighbors(ref.repo, node)
+            guard let child = (n.children.first { $0.state == "OPEN" } ?? n.children.first), seen.insert(child.number).inserted else { break }
+            above.append(child)
+            node = child
+        }
+        let chain = below + [current] + above
+        return chain.count > 1 ? chain : []
+    }
+
+    private func stackNeighbors(_ repo: RepoRef, _ pr: StackPR) async throws -> (parents: [StackPR], children: [StackPR]) {
+        struct R: Decodable {
+            struct Repo: Decodable {
+                let parents: Nodes<StackPR>
+                let children: Nodes<StackPR>
+            }
+            let repository: Repo?
+        }
+        let r: R = try await graphQL(Q.prStackNeighbors, ["o": repo.owner, "n": repo.name, "head": pr.headRefName, "base": pr.baseRefName])
+        return (r.repository?.parents.nodes ?? [], r.repository?.children.nodes ?? [])
+    }
+
     func badges() async throws -> BadgeResponse {
         try await graphQL(Q.badges)
     }

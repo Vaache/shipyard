@@ -27,6 +27,9 @@ struct ShipyardApp: App {
         }
         .defaultSize(width: 1380, height: 860)
         .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesButton()
+            }
             CommandGroup(after: .toolbar) {
                 Button(t("Обновить", "Refresh")) { app.refresh() }
                     .keyboardShortcut("r")
@@ -51,6 +54,12 @@ struct ShipyardApp: App {
             MenuBarLabel(app: app)
         }
         .menuBarExtraStyle(.window)
+
+        Window(t("Обновление ПО", "Software Update"), id: "update") {
+            ThemedRoot { UpdateView() }
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
 
         Settings {
             ThemedRoot { SettingsView().environment(app) }

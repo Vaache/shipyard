@@ -83,7 +83,20 @@ struct LabelInfo: Decodable, Hashable {
 }
 
 struct RepoName: Decodable {
+    struct Branch: Decodable { let name: String }
     let nameWithOwner: String
+    var defaultBranchRef: Branch?
+}
+
+struct StackPR: Decodable, Identifiable, Hashable {
+    let number: Int
+    let title: String
+    let state: String
+    let isDraft: Bool
+    let headRefName: String
+    let baseRefName: String
+    var id: Int { number }
+    var visualState: VisualState { .pr(state: state, draft: isDraft) }
 }
 
 struct Viewer: Decodable {
@@ -119,6 +132,7 @@ struct SearchItem: Decodable, Identifiable {
     let isDraft: Bool?
     let createdAt: Date
     let updatedAt: Date
+    let baseRefName: String?
     let author: Actor?
     let repository: RepoName
     let reviewDecision: String?
@@ -129,7 +143,7 @@ struct SearchItem: Decodable, Identifiable {
     let commits: Nodes<RollupCommitNode>?
 
     enum CodingKeys: String, CodingKey {
-        case typename = "__typename", number, title, url, prState, issueState, stateReason, isDraft, createdAt, updatedAt, author, repository, reviewDecision, additions, deletions, comments, labels, commits
+        case typename = "__typename", number, title, url, prState, issueState, stateReason, isDraft, createdAt, updatedAt, baseRefName, author, repository, reviewDecision, additions, deletions, comments, labels, commits
     }
 
     var id: String { url }
@@ -138,6 +152,10 @@ struct SearchItem: Decodable, Identifiable {
     var ref: ItemRef { ItemRef(repo: repo, number: number) }
     var route: Route { isPR ? .pr(ref) : .issue(ref) }
     var ciState: String? { commits?.nodes.first?.commit.statusCheckRollup?.state }
+    var stackedOn: String? {
+        guard isPR, let base = baseRefName, let main = repository.defaultBranchRef?.name, base != main else { return nil }
+        return base
+    }
     var visualState: VisualState {
         isPR ? .pr(state: prState ?? "OPEN", draft: isDraft ?? false) : .issue(state: issueState ?? "OPEN", reason: stateReason)
     }

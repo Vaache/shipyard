@@ -32,6 +32,7 @@ A browser tab with GitHub can use a gigabyte of memory just to show one diff. Sh
 - Conversation, review threads, commits, checks and changed files
 - Comment, approve, request changes and merge
 - Fast diff viewer with sticky file headers, built on `NSTableView`
+- Stacked pull requests: the whole stack in the PR header, jump up and down the chain, "stacked on" markers in lists
 
 **Everything else you open GitHub for**
 - Notifications and issues
@@ -41,6 +42,7 @@ A browser tab with GitHub can use a gigabyte of memory just to show one diff. Sh
 - Shipyard theme in light and dark, or the native macOS look
 - Open any GitHub link inside the app (`⌘L`)
 - English and Russian interface
+- Built-in updates: **Shipyard → Check for Updates…** downloads and installs new releases
 
 **Claude Code workspace**
 - Native chat for the official Claude Code CLI, next to the PR, changed files and branch
@@ -56,11 +58,13 @@ A browser tab with GitHub can use a gigabyte of memory just to show one diff. Sh
 
 1. Download [`Shipyard.dmg`](https://github.com/Vaache/shipyard/releases/latest/download/Shipyard.dmg) (universal: Apple Silicon and Intel).
 2. Open it and drag **Shipyard** to Applications.
-3. The app is not notarized yet, so macOS blocks the first launch. Open **System Settings → Privacy & Security → Open Anyway**, or run:
+3. The app is not notarized yet, so macOS blocks the first launch. Open **System Settings → Privacy & Security → Open Anyway** (the DMG includes a *How to Install* guide), or run:
 
    ```bash
    xattr -dr com.apple.quarantine /Applications/Shipyard.app
    ```
+
+After that, updates install from inside the app: **Shipyard → Check for Updates…**
 
 **Requirements:** macOS 14 Sonoma or later. Optional: [GitHub CLI](https://cli.github.com) for one-click sign-in, [Claude Code](https://docs.claude.com/en/docs/claude-code) for the Claude workspace.
 
@@ -92,7 +96,7 @@ cd shipyard
 Other scripts:
 
 - `UNIVERSAL=1 ./scripts/build.sh`: universal binary (arm64 + x86_64)
-- `./scripts/release.sh 2.0.0`: universal build packed into `build/Shipyard-2.0.0.dmg`
+- `./scripts/release.sh 2.1.0`: universal build packed into `build/Shipyard-2.1.0.dmg` with a drag-to-Applications window (needs `pip3 install --user dmgbuild`)
 - `swift scripts/make_icon.swift Resources/Brand/icon.svg build/AppIcon.iconset`: regenerate the icon
 
 The build is signed with the first "Apple Development" identity in your keychain, or ad-hoc if there is none. Set `SIGN_ID` to choose another one.

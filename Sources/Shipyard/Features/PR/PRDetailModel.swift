@@ -54,6 +54,7 @@ final class PRDetailModel {
         didSet { visitedTabs.insert(tab) }
     }
     var visitedTabs: Set<PRTab> = [.conversation]
+    var stack: [StackPR] = []
     var html = ""
     var scrollToBottomToken = 0
 
@@ -114,6 +115,7 @@ final class PRDetailModel {
             viewedPaths = Set(pr.files?.nodes.filter { $0.viewerViewedState == "VIEWED" }.map(\.path) ?? [])
             indexThreads(pr.reviewThreads.nodes)
             error = nil
+            Task(priority: .utility) { await self.loadStack() }
             if filesLoaded {
                 await loadFiles(force: true)
             } else if !filesLoading {
@@ -123,6 +125,11 @@ final class PRDetailModel {
             if isCancellation(error) { return }
             if pr == nil { self.error = error.localizedDescription } else { actionError = error.localizedDescription }
         }
+    }
+
+    func loadStack() async {
+        guard let s = try? await api.pullRequestStack(ref) else { return }
+        if s != stack { stack = s }
     }
 
     func loadFiles(force: Bool = false) async {

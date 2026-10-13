@@ -276,10 +276,98 @@ struct PRHeaderView: View {
                     }
                 }
             }
+            if model.stack.count > 1 {
+                StackStrip(stack: model.stack, current: pr.number, repo: model.ref.repo)
+                    .transition(.opacity)
+            }
             MergeStatusBar(model: model, pr: pr, onMerge: onMerge)
         }
+        .animation(Motion.smooth, value: model.stack)
         .padding(.horizontal, 16)
         .padding(.top, 12)
+    }
+}
+
+struct StackStrip: View {
+    let stack: [StackPR]
+    let current: Int
+    let repo: RepoRef
+    @Environment(AppModel.self) private var app
+    @State private var expanded = false
+
+    var body: some View {
+        let index = stack.firstIndex { $0.number == current } ?? 0
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(Motion.quick) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.stack.3d.up.fill").foregroundStyle(Color.syIndigo)
+                    Text(t("Стек", "Stack")).fontWeight(.semibold)
+                    Text(t("\(index + 1) из \(stack.count)", "\(index + 1) of \(stack.count)")).foregroundStyle(Color.syMuted)
+                    HStack(spacing: 3) {
+                        ForEach(stack) { s in
+                            Capsule()
+                                .fill(s.number == current ? Color.syIndigo : s.visualState.color.opacity(0.55))
+                                .frame(width: s.number == current ? 18 : 10, height: 5)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    if index > 0 { navButton(stack[index - 1], icon: "chevron.down", help: t("Ниже в стеке", "Down the stack")) }
+                    if index < stack.count - 1 { navButton(stack[index + 1], icon: "chevron.up", help: t("Выше в стеке", "Up the stack")) }
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(Color.syDim)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .font(.callout)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if expanded {
+                Rectangle().fill(Color.syLine).frame(height: 1)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(stack.enumerated().reversed()), id: \.element.id) { i, s in
+                        Button {
+                            if s.number != current { app.open(.pr(ItemRef(repo: repo, number: s.number))) }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text("\(i + 1)").font(.caption.monospacedDigit()).foregroundStyle(Color.syDim).frame(width: 14)
+                                StateBadge(state: s.visualState, compact: true).scaleEffect(0.85)
+                                Text("#\(s.number)").foregroundStyle(Color.syMuted)
+                                Text(s.title).lineLimit(1).fontWeight(s.number == current ? .semibold : .regular)
+                                Spacer(minLength: 6)
+                                BranchChip(name: s.headRefName, color: s.number == current ? .syViolet : .sySlate)
+                            }
+                            .font(.callout)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(s.number == current ? Color.syIndigo.opacity(0.12) : .clear)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(s.number == current)
+                    }
+                }
+                .padding(.vertical, 4)
+                .transition(.opacity)
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: 9).fill(Color.syIndigo.opacity(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.syIndigo.opacity(0.28)))
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+    }
+
+    private func navButton(_ s: StackPR, icon: String, help: String) -> some View {
+        Button {
+            app.open(.pr(ItemRef(repo: repo, number: s.number)))
+        } label: {
+            Label("#\(s.number)", systemImage: icon).labelStyle(.titleAndIcon).font(.caption.weight(.medium))
+        }
+        .buttonStyle(.borderless)
+        .help("\(help): #\(s.number) \(s.title)")
     }
 }
 

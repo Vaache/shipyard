@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.openWindow) private var openWindow
     @State private var splashHold = true
 
     var body: some View {
@@ -20,6 +21,8 @@ struct RootView: View {
             try? await Task.sleep(nanoseconds: 750_000_000)
             splashHold = false
         }
+        .task { await Updater.shared.checkOnLaunch() }
+        .onChange(of: Updater.shared.presentRequest) { openWindow(id: "update") }
         .environment(\.locale, Loc.shared.lang.locale)
     }
 }

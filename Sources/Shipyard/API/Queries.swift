@@ -2,16 +2,29 @@ import Foundation
 
 enum Q {
     static let prItemFragment = """
-    fragment PRItem on PullRequest { number title url prState: state isDraft createdAt updatedAt author { login avatarUrl } repository { nameWithOwner } reviewDecision additions deletions comments { totalCount } labels(first: 6) { nodes { name color } } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
+    fragment PRItem on PullRequest { number title url prState: state isDraft createdAt updatedAt baseRefName author { login avatarUrl } repository { nameWithOwner defaultBranchRef { name } } reviewDecision additions deletions comments { totalCount } labels(first: 6) { nodes { name color } } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
     """
 
     static let repoPullRequests = """
     query($o: String!, $n: String!, $b: String, $states: [PullRequestState!], $first: Int!) { repository(owner: $o, name: $n) { pullRequests(headRefName: $b, states: $states, first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { __typename ...PRItem } } } }
     """ + prItemFragment
 
+    static let stackNode = "fragment StackPR on PullRequest { number title state isDraft headRefName baseRefName }"
+
+    static let prStack = """
+    query($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { defaultBranchRef { name } pullRequest(number: $num) { ...StackPR stack { entries(first: 30) { nodes { position pullRequest { ...StackPR } } } } } } }
+    """ + stackNode
+
+    static let prStackNeighbors = """
+    query($o: String!, $n: String!, $head: String!, $base: String!) { repository(owner: $o, name: $n) {
+      parents: pullRequests(headRefName: $base, states: [OPEN, MERGED], first: 3, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...StackPR } }
+      children: pullRequests(baseRefName: $head, states: [OPEN, MERGED], first: 5, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...StackPR } }
+    } }
+    """ + stackNode
+
     static let itemFragments = """
-    fragment PRItem on PullRequest { number title url prState: state isDraft createdAt updatedAt author { login avatarUrl } repository { nameWithOwner } reviewDecision additions deletions comments { totalCount } labels(first: 6) { nodes { name color } } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
-    fragment IssueItem on Issue { number title url issueState: state stateReason createdAt updatedAt author { login avatarUrl } repository { nameWithOwner } comments { totalCount } labels(first: 6) { nodes { name color } } }
+    fragment PRItem on PullRequest { number title url prState: state isDraft createdAt updatedAt baseRefName author { login avatarUrl } repository { nameWithOwner defaultBranchRef { name } } reviewDecision additions deletions comments { totalCount } labels(first: 6) { nodes { name color } } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
+    fragment IssueItem on Issue { number title url issueState: state stateReason createdAt updatedAt author { login avatarUrl } repository { nameWithOwner defaultBranchRef { name } } comments { totalCount } labels(first: 6) { nodes { name color } } }
     """
 
     static let search = """

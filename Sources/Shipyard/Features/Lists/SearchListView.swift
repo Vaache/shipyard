@@ -210,6 +210,14 @@ struct ItemRow: View {
                         Label("\(item.comments.totalCount)", systemImage: "bubble.left").font(.caption).foregroundStyle(Color.syMuted).labelStyle(.titleAndIcon)
                     }
                 }
+                if let base = item.stackedOn {
+                    Label(t("в стеке на \(base)", "stacked on \(base)"), systemImage: "square.stack.3d.up")
+                        .font(.caption)
+                        .foregroundStyle(Color.syIndigo)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(base)
+                }
                 if let labels = item.labels?.nodes, !labels.isEmpty {
                     HStack(spacing: 4) { ForEach(labels.prefix(4), id: \.name) { LabelChip(label: $0) } }
                 }

@@ -188,7 +188,7 @@ footer a:hover{color:var(--text)}
       <div class="card reveal">
         <div class="ic" style="background:rgba(167,139,250,.14);color:var(--violet)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V10a3 3 0 0 0-3-3h-4"/><path d="m13 5-2 2 2 2"/></svg></div>
         <h4>Full pull request review</h4>
-        <p>Conversation, review threads, commits, checks and files. Comment, approve, request changes and merge.</p>
+        <p>Conversation, review threads, commits, checks and files. Comment, approve, request changes, merge — and see stacked PRs as one chain.</p>
       </div>
       <div class="card reveal">
         <div class="ic" style="background:rgba(251,113,133,.14);color:var(--coral)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></div>
@@ -260,7 +260,7 @@ footer a:hover{color:var(--text)}
     <div class="steps">
       <div class="step reveal"><h4>Download</h4><p>Get the latest universal DMG from GitHub Releases.</p></div>
       <div class="step reveal"><h4>Drag to Applications</h4><p>Open the DMG and drop Shipyard into your Applications folder.</p></div>
-      <div class="step reveal"><h4>Allow first launch</h4><p>System Settings → Privacy &amp; Security → Open Anyway, or run the command below.</p></div>
+      <div class="step reveal"><h4>Allow first launch</h4><p>System Settings → Privacy &amp; Security → Open Anyway. The DMG has a short guide, or run the command below.</p></div>
     </div>
     <div class="code reveal"><code id="cmd">xattr -dr com.apple.quarantine /Applications/Shipyard.app</code><button type="button" id="copy">Copy</button></div>
     <div class="req reveal">
@@ -276,6 +276,7 @@ footer a:hover{color:var(--text)}
       <details class="reveal"><summary>Is this an official GitHub or Anthropic app?</summary><p>No. Shipyard is an independent open-source project. It uses the public GitHub API and runs the official Claude Code CLI that you install yourself.</p></details>
       <details class="reveal"><summary>Where does my data go?</summary><p>Straight from your Mac to api.github.com. Your token is stored in the macOS Keychain. Shipyard has no backend and no analytics.</p></details>
       <details class="reveal"><summary>Do I need Claude Code?</summary><p>No. Everything GitHub-related works without it. The Claude Code workspace and “Fix with Claude Code” light up once the CLI is installed and signed in.</p></details>
+      <details class="reveal"><summary>How do I update?</summary><p>Choose <b>Shipyard → Check for Updates…</b>. Shipyard downloads the new release from GitHub, installs it and restarts. It also checks once a day on its own; you can turn that off in Settings.</p></details>
       <details class="reveal"><summary>How does sign-in to Claude work?</summary><p>Shipyard never sees your Claude credentials. It runs <code>claude auth login</code>, which opens the official sign-in page in your browser.</p></details>
     </div>
   </div>

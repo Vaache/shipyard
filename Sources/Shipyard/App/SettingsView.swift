@@ -10,6 +10,8 @@ struct SettingsView: View {
     @State private var confirmClaudeLogout = false
     @State private var loggingOut = false
     @State private var showAddProfile = false
+    @AppStorage(Updater.autoCheckKey) private var autoCheckUpdates = true
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Form {
@@ -121,6 +123,21 @@ struct SettingsView: View {
                     .foregroundStyle(Color.syMuted)
             } header: {
                 SettingsHeader(title: "Claude Code", icon: "sparkles", color: .syCoral)
+            }
+            Section {
+                Toggle(t("Проверять обновления автоматически", "Check for updates automatically"), isOn: $autoCheckUpdates)
+                HStack {
+                    Text(t("Текущая версия \(Updater.shared.currentVersion)", "Current version \(Updater.shared.currentVersion)"))
+                        .foregroundStyle(Color.syMuted)
+                    Spacer()
+                    Button(t("Проверить сейчас", "Check Now")) {
+                        openWindow(id: "update")
+                        Task { await Updater.shared.check(userInitiated: true) }
+                    }
+                    .disabled(Updater.shared.isBusy)
+                }
+            } header: {
+                SettingsHeader(title: t("Обновления", "Updates"), icon: "arrow.down.circle", color: .syGreen)
             }
             Section {
                 TextField("Client ID", text: $clientID)
