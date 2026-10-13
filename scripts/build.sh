@@ -6,8 +6,11 @@ APP="build/GitHub Lite.app"
 SIGN_ID="${SIGN_ID:-$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/{print $2; exit}')}"
 
 if [ "${UNIVERSAL:-0}" = "1" ]; then
-    swift build -c release --arch arm64 --arch x86_64
-    BIN=.build/apple/Products/Release/GitHubLite
+    swift build -c release --arch arm64
+    swift build -c release --arch x86_64
+    mkdir -p build
+    lipo -create .build/arm64-apple-macosx/release/GitHubLite .build/x86_64-apple-macosx/release/GitHubLite -output build/GitHubLite-universal
+    BIN=build/GitHubLite-universal
 else
     swift build -c release
     BIN=.build/release/GitHubLite
