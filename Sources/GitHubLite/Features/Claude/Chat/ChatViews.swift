@@ -140,10 +140,24 @@ struct ErrorBanner: View {
     let text: String
     let retry: () -> Void
 
+    private var looksLikeAuth: Bool {
+        let s = text.lowercased()
+        return ["login", "log in", "logged in", "auth", "api key", "credential", "401", "oauth", "token"].contains { s.contains($0) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(text, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).textSelection(.enabled)
-            Button(t("Перезапустить сессию", "Restart session"), action: retry).controlSize(.small)
+            HStack {
+                Button(t("Перезапустить сессию", "Restart session"), action: retry).controlSize(.small)
+                if looksLikeAuth {
+                    Button(t("Проверить вход в Claude", "Check Claude sign-in")) {
+                        Task { await ClaudeAccountStore.shared.refresh() }
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
+                }
+            }
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.08)))

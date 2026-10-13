@@ -55,6 +55,21 @@ struct SettingsView: View {
                 .onChange(of: pollInterval) { app.startPolling() }
             }
             Section("Claude Code") {
+                switch ClaudeAccountStore.shared.status {
+                case .loggedIn(let info):
+                    ClaudeAccountCard(info: info, compact: true)
+                case .notInstalled:
+                    Text(t("claude CLI не установлен", "claude CLI isn't installed")).foregroundStyle(.secondary)
+                default:
+                    HStack {
+                        Text(t("Вход в Claude не выполнен", "Not signed in to Claude")).foregroundStyle(.secondary)
+                        Spacer()
+                        Button(t("Войти…", "Sign in…")) {
+                            app.section = .claude
+                            NSApp.activate(ignoringOtherApps: true)
+                        }
+                    }
+                }
                 Picker(t("Усыплять сессии после простоя", "Sleep idle sessions after"), selection: Binding(get: { app.claude.idleMinutes }, set: { app.claude.idleMinutes = $0 })) {
                     Text(t("Никогда", "Never")).tag(0)
                     Text(t("5 минут", "5 minutes")).tag(5)
@@ -71,6 +86,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .task { await ClaudeAccountStore.shared.refresh() }
         .frame(width: 500, height: 560)
         .padding(.vertical, 10)
     }

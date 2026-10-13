@@ -45,9 +45,20 @@ struct ClaudeProjectsColumn: View {
 
     var body: some View {
         List {
-            if !ws.cliAvailable {
-                Label(t("claude CLI не найден. Установите Claude Code.", "claude CLI not found. Install Claude Code."), systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
+            Section {
+                switch ClaudeAccountStore.shared.status {
+                case .loggedIn(let info):
+                    ClaudeAccountCard(info: info, compact: true)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                case .loggedOut:
+                    Label(t("Вход в Claude не выполнен — войдите справа", "Not signed in to Claude — sign in on the right"), systemImage: "person.crop.circle.badge.exclamationmark")
+                        .foregroundStyle(.orange)
+                case .notInstalled:
+                    Label(t("claude CLI не найден — инструкция справа", "claude CLI not found — see the right side"), systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                default:
+                    EmptyView()
+                }
             }
             if !ws.tabs.isEmpty {
                 Section {
@@ -118,7 +129,11 @@ struct ClaudeProjectsColumn: View {
                 Button { Task { await ws.reloadProjects() } } label: { Label(t("Обновить", "Refresh"), systemImage: "arrow.clockwise") }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await ClaudeAccountStore.shared.refresh() }
+        }
         .task {
+            await ClaudeAccountStore.shared.refresh()
             await ws.reloadProjects()
             if expanded.isEmpty, let first = ws.projects.first { expanded.insert(first.id) }
         }
@@ -259,8 +274,13 @@ struct ClaudeWorkspaceView: View {
 
     var body: some View {
         let ws = app.claude
+        let account = ClaudeAccountStore.shared
         Group {
-            if let tab = ws.selectedTab {
+            if case .loggedOut = account.status {
+                ClaudeAuthView()
+            } else if case .notInstalled = account.status {
+                ClaudeAuthView()
+            } else if let tab = ws.selectedTab {
                 HSplitView {
                     VStack(spacing: 0) {
                         ClaudeTabBar()
