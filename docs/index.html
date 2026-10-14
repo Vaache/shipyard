@@ -56,10 +56,7 @@ h1 .grad{color:var(--muted)}
 .shot{position:relative;margin:64px auto 0;max-width:1100px}
 .shot:before{display:none}
 .shot img{display:block;width:100%;height:auto;filter:drop-shadow(0 24px 40px rgba(0,0,0,.4))}
-.tour-head{margin-top:48px}
-.tour-head h3{margin:0 0 6px;font-size:20px;letter-spacing:-.01em}
-.tour-head p{margin:0;color:var(--muted);font-size:16px}
-.tour-video{margin:20px auto 0;width:100%;max-width:1100px;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#0c1220;filter:drop-shadow(0 24px 40px rgba(0,0,0,.4))}
+.tour-video{margin:56px auto 0;width:100%;max-width:1100px;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#0c1220;filter:drop-shadow(0 24px 40px rgba(0,0,0,.4))}
 .tour-video video{display:block;width:100%;height:100%;object-fit:cover;cursor:pointer;background:#0c1220}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .gallery{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:48px}
@@ -168,6 +165,15 @@ footer a:hover{color:var(--text)}
     </div>
     <div class="meta"><a href="https://github.com/Vaache/shipyard/releases/latest" data-version>Version 2.4.1</a> · Universal · Apple Silicon &amp; Intel · macOS 14 Sonoma or later · ~9 MB</div>
 
+    <figure class="tour-video reveal">
+      <video muted loop playsinline preload="none" poster="img/shipyard-web-poster.jpg" width="1920" height="1080" aria-label="Shipyard product tour">
+        <source src="img/shipyard-web-1920x1080.webm" type="video/webm">
+        <source src="img/shipyard-web-1280x720.mp4" type="video/mp4">
+      </video>
+      <span class="sr-only">Click the video to play or pause it.</span>
+    </figure>
+    <p class="demo-hint tour-hint">One minute through the app: diffs, review, merge, Fix with Claude Code and accounts.</p>
+
     <div class="shot reveal">
       <div id="demo" class="demo" role="application" aria-label="Interactive Shipyard demo">
         <noscript><img src="img/pr-files.webp" width="1600" height="958" alt="Shipyard showing a pull request's changed files"></noscript>
@@ -246,17 +252,6 @@ footer a:hover{color:var(--text)}
       <h2>Built for the way you review.</h2>
       <p class="sub">Every screen is a real screenshot of Shipyard running on a public repository.</p>
     </div>
-    <div class="tour-head reveal">
-      <h3>Watch the tour</h3>
-      <p>One minute through the app: diffs, review, merge, Fix with Claude Code and accounts.</p>
-    </div>
-    <figure class="tour-video reveal">
-      <video muted loop playsinline preload="none" poster="img/shipyard-web-poster.jpg" width="1920" height="1080" aria-label="Shipyard product tour">
-        <source src="img/shipyard-web-1920x1080.webm" type="video/webm">
-        <source src="img/shipyard-web-1280x720.mp4" type="video/mp4">
-      </video>
-      <span class="sr-only">Click the video to play or pause it.</span>
-    </figure>
     <div class="gallery">
       <figure class="reveal wide"><img src="img/pr-files.webp" width="1600" height="958" loading="lazy" alt="Changed files of a pull request with a fast diff viewer"><figcaption><b>Diffs that keep up.</b> A native diff viewer that scrolls thousands of lines smoothly, with a file list and viewed checkmarks.</figcaption></figure>
       <figure class="reveal"><img src="img/pr-conversation.webp" width="1600" height="958" loading="lazy" alt="Pull request conversation with merge status and unresolved comments"><figcaption><b>The whole conversation.</b> Reviews, threads and checks, plus one click to hand unresolved comments to Claude Code.</figcaption></figure>
