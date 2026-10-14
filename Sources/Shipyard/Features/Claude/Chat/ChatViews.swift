@@ -168,8 +168,10 @@ struct ErrorBanner: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.syAmber.opacity(0.08)))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.syAmber.opacity(0.35)))
+        .padding(.leading, 3)
+        .background(Color.syRaised)
+        .overlay(alignment: .leading) { Rectangle().fill(Color.syAmber).frame(width: 3) }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -377,7 +379,7 @@ struct ToolCallView: View {
     }
 
     private var borderColor: Color {
-        if call.permission?.resolved == false { return Color.syAmber.opacity(0.6) }
+        if call.permission?.resolved == false { return .clear }
         switch call.status {
         case .error: return Color.syRed.opacity(0.5)
         case .denied: return Color.syAmber.opacity(0.5)
@@ -591,41 +593,45 @@ struct PermissionCard: View {
                 }
                 denyRow(placeholder: "What to change in the plan…")
             default:
-                Text(question).font(.callout.weight(.semibold))
+                Text(question).font(.caption).foregroundStyle(Color.syAmber)
                 if let d = request.description, !d.isEmpty { Text(d).font(.callout).foregroundStyle(Color.syMuted) }
                 if let path = request.blockedPath {
                     Text(ToolPresentation.relative(path, folder)).font(.caption.monospaced()).foregroundStyle(Color.syMuted)
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    Button { chat.respond(request, allow: true) } label: {
-                        Label("Yes, allow", systemImage: "checkmark").frame(maxWidth: .infinity, alignment: .leading)
+                    HStack {
+                        Button("Allow") { chat.respond(request, allow: true) }
+                            .buttonStyle(.borderedProminent)
+                            .keyboardShortcut(.return, modifiers: [.command])
+                        Spacer()
+                        Text("⌘↩").font(.caption).foregroundStyle(Color.syDim)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.return, modifiers: [.command])
                     ForEach(Array(request.suggestions.enumerated()), id: \.offset) { _, s in
                         Button { chat.respond(request, allow: true, always: s) } label: {
-                            Label("Yes, and don't ask again for: " + s.label, systemImage: "checkmark.seal")
+                            Text("Allow, and don't ask again for " + s.label)
                                 .lineLimit(1)
-                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .buttonStyle(.link)
                     }
                 }
                 denyRow(placeholder: "No — tell Claude what to do instead…")
             }
         }
         .padding(12)
+        .padding(.leading, 3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.syAmber.opacity(0.08)))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.syAmber.opacity(0.35)))
+        .background(Color.syRaised)
+        .overlay(alignment: .leading) { Rectangle().fill(Color.syAmber).frame(width: 3) }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private var question: String {
         switch request.toolName {
-        case "Bash": return "Run this command?"
-        case "Edit", "MultiEdit": return "Make this edit?"
-        case "Write": return "Write this file?"
-        case "WebFetch": return "Fetch this URL?"
-        default: return "Allow \(request.toolName)?"
+        case "Bash": return "Claude wants to run a command"
+        case "Edit", "MultiEdit": return "Claude wants to edit a file"
+        case "Write": return "Claude wants to write a file"
+        case "WebFetch": return "Claude wants to fetch a URL"
+        default: return "Claude wants to use \(request.toolName)"
         }
     }
 

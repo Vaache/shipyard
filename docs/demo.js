@@ -362,7 +362,7 @@
       '<div class="d-ln d"><span>25</span><span></span><span>−</span><span>    fetchResults(debounced)</span></div>' +
       '<div class="d-ln a"><span></span><span>25</span><span>+</span><span>    fetchResults(debounced, ctrl.signal)</span></div>' +
       '<div class="d-ln a"><span></span><span>29</span><span>+</span><span>    return () =&gt; ctrl.abort()</span></div></div>';
-    if (step.k === "perm") return '<div class="d-perm" id="d-perm"><b>Run this command?</b><code>$ npm test -- search</code><div class="d-pacts"><button data-allow>' + icon("check", "ti") + 'Yes, allow</button><button data-deny>No</button></div></div>';
+    if (step.k === "perm") return '<div class="d-perm" id="d-perm"><small>Claude wants to run a command</small><code>npm test -- search</code><div class="d-pacts"><button data-allow>Allow</button><button data-deny>Deny</button><kbd>⌘↩</kbd></div></div>';
     if (step.k === "bash") return '<div class="d-toolx"><div class="d-tool"><span class="d-ok">' + icon("check", "ti") + '</span><b>Bash</b><small>npm test -- search</small></div><pre> ✓ src/search/SearchBar.test.tsx (8)\n ✓ src/hooks/useDebounce.test.ts (4)\n\n Tests  12 passed</pre></div>';
     if (step.k === "denied") return '<div class="d-ans dim">Skipped the tests. Tell me what to do instead.</div>';
     return "";
