@@ -17,13 +17,6 @@ struct UpdateView: View {
                 errorRow(message)
                     .transition(.rise)
             }
-            if case .manualInstall = updater.state {
-                Label("Shipyard can't replace itself in its current location. The disk image is open in Finder — drag Shipyard to Applications.", systemImage: "info.circle")
-                    .font(.callout)
-                    .foregroundStyle(Color.syMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .transition(.rise)
-            }
             buttons
         }
         .padding(20)
@@ -66,7 +59,7 @@ struct UpdateView: View {
         case .failed: return updater.release.map { "Shipyard \($0.version) is available" } ?? "Couldn't check for updates"
         case .installing: return "Preparing update…"
         case .readyToRelaunch: return "Shipyard \(updater.release?.version ?? "") is ready to install"
-        case .available, .downloading, .manualInstall:
+        case .available, .downloading:
             return "Shipyard \(updater.release?.version ?? "") is available"
         }
     }
@@ -153,13 +146,7 @@ struct UpdateView: View {
                 Spacer()
                 Button("Later") { close() }
                     .keyboardShortcut(.cancelAction)
-                Button("Restart to Update") { updater.relaunch() }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-            case .manualInstall:
-                Button("View on GitHub") { openInBrowser(updater.pageURL) }
-                Spacer()
-                Button("Done") { close() }
+                Button("Restart to Update") { Task { await updater.relaunch() } }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
             default:

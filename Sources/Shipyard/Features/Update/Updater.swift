@@ -23,6 +23,7 @@ enum UpdateError: LocalizedError {
     case bundleMismatch
     case versionMismatch(String, String)
     case install(String)
+    case cancelled
 
     var errorDescription: String? {
         switch self {
@@ -38,7 +39,8 @@ enum UpdateError: LocalizedError {
         case .copy: return "Couldn't copy the new version."
         case .bundleMismatch: return "The app in the disk image has a different bundle identifier."
         case .versionMismatch(let expected, let found): return "Expected version \(expected), found \(found)."
-        case .install(let s): return "Couldn't start the installation: \(s)"
+        case .install(let s): return "Couldn't install the update: \(s)"
+        case .cancelled: return "Installation was cancelled. Shipyard needs an administrator password to replace itself in this folder."
         }
     }
 }
@@ -54,7 +56,6 @@ final class Updater {
         case downloading(Double)
         case installing
         case readyToRelaunch
-        case manualInstall
         case failed(String)
     }
 
@@ -96,7 +97,7 @@ final class Updater {
 
     func check(userInitiated: Bool) async {
         switch state {
-        case .checking, .downloading, .installing, .readyToRelaunch, .manualInstall:
+        case .checking, .downloading, .installing, .readyToRelaunch:
             if userInitiated { presentRequest += 1 }
             return
         default:
@@ -150,14 +151,6 @@ final class Updater {
                     if case .downloading = Updater.shared.state { Updater.shared.state = .downloading(progress) }
                 }
             }
-            let target = Bundle.main.bundleURL
-            let replaceable = await Task.detached { Self.canReplace(target) }.value
-            guard replaceable else {
-                NSWorkspace.shared.open(dmg)
-                state = .manualInstall
-                presentRequest += 1
-                return
-            }
             state = .installing
             let bundleID = Bundle.main.bundleIdentifier
             let version = release.version
@@ -169,34 +162,94 @@ final class Updater {
         presentRequest += 1
     }
 
-    func relaunch() {
+    func relaunch() async {
         guard case .readyToRelaunch = state, let staged = stagedApp else { return }
-        let target = Bundle.main.bundleURL
-        let script = """
-        while kill -0 "$1" 2>/dev/null; do sleep 0.2; done
-        if /usr/bin/ditto "$2" "$3.update"; then
-          rm -rf "$3" && mv "$3.update" "$3"
-        fi
-        rm -rf "$3.update" "$2"
-        /usr/bin/open "$3"
-        rm -f "$0"
-        """
+        let target = Self.installedBundleURL
+        state = .installing
+        do {
+            if await Task.detached(operation: { Self.canReplace(target) }).value {
+                try Self.spawn(Self.swapScript, [String(ProcessInfo.processInfo.processIdentifier), staged.path, target.path])
+            } else {
+                try await Task.detached { try Self.installAsAdmin(staged: staged, target: target) }.value
+                try Self.spawn(Self.reopenScript, [String(ProcessInfo.processInfo.processIdentifier), target.path])
+            }
+        } catch {
+            state = .failed(error.localizedDescription)
+            presentRequest += 1
+            return
+        }
+        stagedApp = nil
+        NSApp.terminate(nil)
+    }
+
+    private static let swapScript = """
+    while kill -0 "$1" 2>/dev/null; do sleep 0.2; done
+    if /usr/bin/ditto "$2" "$3.update"; then
+      rm -rf "$3" && mv "$3.update" "$3"
+    fi
+    rm -rf "$3.update" "$2"
+    /usr/bin/xattr -dr com.apple.quarantine "$3" 2>/dev/null
+    /usr/bin/open "$3"
+    rm -f "$0"
+    """
+
+    private static let reopenScript = """
+    while kill -0 "$1" 2>/dev/null; do sleep 0.2; done
+    /usr/bin/open "$2"
+    rm -f "$0"
+    """
+
+    private static func spawn(_ script: String, _ args: [String]) throws {
         let scriptURL = FileManager.default.temporaryDirectory.appendingPathComponent("shipyard-update-\(UUID().uuidString).sh")
         do {
             try script.write(to: scriptURL, atomically: true, encoding: .utf8)
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/bin/sh")
-            p.arguments = [scriptURL.path, String(ProcessInfo.processInfo.processIdentifier), staged.path, target.path]
+            p.arguments = [scriptURL.path] + args
             p.standardInput = FileHandle.nullDevice
             p.standardOutput = FileHandle.nullDevice
             p.standardError = FileHandle.nullDevice
             try p.run()
         } catch {
-            state = .failed(UpdateError.install(error.localizedDescription).localizedDescription)
-            return
+            throw UpdateError.install(error.localizedDescription)
         }
-        state = .installing
-        NSApp.terminate(nil)
+    }
+
+    nonisolated static func installAsAdmin(staged: URL, target: URL) throws {
+        func q(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+        let update = target.path + ".update"
+        let command = [
+            "/usr/bin/ditto \(q(staged.path)) \(q(update))",
+            "rm -rf \(q(target.path))",
+            "mv \(q(update)) \(q(target.path))",
+            "/usr/bin/xattr -dr com.apple.quarantine \(q(target.path))",
+            "chown -R \(getuid()):staff \(q(target.path))"
+        ].joined(separator: " && ")
+        let escaped = command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let result = run("/usr/bin/osascript", ["-e", "do shell script \"\(escaped)\" with administrator privileges with prompt \"Shipyard wants to install an update.\""])
+        try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
+        guard result.ok else {
+            if result.out.contains("-128") { throw UpdateError.cancelled }
+            throw UpdateError.install(result.out.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+    }
+
+    nonisolated static var installedBundleURL: URL {
+        let current = Bundle.main.bundleURL
+        guard current.path.contains("/AppTranslocation/") else { return current }
+        typealias OriginalPath = @convention(c) (CFURL, UnsafeMutablePointer<Unmanaged<CFError>?>?) -> Unmanaged<CFURL>?
+        if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "SecTranslocateCreateOriginalPathForURL") {
+            let original = unsafeBitCast(symbol, to: OriginalPath.self)
+            if let url = original(current as CFURL, nil)?.takeRetainedValue() { return url as URL }
+        }
+        return URL(fileURLWithPath: "/Applications", isDirectory: true).appendingPathComponent(current.lastPathComponent)
+    }
+
+    nonisolated static func clearQuarantine() {
+        let target = installedBundleURL
+        guard target.pathExtension == "app",
+              getxattr(target.path, "com.apple.quarantine", nil, 0, 0, 0) >= 0 else { return }
+        _ = run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", target.path])
     }
 
     nonisolated static var updatesDir: URL {
@@ -274,7 +327,8 @@ final class Updater {
     nonisolated static func canReplace(_ target: URL) -> Bool {
         guard target.pathExtension == "app" else { return false }
         let fm = FileManager.default
-        return fm.isWritableFile(atPath: target.deletingLastPathComponent().path) && fm.isWritableFile(atPath: target.path)
+        guard fm.isWritableFile(atPath: target.deletingLastPathComponent().path) else { return false }
+        return !fm.fileExists(atPath: target.path) || fm.isWritableFile(atPath: target.path)
     }
 
     nonisolated static func stage(dmg: URL, version: String, bundleID: String?) throws -> URL {

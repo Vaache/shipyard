@@ -7,6 +7,7 @@ enum Main {
             SelfTest.run()
         } else {
             LegacyMigration.run()
+            DispatchQueue.global(qos: .utility).async { Updater.clearQuarantine() }
             UserDefaults.standard.register(defaults: ["pollInterval": 30.0])
             ShipyardApp.main()
         }
