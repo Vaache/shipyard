@@ -151,22 +151,57 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .background(SidebarFocusProbe())
         .safeAreaInset(edge: .bottom) {
-            if let user = app.user {
-                HStack(spacing: 8) {
-                    Avatar(url: user.avatarUrl, size: 24)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(user.name ?? user.login).font(.callout.weight(.medium)).lineLimit(1)
-                        Text("@\(user.login)").font(.caption).foregroundStyle(Color.syMuted)
-                    }
-                    Spacer()
-                    SettingsLink { Image(systemName: "gearshape") }.buttonStyle(.borderless)
+            VStack(spacing: 0) {
+                if let version = Updater.shared.availableVersion {
+                    UpdateAvailableRow(version: version)
                 }
-                .padding(10)
-                .background(Theme.isBrand ? AnyShapeStyle(Color.sySidebar) : AnyShapeStyle(.clear))
-                .overlay(alignment: .top) { if Theme.isBrand { Rectangle().fill(Color.syLine).frame(height: 1) } }
+                userFooter
             }
         }
+    }
+
+    @ViewBuilder
+    private var userFooter: some View {
+        if let user = app.user {
+            HStack(spacing: 8) {
+                Avatar(url: user.avatarUrl, size: 24)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(user.name ?? user.login).font(.callout.weight(.medium)).lineLimit(1)
+                    Text("@\(user.login)").font(.caption).foregroundStyle(Color.syMuted)
+                }
+                Spacer()
+                SettingsLink { Image(systemName: "gearshape") }.buttonStyle(.borderless)
+            }
+            .padding(10)
+            .background(Theme.isBrand ? AnyShapeStyle(Color.sySidebar) : AnyShapeStyle(.clear))
+            .overlay(alignment: .top) { if Theme.isBrand { Rectangle().fill(Color.syLine).frame(height: 1) } }
+        }
+    }
+}
+
+struct UpdateAvailableRow: View {
+    let version: String
+
+    var body: some View {
+        Button { Updater.shared.present() } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.sySky)
+                Text("Update to \(version)").foregroundStyle(Color.syText)
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(Color.syDim)
+            }
+            .font(.callout.weight(.medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.sySky.opacity(0.12)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
+        .help("A new version of Shipyard is available")
     }
 }
 
@@ -180,6 +215,55 @@ struct SidebarRow: View {
             Text(title)
         } icon: {
             SidebarIcon(systemImage: icon, color: color)
+        }
+    }
+}
+
+struct SidebarFocusProbe: NSViewRepresentable {
+    func makeNSView(context: Context) -> ProbeView { ProbeView() }
+    func updateNSView(_ view: ProbeView, context: Context) {}
+
+    final class ProbeView: NSView {
+        private var done = false
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            done = false
+            guard window != nil else { return }
+            DispatchQueue.main.async { [weak self] in self?.apply() }
+        }
+
+        override func layout() {
+            super.layout()
+            if !done { apply() }
+        }
+
+        private func apply() {
+            guard !done, window != nil else { return }
+            let target = convert(bounds, to: nil)
+            guard target.width > 0 else { return }
+            var ancestor = superview
+            while let a = ancestor {
+                var queue: [NSView] = [a]
+                while !queue.isEmpty {
+                    let v = queue.removeFirst()
+                    if let table = v as? NSTableView {
+                        let r = table.enclosingScrollView.map { $0.convert($0.bounds, to: nil) } ?? .zero
+                        if r.intersects(target), abs(r.width - target.width) < 2 {
+                            done = true
+                            if !table.refusesFirstResponder {
+                                table.refusesFirstResponder = true
+                                if table.window?.firstResponder === table { table.window?.makeFirstResponder(nil) }
+                            }
+                            return
+                        }
+                    }
+                    queue.append(contentsOf: v.subviews)
+                }
+                ancestor = a.superview
+            }
         }
     }
 }

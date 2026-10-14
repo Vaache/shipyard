@@ -36,6 +36,22 @@ struct MenuBarView: View {
             .padding(12)
             .background(Theme.isBrand ? Color.syBar : Color.clear)
             Rectangle().fill(Color.syLine).frame(height: 1)
+            if let version = Updater.shared.availableVersion {
+                Button {
+                    openWindow(id: "update")
+                    NSApp.activate(ignoringOtherApps: true)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.sySky)
+                        Text("Update to \(version)").foregroundStyle(Color.syText)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(MenuRowStyle())
+                .padding(6)
+                Rectangle().fill(Color.syLine).frame(height: 1)
+            }
             if app.phase != .loggedIn {
                 Button("Sign in…") { show(nil) }.padding(12)
             } else if ready {

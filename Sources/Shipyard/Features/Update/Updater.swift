@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import UserNotifications
 
 struct Release: Equatable {
     let version: String
@@ -63,6 +64,8 @@ final class Updater {
     static let autoCheckKey = "update.autoCheck"
     static let lastCheckKey = "update.lastCheck"
     static let skippedVersionKey = "update.skippedVersion"
+    static let announcedVersionKey = "update.announcedVersion"
+    static let checkInterval: TimeInterval = 6 * 3600
     static let releasesPage = "https://github.com/Vaache/shipyard/releases/latest"
     nonisolated static let latestAPI = URL(string: "https://api.github.com/repos/Vaache/shipyard/releases/latest")!
     nonisolated static let userAgent = "Shipyard-macOS"
@@ -71,6 +74,7 @@ final class Updater {
     private(set) var release: Release?
     private(set) var presentRequest = 0
     private var launchCheckDone = false
+    private var periodicTask: Task<Void, Never>?
     private var stagedApp: URL?
 
     let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
@@ -86,13 +90,39 @@ final class Updater {
 
     var pageURL: String { release?.pageURL ?? Self.releasesPage }
 
+    var availableVersion: String? {
+        if case .available(let r) = state { return r.version }
+        return nil
+    }
+
+    func present() {
+        presentRequest += 1
+    }
+
     func checkOnLaunch() async {
         guard !launchCheckDone else { return }
         launchCheckDone = true
         let defaults = UserDefaults.standard
+        UpdateNotifier.shared.install()
+        startPeriodicChecks()
         guard defaults.object(forKey: Self.autoCheckKey) as? Bool ?? true else { return }
-        if let last = defaults.object(forKey: Self.lastCheckKey) as? Date, Date().timeIntervalSince(last) < 86_400 { return }
+        if let last = defaults.object(forKey: Self.lastCheckKey) as? Date, Date().timeIntervalSince(last) < Self.checkInterval { return }
         await check(userInitiated: false)
+    }
+
+    private func startPeriodicChecks() {
+        guard periodicTask == nil else { return }
+        periodicTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3600 * 1_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                let defaults = UserDefaults.standard
+                guard defaults.object(forKey: Self.autoCheckKey) as? Bool ?? true else { continue }
+                if let last = defaults.object(forKey: Self.lastCheckKey) as? Date, Date().timeIntervalSince(last) < Self.checkInterval { continue }
+                if case .available = self.state { continue }
+                await self.check(userInitiated: false)
+            }
+        }
     }
 
     func check(userInitiated: Bool) async {
@@ -110,8 +140,19 @@ final class Updater {
             release = latest
             if Self.compare(latest.version, currentVersion) == .orderedDescending {
                 state = .available(latest)
-                let skipped = UserDefaults.standard.string(forKey: Self.skippedVersionKey)
-                if userInitiated || skipped != latest.version { presentRequest += 1 }
+                let defaults = UserDefaults.standard
+                let skipped = defaults.string(forKey: Self.skippedVersionKey)
+                let announced = defaults.string(forKey: Self.announcedVersionKey)
+                if userInitiated {
+                    presentRequest += 1
+                } else if skipped != latest.version, announced != latest.version {
+                    defaults.set(latest.version, forKey: Self.announcedVersionKey)
+                    if NSApp.isActive {
+                        presentRequest += 1
+                    } else {
+                        UpdateNotifier.shared.post(version: latest.version)
+                    }
+                }
             } else {
                 state = .upToDate
                 if userInitiated { presentRequest += 1 }
@@ -443,5 +484,41 @@ final class DMGDownloader: NSObject, URLSessionDownloadDelegate {
         guard let c = continuation else { return }
         continuation = nil
         c.resume(with: result)
+    }
+}
+
+@MainActor
+final class UpdateNotifier: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = UpdateNotifier()
+    private var installed = false
+
+    func install() {
+        guard !installed else { return }
+        installed = true
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    func post(version: String) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Shipyard \(version) is available"
+            content.body = "Click to see what's new and update."
+            content.sound = .default
+            center.add(UNNotificationRequest(identifier: "update-\(version)", content: content, trigger: nil))
+        }
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        Task { @MainActor in
+            NSApp.activate(ignoringOtherApps: true)
+            Updater.shared.present()
+        }
+        completionHandler()
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
     }
 }
