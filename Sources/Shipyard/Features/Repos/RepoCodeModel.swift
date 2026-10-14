@@ -29,6 +29,7 @@ final class RepoCodeModel {
     var allPaths: [String]?
     var pathsTruncated = false
     var loadingPaths = false
+    @ObservationIgnored private var dirCache: [String: (entries: [TreeEntry], readme: String?)] = [:]
 
     private static let imageExts: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "icns", "tiff", "heic", "svg"]
     private static let markdownExts: Set<String> = ["md", "markdown", "mdx"]
@@ -78,28 +79,45 @@ final class RepoCodeModel {
     }
 
     func openDir(_ path: String) async {
+        let key = "\(ref)|\(path)"
+        let switching = path != dir
         dir = path
+        if let cached = dirCache[key] {
+            entries = cached.entries
+            readme = cached.readme
+            dirError = nil
+        } else if switching {
+            entries = []
+            readme = nil
+            dirError = nil
+        }
         loadingDir = true
-        defer { loadingDir = false }
+        defer { if path == dir { loadingDir = false } }
         do {
             let obj = try await api.gitObject(repo, ref: ref, path: path)
-            guard path == dir else { return }
+            guard path == dir, key == "\(ref)|\(dir)" else { return }
             guard let list = obj?.entries else {
                 entries = []
+                readme = nil
                 dirError = "Folder not found on this branch"
                 return
             }
-            entries = list.sorted { a, b in
+            let sorted = list.sorted { a, b in
                 if a.isDir != b.isDir { return a.isDir }
                 return a.name.localizedStandardCompare(b.name) == .orderedAscending
             }
+            entries = sorted
             dirError = nil
-            readme = nil
-            if entries.contains(where: { !$0.isDir && $0.name.lowercased().hasPrefix("readme") }) {
-                readme = try? await api.readmeHTML(repo, ref: ref, dir: path)
+            var html: String?
+            if sorted.contains(where: { !$0.isDir && $0.name.lowercased().hasPrefix("readme") }) {
+                html = try? await api.readmeHTML(repo, ref: ref, dir: path)
+                guard path == dir, key == "\(ref)|\(dir)" else { return }
             }
+            dirCache[key] = (sorted, html)
+            readme = html
         } catch {
             if isCancellation(error) { return }
+            guard path == dir else { return }
             dirError = error.localizedDescription
         }
     }

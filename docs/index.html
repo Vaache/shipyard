@@ -13,9 +13,9 @@
 <link rel="stylesheet" href="demo.css">
 <style>
 :root{
-  --bg:#05070f;--bg2:#0b1222;--panel:#0f172a;--panel2:#131c33;--line:rgba(148,163,184,.14);--line2:rgba(148,163,184,.24);
-  --text:#e8edf6;--muted:#93a1b8;--dim:#64748b;
-  --coral:#fb7185;--coral2:#e11d48;--violet:#a78bfa;--sky:#38bdf8;--green:#4ade80;--amber:#fbbf24;
+  --bg:#0a0f1b;--bg2:#111a2c;--panel:#152036;--panel2:#18243c;--line:rgba(160,174,196,.10);--line2:rgba(160,174,196,.18);
+  --text:#e6ebf2;--muted:#8693a8;--dim:#5f6b80;
+  --coral:#ee6f5f;--coral2:#d8513f;--violet:#9d8cf0;--sky:#5bb8ec;--green:#5dbe8a;--amber:#e8b44c;
   --radius:16px;--maxw:1160px;
   --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
 }
@@ -24,32 +24,29 @@ html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
 .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
-.glow{position:absolute;inset:0;pointer-events:none;background:
-  radial-gradient(600px 380px at 18% 8%,rgba(167,139,250,.18),transparent 70%),
-  radial-gradient(640px 420px at 82% 4%,rgba(56,189,248,.14),transparent 70%),
-  radial-gradient(800px 500px at 50% 100%,rgba(251,113,133,.08),transparent 70%)}
+.glow{display:none}
 
-nav{position:sticky;top:0;z-index:20;backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);background:rgba(5,7,15,.72);border-bottom:1px solid var(--line)}
+nav{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
 nav .wrap{display:flex;align-items:center;gap:28px;height:64px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:-.01em;font-size:17px}
 .brand img{width:30px;height:30px}
 nav .links{display:flex;gap:24px;margin-left:auto;color:var(--muted);font-size:14.5px}
 nav .links a:hover{color:var(--text)}
-.btn{display:inline-flex;align-items:center;gap:10px;border-radius:12px;padding:12px 20px;font-weight:600;font-size:15px;transition:transform .15s ease,box-shadow .2s ease,background .2s ease;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:10px;border-radius:8px;padding:11px 18px;font-weight:600;font-size:15px;transition:background .15s ease;white-space:nowrap}
 .btn svg{width:18px;height:18px;flex:none}
-.btn-primary{background:linear-gradient(180deg,#fb7185,#e11d48);color:#fff;box-shadow:0 8px 30px rgba(225,29,72,.35),inset 0 1px 0 rgba(255,255,255,.25)}
-.btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 36px rgba(225,29,72,.45),inset 0 1px 0 rgba(255,255,255,.25)}
-.btn-ghost{border:1px solid var(--line2);background:rgba(255,255,255,.03)}
+.btn-primary{background:var(--coral);color:#1a0b09}
+.btn-primary:hover{background:#f27f70}
+.btn-ghost{background:rgba(255,255,255,.05)}
 .btn-ghost:hover{background:rgba(255,255,255,.07)}
-.btn-sm{padding:8px 14px;font-size:14px;border-radius:10px}
+.btn-sm{padding:7px 13px;font-size:14px;border-radius:7px}
 
 header.hero{position:relative;padding:96px 0 40px;text-align:center}
-.hero-icon{width:132px;height:132px;margin:0 auto 26px;display:block;filter:drop-shadow(0 22px 40px rgba(0,0,0,.55))}
-.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:1px solid var(--line2);background:rgba(255,255,255,.03);color:var(--muted);font-size:13px;margin-bottom:22px}
+.hero-icon{width:132px;height:132px;margin:0 auto 26px;display:block;filter:drop-shadow(0 14px 24px rgba(0,0,0,.35))}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.05);color:var(--muted);font-size:13px;margin-bottom:22px}
 .pill b{color:var(--text);font-weight:600}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
-h1{font-size:clamp(40px,6.4vw,76px);line-height:1.02;letter-spacing:-.035em;margin:0 auto 22px;max-width:900px;font-weight:750}
-h1 .grad{background:linear-gradient(92deg,var(--violet),var(--sky) 45%,var(--coral));-webkit-background-clip:text;background-clip:text;color:transparent}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+h1{font-size:clamp(40px,6.4vw,76px);line-height:1.02;letter-spacing:-.035em;margin:0 auto 22px;max-width:900px;font-weight:650}
+h1 .grad{color:var(--muted)}
 .lead{font-size:clamp(17px,2vw,20px);color:var(--muted);max-width:680px;margin:0 auto 34px}
 .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 .meta{margin-top:16px;color:var(--dim);font-size:13.5px}
@@ -57,8 +54,8 @@ h1 .grad{background:linear-gradient(92deg,var(--violet),var(--sky) 45%,var(--cor
 .meta a:hover{color:var(--text)}
 
 .shot{position:relative;margin:64px auto 0;max-width:1100px}
-.shot:before{content:"";position:absolute;inset:8% 6% -4%;background:radial-gradient(closest-side,rgba(56,189,248,.18),transparent);filter:blur(40px);z-index:-1}
-.shot img{display:block;width:100%;height:auto;filter:drop-shadow(0 40px 60px rgba(0,0,0,.55)) drop-shadow(0 0 1px rgba(0,0,0,.6))}
+.shot:before{display:none}
+.shot img{display:block;width:100%;height:auto;filter:drop-shadow(0 24px 40px rgba(0,0,0,.4))}
 .gallery{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:48px}
 .gallery figure{margin:0}
 .gallery img{display:block;width:100%;height:auto;filter:drop-shadow(0 24px 40px rgba(0,0,0,.5))}
@@ -67,39 +64,38 @@ h1 .grad{background:linear-gradient(92deg,var(--violet),var(--sky) 45%,var(--cor
 .gallery .wide{grid-column:1/-1}
 
 section{padding:110px 0;position:relative}
-.eyebrow{color:var(--sky);font-weight:600;font-size:13.5px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
-h2{font-size:clamp(30px,4vw,46px);line-height:1.08;letter-spacing:-.028em;margin:0 0 16px;font-weight:720}
+.eyebrow{color:var(--coral);font-weight:600;font-size:15px;margin-bottom:10px}
+h2{font-size:clamp(30px,4vw,46px);line-height:1.08;letter-spacing:-.028em;margin:0 0 16px;font-weight:650}
 .sub{color:var(--muted);font-size:18px;max-width:640px;margin:0}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:52px}
-.card{position:relative;padding:26px;border-radius:var(--radius);background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.01));border:1px solid var(--line);transition:border-color .2s ease,transform .2s ease}
-.card:hover{border-color:var(--line2);transform:translateY(-2px)}
-.card .ic{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;margin-bottom:18px}
+.card{position:relative;padding:26px;border-radius:12px;background:var(--bg2)}
+.card .ic{width:24px;height:24px;display:grid;place-items:center;margin-bottom:14px;background:none!important;color:var(--coral)!important}
 .card .ic svg{width:22px;height:22px}
 .card h4{margin:0 0 8px;font-size:17.5px;letter-spacing:-.01em}
 .card p{margin:0;color:var(--muted);font-size:15px}
 
 .checks{list-style:none;padding:0;margin:28px 0 0;display:grid;gap:14px}
-.checks li{display:flex;gap:12px;color:#cbd5e1}
+.checks li{display:flex;gap:12px;color:#c7d0dc}
 .checks li svg{width:20px;height:20px;flex:none;margin-top:3px;color:var(--coral)}
 .checks b{color:#fff;font-weight:600}
 .split{display:grid;grid-template-columns:.8fr 1.2fr;gap:56px;align-items:center}
 .claude-shot img{display:block;width:100%;height:auto;filter:drop-shadow(0 30px 50px rgba(0,0,0,.55))}
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:48px;counter-reset:s}
-.step{padding:26px;border-radius:var(--radius);border:1px solid var(--line);background:rgba(255,255,255,.02)}
-.step:before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:rgba(56,189,248,.14);color:var(--sky);font-weight:700;margin-bottom:16px}
+.step{padding:26px;border-radius:var(--radius);background:var(--bg2)}
+.step:before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:rgba(91,184,236,.14);color:var(--sky);font-weight:700;margin-bottom:16px}
 .step h4{margin:0 0 6px;font-size:17px}
 .step p{margin:0;color:var(--muted);font-size:15px}
-.code{margin-top:22px;display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;border:1px solid var(--line2);background:#0b1222;font:14px var(--mono);color:#cbd5e1;overflow-x:auto}
+.code{margin-top:22px;display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:var(--bg2);font:14px var(--mono);color:#c7d0dc;overflow-x:auto}
 .code code{white-space:nowrap}
-.code button{margin-left:auto;flex:none;background:rgba(255,255,255,.06);border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:6px 12px;font:600 12.5px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer}
+.code button{margin-left:auto;flex:none;background:rgba(255,255,255,.06);border:0;color:var(--text);border-radius:8px;padding:6px 12px;font:600 12.5px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer}
 .code button:hover{background:rgba(255,255,255,.1)}
 .req{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
-.req span{font-size:13.5px;color:var(--muted);padding:6px 12px;border-radius:999px;border:1px solid var(--line)}
+.req span{font-size:13.5px;color:var(--muted);padding:6px 12px;border-radius:999px;background:var(--bg2)}
 
 .faq{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:44px;align-items:start}
 .faq-col{display:flex;flex-direction:column;gap:18px;min-width:0}
-details{border:1px solid var(--line);border-radius:14px;padding:18px 22px;background:rgba(255,255,255,.02);overflow:hidden;transition:border-color .25s ease,background .25s ease}
-details.is-open{border-color:var(--line2);background:rgba(255,255,255,.035)}
+details{border-radius:12px;padding:18px 22px;background:var(--bg2);overflow:hidden;transition:border-color .25s ease,background .25s ease}
+details.is-open{background:var(--panel)}
 summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:16px}
 summary::-webkit-details-marker{display:none}
 summary:after{content:"+";color:var(--dim);font-weight:400;font-size:22px;line-height:1;display:inline-block;transition:transform .35s cubic-bezier(.3,1.4,.5,1),color .25s}
@@ -107,14 +103,14 @@ details.is-open summary:after{transform:rotate(45deg);color:var(--text)}
 details p{color:var(--muted);margin:12px 0 0;font-size:15px}
 
 .final{text-align:center;padding:120px 0}
-.final img{width:96px;height:96px;margin-bottom:22px;filter:drop-shadow(0 18px 34px rgba(0,0,0,.5))}
+.final img{width:96px;height:96px;margin-bottom:22px;filter:drop-shadow(0 12px 22px rgba(0,0,0,.35))}
 footer{border-top:1px solid var(--line);padding:34px 0 46px;color:var(--dim);font-size:13.5px}
 footer .wrap{display:flex;gap:20px;justify-content:space-between;flex-wrap:wrap}
 footer a:hover{color:var(--text)}
 
 .reveal{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s ease}
 .reveal.in{opacity:1;transform:none}
-@media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}.btn,.card{transition:none}}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}.btn{transition:none}}
 
 @media (max-width:1000px){
   .grid{grid-template-columns:1fr 1fr}.split{grid-template-columns:1fr;gap:40px}
@@ -164,7 +160,7 @@ footer a:hover{color:var(--text)}
         View source
       </a>
     </div>
-    <div class="meta"><a href="https://github.com/Vaache/shipyard/releases/latest" data-version>Version 2.3.1</a> · Universal · Apple Silicon &amp; Intel · macOS 14 Sonoma or later · ~9 MB</div>
+    <div class="meta"><a href="https://github.com/Vaache/shipyard/releases/latest" data-version>Version 2.4.0</a> · Universal · Apple Silicon &amp; Intel · macOS 14 Sonoma or later · ~9 MB</div>
 
     <div class="shot reveal">
       <div id="demo" class="demo" role="application" aria-label="Interactive Shipyard demo">
@@ -184,24 +180,24 @@ footer a:hover{color:var(--text)}
     </div>
     <div class="grid">
       <div class="card reveal">
-        <div class="ic" style="background:rgba(56,189,248,.14);color:var(--sky)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+        <div class="ic" style="background:rgba(91,184,236,.14);color:var(--sky)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
         <h4>Native and instant</h4>
         <p>Built with SwiftUI and AppKit. Diffs with thousands of lines scroll smoothly, with sticky file headers.</p>
       </div>
       <div class="card reveal">
-        <div class="ic" style="background:rgba(167,139,250,.14);color:var(--violet)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V10a3 3 0 0 0-3-3h-4"/><path d="m13 5-2 2 2 2"/></svg></div>
+        <div class="ic" style="background:rgba(157,140,240,.14);color:var(--violet)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V10a3 3 0 0 0-3-3h-4"/><path d="m13 5-2 2 2 2"/></svg></div>
         <h4>Full pull request review</h4>
         <p>Conversation, review threads, commits, checks and files. Comment, approve, merge, see stacked PRs as one chain — and re-request review in one click after you push.</p>
       </div>
       <div class="card reveal">
-        <div class="ic" style="background:rgba(251,113,133,.14);color:var(--coral)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></div>
+        <div class="ic" style="background:rgba(238,111,95,.14);color:var(--coral)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></div>
         <h4>Fix with Claude Code</h4>
         <p>One click sends review feedback to Claude Code. Uses the reviewer's “Fix prompt” if there is one, or writes it for you.</p>
       </div>
       <div class="card reveal">
-        <div class="ic" style="background:rgba(251,191,36,.14);color:var(--amber)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+        <div class="ic" style="background:rgba(232,180,76,.14);color:var(--amber)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
         <h4>Always up to date</h4>
-        <p>Pull requests refresh on their own every 30 seconds, with “Updated 12s ago” in view and pull to refresh on the trackpad. A menu bar badge shows who's waiting on you.</p>
+        <p>Pull requests refresh on their own every 30 seconds, and new ones slide in at the top. Pull down on any list with the trackpad to refresh right away. A menu bar badge shows who's waiting on you.</p>
       </div>
       <div class="card reveal">
         <div class="ic" style="background:rgba(45,212,191,.14);color:#2dd4bf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
@@ -209,7 +205,7 @@ footer a:hover{color:var(--text)}
         <p>Browse repository files with syntax highlighting, and see your GitHub Projects boards without leaving the app.</p>
       </div>
       <div class="card reveal">
-        <div class="ic" style="background:rgba(74,222,128,.14);color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+        <div class="ic" style="background:rgba(93,190,138,.14);color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
         <h4>Your keys stay yours</h4>
         <p>Sign in with the GitHub CLI, a personal token or Device Flow. Tokens live in the macOS Keychain. No servers in between.</p>
       </div>

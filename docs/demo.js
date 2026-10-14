@@ -31,14 +31,28 @@
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
   function avatar(name) {
-    var hues = { mkato: "#34d399,#0ea5e9", jlee: "#fbbf24,#f472b6", sofia: "#a78bfa,#38bdf8", dvorak: "#fb7185,#f59e0b", bot: "#64748b,#94a3b8", arivera: "#f472b6,#818cf8" };
-    return '<span class="d-av" style="background:linear-gradient(135deg,' + (hues[name] || "#64748b,#94a3b8") + ')"></span>';
+    var hues = { mkato: "#34d399,#4aa8dc", jlee: "#e8b44c,#f472b6", sofia: "#9d8cf0,#5bb8ec", dvorak: "#ee6f5f,#f59e0b", bot: "#5f6b80,#94a3b8", arivera: "#f472b6,#818cf8" };
+    return '<span class="d-av" style="background:' + (hues[name] || "#5f6b80,#94a3b8").split(",")[0] + '"></span>';
   }
 
   var PRS = {
+    91: {
+      repo: "acme/ios", title: "Haptics on pull to refresh", author: "dvorak", state: "open", ago: "now", add: 22, del: 3, base: "main", head: "feat/pull-haptics",
+      body: "Plays a light haptic when the pull crosses the refresh threshold, once per gesture.",
+      commits: [["Add haptic at refresh threshold", "dvorak", "now"]],
+      checks: [["run", "build", "running"], ["ok", "lint", "18s"]],
+      files: [{ path: "Sources/Shared/PullIndicator.swift", st: "M", add: 22, del: 3, lines: [
+        ["h", "", "", "@@ -12,6 +12,9 @@ struct PullIndicator: View {"],
+        ["", "12", "12", "    .onChange(of: armed) { _, armed in"],
+        ["a", "", "13", "        guard armed else { return }"],
+        ["a", "", "14", "        haptics.perform(.alignment, performanceTime: .now)"],
+        ["", "13", "15", "    }"]
+      ] }]
+    },
     482: {
       repo: "acme/web-app", title: "Speed up search with debounced queries", author: "mkato", state: "open", ago: "2h", add: 48, del: 12, base: "main", head: "feat/search-debounce",
       body: "Debounces the search box by 250 ms so we stop firing a request on every keystroke. Adds a small <code>useDebounce</code> hook with tests.",
+      rerequest: { who: "sofia", n: 2 },
       review: { who: "sofia", text: "Cancel the in-flight request when the query changes, otherwise stale results can win the race.", file: "src/search/useSearch.ts", line: 26 },
       commits: [["Add useDebounce hook", "mkato", "3h"], ["Debounce search queries", "mkato", "3h"], ["Show spinner while loading", "mkato", "2h"], ["Address lint", "mkato", "2h"]],
       checks: [["ok", "build", "1m 12s"], ["ok", "unit tests", "48s"], ["ok", "lint", "21s"], ["ok", "e2e / chrome", "3m 40s"]],
@@ -145,16 +159,16 @@
 
   var SECTIONS = [
     { h: "Inbox" },
-    { id: "notifications", title: "Notifications", icon: "bell", color: "#fbbf24", count: 4 },
+    { id: "notifications", title: "Notifications", icon: "bell", color: "#e8b44c", count: 4 },
     { h: "Pull requests" },
-    { id: "review", title: "Review requests", icon: "eye", color: "#38bdf8", count: 3, list: [482, 479, 213] },
-    { id: "mine", title: "Created by me", icon: "user", color: "#a78bfa", count: 2, list: [77, 58] },
+    { id: "review", title: "Review requests", icon: "eye", color: "#5bb8ec", count: 3, list: [482, 479, 213] },
+    { id: "mine", title: "Created by me", icon: "user", color: "#9d8cf0", count: 2, list: [77, 58] },
     { id: "mentioned", title: "Mentioned", icon: "at", color: "#818cf8", list: [213] },
     { h: "Code" },
     { id: "repos", title: "Repositories", icon: "book", color: "#2dd4bf" },
     { id: "projects", title: "Projects", icon: "board", color: "#6366f1" },
     { h: "AI" },
-    { id: "claude", title: "Claude Code", icon: "spark", color: "#fb7185" }
+    { id: "claude", title: "Claude Code", icon: "spark", color: "#ee6f5f" }
   ];
 
   var NOTIFS = [
@@ -171,7 +185,7 @@
     ["acme/infra", "HCL", "#844fba", "Terraform and CI", 12]
   ];
 
-  var state = { section: "review", pr: 482, tab: "files", file: 0, filter: "open", repo: 0, chat: null, detailOpen: false };
+  var state = { section: "review", pr: 482, tab: "files", file: 0, filter: "open", repo: 0, chat: null, detailOpen: false, fresh: null, freshDone: false, updated: Date.now(), requested: false, rerqHidden: false };
 
   function stateColor(s) {
     return s === "merged" ? "var(--violet)" : s === "draft" ? "#94a3b8" : s === "closed" ? "var(--coral)" : "var(--green)";
@@ -207,8 +221,10 @@
         var st = PRS[id].state;
         return state.filter === "all" || (state.filter === "open" ? st !== "merged" : st === "merged");
       });
+      h += '<div class="d-ptr"><i></i><span>Updated just now</span></div>';
       if (!ids.length) h += '<div class="d-empty">Nothing here</div>';
       ids.forEach(function (id) { h += prRow(id); });
+      h += '<div class="d-upd">Updated <span data-ago>' + agoText() + "</span></div>";
     } else if (state.section === "notifications") {
       NOTIFS.forEach(function (n) {
         var p = PRS[n.pr];
@@ -223,9 +239,9 @@
       h += '<button class="d-row on"><span class="d-tile sm" style="background:#6366f1">' + icon("board", "ti") + '</span><span class="d-rt"><b>Q4 roadmap</b><small>12 items · 3 columns</small></span></button>';
     } else if (state.section === "claude") {
       h += '<div class="d-sub">Open</div>';
-      h += '<button class="d-row on"><span class="d-sdot" style="background:' + (state.chat && state.chat.waiting ? "#fbbf24" : "#4ade80") + '"></span><span class="d-rt"><b>Cancel stale searches</b><small>web-app · <i class="d-chip v">feat/search-debounce</i></small></span></button>';
+      h += '<button class="d-row on"><span class="d-sdot" style="background:' + (state.chat && state.chat.waiting ? "#e8b44c" : "#5dbe8a") + '"></span><span class="d-rt"><b>Cancel stale searches</b><small>web-app · <i class="d-chip v">feat/search-debounce</i></small></span></button>';
       h += '<div class="d-sub">Projects</div>';
-      [["web-app", "#38bdf8", 6], ["api", "#a78bfa", 12], ["ios", "#fb923c", 3]].forEach(function (p) {
+      [["web-app", "#5bb8ec", 6], ["api", "#9d8cf0", 12], ["ios", "#fb923c", 3]].forEach(function (p) {
         h += '<div class="d-proj"><span class="d-tile sm" style="background:' + p[1] + '">' + icon("folder", "ti") + "</span><b>" + p[0] + "</b><small>" + p[2] + "</small></div>";
       });
     }
@@ -242,7 +258,7 @@
 
   function prRow(id) {
     var p = PRS[id];
-    var on = state.detail === "pr" && state.pr === id ? " on" : "";
+    var on = (state.detail === "pr" && state.pr === id ? " on" : "") + (state.fresh === id && !state.freshDone ? " d-new" : "");
     var col = stateColor(p.state);
     return '<button class="d-row' + on + '" data-pr="' + id + '"><span class="d-state" style="color:' + col + ";background:color-mix(in srgb," + col + ' 16%,transparent)">' + icon(stateIcon(p.state), "ti") + '</span><span class="d-rt"><b>' + esc(p.title) + "</b><small>" + p.repo + "#" + id + " · " + p.ago + "</small><small>" + avatar(p.author) + p.author + ' <i class="g">+' + p.add + '</i> <i class="r">−' + p.del + "</i></small></span></button>";
   }
@@ -256,6 +272,11 @@
     var p = PRS[state.pr];
     var col = stateColor(p.state);
     var h = '<div class="d-det">' + back + '<div class="d-head"><h3>' + esc(p.title) + " <span>#" + state.pr + '</span></h3><div class="d-meta"><span class="d-pill" style="background:' + col + '">' + icon(stateIcon(p.state), "ti") + p.state.charAt(0).toUpperCase() + p.state.slice(1) + "</span>" + avatar(p.author) + "<b>" + p.author + '</b><i class="d-chip s">' + p.base + '</i><span class="d-arrow">←</span><i class="d-chip v">' + p.head + '</i><i class="g">+' + p.add + '</i><i class="r">−' + p.del + '</i><span class="d-ago">' + p.ago + " ago</span></div>";
+    if (p.rerequest && !state.rerqHidden) {
+      h += state.requested
+        ? '<div class="d-rerq done">' + icon("check", "ti") + "<b>Requested</b><span>· Review re-requested from @" + p.rerequest.who + "</span></div>"
+        : '<div class="d-rerq"><span>' + icon("commit", "ti") + "You pushed " + p.rerequest.n + " commits after @" + p.rerequest.who + " reviewed</span><button data-rerq>Re-request review</button></div>";
+    }
     if (p.review) h += '<div class="d-fix"><span>' + icon("chat", "ti") + '1 unresolved comment</span><button data-fix>' + icon("spark", "ti") + "Fix with Claude Code</button></div>";
     h += "</div>";
     var tabs = [["conversation", "Conversation", "chat", p.review ? 1 : 0], ["commits", "Commits", "commit", p.commits.length], ["checks", "Checks", "check", p.checks.length], ["files", "Files changed", "file", p.files.length]];
@@ -306,7 +327,7 @@
   }
 
   function boardView() {
-    var cols = [["Todo", "#94a3b8", ["Saved searches", "Offline mode"]], ["In progress", "#38bdf8", ["Search debounce #482", "Dark settings #479"]], ["Done", "#a78bfa", ["Empty list crash #77"]]];
+    var cols = [["Todo", "#94a3b8", ["Saved searches", "Offline mode"]], ["In progress", "#5bb8ec", ["Search debounce #482", "Dark settings #479"]], ["Done", "#9d8cf0", ["Empty list crash #77"]]];
     return '<div class="d-board">' + cols.map(function (c) {
       return '<div class="d-col"><div class="d-colh" style="border-top-color:' + c[1] + '">' + c[0] + "<em>" + c[2].length + "</em></div>" + c[2].map(function (t) { return '<div class="d-item">' + t + "</div>"; }).join("") + "</div>";
     }).join("") + "</div>";
@@ -374,10 +395,26 @@
     runChat();
   }
 
-  var lastDetailKey = null, lastTabKey = null;
+  var lastDetailKey = null, lastTabKey = null, lastListKey = null;
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function agoText() {
+    var s = Math.max(0, Math.round((Date.now() - state.updated) / 1000));
+    return s < 10 ? "just now" : s < 60 ? Math.floor(s / 5) * 5 + "s ago" : Math.floor(s / 60) + "m ago";
+  }
+
   function render() {
     root.className = "demo" + (state.detailOpen ? " show-detail" : "");
     root.innerHTML = sidebar() + listColumn() + detail();
+    var listKey = state.section + "|" + state.filter;
+    if (listKey !== lastListKey) {
+      Array.prototype.slice.call(root.querySelectorAll(".d-list .d-row"), 0, 12).forEach(function (r, i) {
+        r.style.animationDelay = (reduced ? 0 : i * 70) + "ms";
+        r.classList.add("d-in");
+      });
+      lastListKey = listKey;
+    }
+    if (state.fresh && !state.freshDone && root.querySelector(".d-new")) state.freshDone = true;
     var detailKey = [state.section, state.detail, state.pr, state.repo].join("|");
     var tabKey = detailKey + "|" + state.tab + "|" + state.file;
     var det = root.querySelector(".d-det"), body = root.querySelector(".d-body");
@@ -414,6 +451,9 @@
       state.tab = t.dataset.tab; render();
     } else if (t.dataset.file) {
       state.file = +t.dataset.file; render();
+    } else if (t.hasAttribute("data-rerq")) {
+      state.requested = true; render();
+      setTimeout(function () { state.rerqHidden = true; render(); }, 2500);
     } else if (t.hasAttribute("data-fix")) {
       startFix();
     } else if (t.hasAttribute("data-back")) {
@@ -438,6 +478,62 @@
     state.chat.fresh = state.chat.items.length - 1;
     render();
   });
+
+  var pull = 0, pulling = false, pullTimer = null, refreshing = false;
+  function ring() { return root.querySelector(".d-list .d-ptr"); }
+  function setPull(v) {
+    var r = ring();
+    if (!r) return;
+    var p = Math.min(1, v / 44);
+    r.style.height = Math.min(48, v) + "px";
+    r.style.setProperty("--p", Math.round(p * 100) + "%");
+    r.classList.toggle("armed", p >= 1);
+  }
+  function finishPull() {
+    pulling = false;
+    if (pull < 38 || refreshing) { pull = 0; setPull(0); return; }
+    refreshing = true;
+    var r = ring();
+    if (r) { r.style.height = "48px"; r.classList.add("spin"); }
+    setTimeout(function () {
+      state.updated = Date.now();
+      var r2 = ring();
+      if (r2) { r2.classList.remove("spin"); r2.classList.add("done"); }
+      var ago = root.querySelector("[data-ago]");
+      if (ago) ago.textContent = agoText();
+      setTimeout(function () {
+        refreshing = false; pull = 0;
+        var r3 = ring();
+        if (r3) { r3.classList.remove("done", "armed"); r3.style.height = "0px"; }
+      }, 800);
+    }, 900);
+  }
+  root.addEventListener("wheel", function (e) {
+    var list = e.target.closest && e.target.closest(".d-list");
+    if (!list || refreshing || e.deltaMode !== 0 || Math.abs(e.deltaY) > 60) return;
+    if (list.scrollTop > 0 || e.deltaY >= 0) { if (pulling && e.deltaY > 0) { pull = Math.max(0, pull - e.deltaY); setPull(pull); } return; }
+    pulling = true;
+    pull += -e.deltaY * 0.8;
+    setPull(pull);
+    clearTimeout(pullTimer);
+    pullTimer = setTimeout(finishPull, 140);
+  }, { passive: true });
+
+  setInterval(function () {
+    var ago = root.querySelector("[data-ago]");
+    if (ago) ago.textContent = agoText();
+  }, 5000);
+
+  setTimeout(function () {
+    var review = sectionById("review");
+    if (review.list.indexOf(91) >= 0) return;
+    review.list.unshift(91);
+    review.count += 1;
+    state.fresh = 91;
+    state.freshDone = false;
+    state.updated = Date.now();
+    if (state.section === "review" && !refreshing) render();
+  }, 6000);
 
   state.detail = "pr";
   render();

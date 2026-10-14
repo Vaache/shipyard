@@ -33,8 +33,9 @@ A browser tab with GitHub can use a gigabyte of memory just to show one diff. Sh
 - Comment, approve, request changes and merge
 - Fast diff viewer with sticky file headers, built on `NSTableView`
 - Stacked pull requests: the whole stack in the PR header, jump up and down the chain, "stacked on" markers in lists
-- Live refresh: lists and the open PR update every 30 seconds (15 s to 15 min in Settings), right after you switch back to the app, and on pull to refresh; "Updated 12s ago" shows how fresh the data is
-- Re-request review in one click when you push after someone reviewed; outdated review threads aren't counted as unresolved
+- Live refresh: lists and the open PR update every 30 seconds (15 s to 15 min in Settings) and right after you switch back to the app; new pull requests slide in at the top and stay highlighted for a moment
+- Pull to refresh on every list, board and PR tab: drag down with two fingers on the trackpad, the ring fills and the list updates. `⌘R` works everywhere; the footer shows "Updated 12s ago" and a Retry link if a refresh fails
+- Re-request review in one click after you push: Shipyard compares the reviewed commit with the branch head, so rebases and force pushes count too ("You pushed 3 commits after @sofia reviewed"). Outdated review threads aren't counted as unresolved
 
 **Everything else you open GitHub for**
 - Notifications and issues
