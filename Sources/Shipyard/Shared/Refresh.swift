@@ -162,7 +162,6 @@ private struct PullIndicator: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.syLine))
                 .transition(.opacity)
             case .loading:
                 ring(trim: 0.28)

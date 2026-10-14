@@ -322,7 +322,6 @@ struct ClaudeAccountCard: View {
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
                             .background(Capsule().fill(Color.syCoral.opacity(0.12)))
-                            .overlay(Capsule().strokeBorder(Color.syCoral.opacity(0.28)))
                     } else if info.method == "console" || info.provider != "firstParty" {
                         Text(info.provider == "firstParty" ? "API" : (info.provider ?? "API")).font(.caption2)
                     }

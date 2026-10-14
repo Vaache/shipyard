@@ -248,7 +248,6 @@ struct CodeBlockView: View {
         }
         .background(Color.sySunken)
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.syLine))
     }
 
     private var highlighted: AttributedString {

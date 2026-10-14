@@ -283,7 +283,6 @@ struct ClaudeFixBanner: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.syCoral.opacity(0.08)))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.syCoral.opacity(0.28)))
             .padding(.horizontal, 16)
             .padding(.top, 6)
         }
@@ -357,7 +356,6 @@ struct ReReviewBanner: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.sySky.opacity(0.08)))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.sySky.opacity(0.3)))
             .padding(.horizontal, inset ? 16 : 0)
             .padding(.top, inset ? 6 : 0)
     }

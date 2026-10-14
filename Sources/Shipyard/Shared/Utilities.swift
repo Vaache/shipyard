@@ -177,7 +177,7 @@ struct StateBadge: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 3)
-                .background(Capsule().fill((state.color == .secondary ? Color.sySlate : state.color).gradient))
+                .background(Capsule().fill(state.color == .secondary ? Color.sySlate : state.color))
         }
     }
 }
@@ -296,7 +296,6 @@ struct ComposerBox: View {
         }
         .frame(minHeight: minHeight)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.sySunken))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.syLineStrong))
     }
 }
 

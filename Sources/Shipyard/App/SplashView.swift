@@ -7,10 +7,6 @@ struct SplashView: View {
     var body: some View {
         ZStack {
             Color(nsColor: Theme.isBrand ? .syWindow : .windowBackgroundColor)
-            if Theme.isBrand {
-                RadialGradient(colors: [Color.syViolet.opacity(0.20), .clear], center: UnitPoint(x: 0.36, y: 0.32), startRadius: 0, endRadius: 440)
-                RadialGradient(colors: [Color.sySky.opacity(0.14), .clear], center: UnitPoint(x: 0.66, y: 0.28), startRadius: 0, endRadius: 440)
-            }
             VStack(spacing: 20) {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()

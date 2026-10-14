@@ -221,7 +221,6 @@ struct ProjectHeader: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)
                 .background(Capsule().fill(color.opacity(0.14)))
-                .overlay(Capsule().strokeBorder(color.opacity(0.28)))
             Button(action: onNew) { Image(systemName: "plus") }
                 .buttonStyle(.borderless)
                 .foregroundStyle(Color.syCoral)

@@ -381,7 +381,7 @@ struct ToolCallView: View {
         switch call.status {
         case .error: return Color.syRed.opacity(0.5)
         case .denied: return Color.syAmber.opacity(0.5)
-        default: return Color.syLine
+        default: return .clear
         }
     }
 
@@ -540,7 +540,6 @@ struct InlineDiff: View {
         }
         .background(Color.sySunken)
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.syLine))
     }
 }
 

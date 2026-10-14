@@ -365,7 +365,6 @@ struct StackStrip: View {
             }
         }
         .background(RoundedRectangle(cornerRadius: 9).fill(Color.syIndigo.opacity(0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.syIndigo.opacity(0.28)))
         .clipShape(RoundedRectangle(cornerRadius: 9))
     }
 
@@ -390,7 +389,6 @@ struct BranchChip: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(Capsule().fill(color.opacity(0.12)))
-            .overlay(Capsule().strokeBorder(color.opacity(0.3)))
             .foregroundStyle(color)
             .onTapGesture { copyToPasteboard(name) }
             .help("Click to copy")
@@ -459,7 +457,6 @@ struct MergeStatusBar: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 8).fill(s.color.opacity(0.08)))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(s.color.opacity(0.3)))
         }
     }
 

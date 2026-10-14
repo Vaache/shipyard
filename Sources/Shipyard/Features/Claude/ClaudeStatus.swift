@@ -92,7 +92,6 @@ struct BranchTag: View {
         .padding(.horizontal, 6)
         .padding(.vertical, 1)
         .background(Capsule().fill(c.opacity(0.12)))
-        .overlay(Capsule().strokeBorder(c.opacity(0.28)))
     }
 }
 
@@ -109,7 +108,6 @@ struct PRTag: View {
         .padding(.horizontal, 6)
         .padding(.vertical, 1)
         .background(Capsule().fill(Color.syViolet.opacity(0.12)))
-        .overlay(Capsule().strokeBorder(Color.syViolet.opacity(0.28)))
     }
 }
 

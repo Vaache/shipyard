@@ -191,7 +191,7 @@ enum ConversationHTML {
         """
     }
 
-    static var css: String { (Theme.isBrand ? brandVars : systemVars) + baseCSS }
+    static var css: String { Theme.isBrand ? brandVars + baseCSS + brandOverrides : systemVars + baseCSS }
 
     private static let systemVars = """
     :root{--fg:#1f2328;--muted:#59636e;--border:#d1d9e0;--sub:#f6f8fa;--card:transparent;--link:#0969da;--green:#1a7f37;--red:#d1242f;--purple:#8250df;--add:#dafbe1;--del:#ffebe9;--mine:#ddf4ff;--code:#fff;color-scheme:light dark}
@@ -200,8 +200,17 @@ enum ConversationHTML {
     """
 
     private static let brandVars = """
-    :root{--fg:#0f172a;--muted:#52627a;--border:rgba(15,23,42,.12);--sub:#f3f6fb;--card:#ffffff;--link:#0278c2;--green:#16a34a;--red:#dc2626;--purple:#7c3aed;--add:rgba(22,163,74,.11);--del:rgba(220,38,38,.10);--mine:rgba(2,132,199,.07);--code:#f8fafc;color-scheme:light dark}
-    @media (prefers-color-scheme: dark){:root{--fg:#e8edf6;--muted:#93a1b8;--border:rgba(148,163,184,.18);--sub:#121b31;--card:#141d35;--link:#38bdf8;--green:#4ade80;--red:#f87171;--purple:#a78bfa;--add:rgba(74,222,128,.10);--del:rgba(248,113,113,.11);--mine:rgba(56,189,248,.08);--code:#0b1222}}
+    :root{--fg:#1a2333;--muted:#5f6b7e;--border:rgba(26,35,51,.09);--sub:#f3f1ec;--card:#ffffff;--link:#1f7fb8;--green:#2e8a57;--red:#c2412f;--purple:#6b55d6;--add:rgba(46,138,87,.10);--del:rgba(194,65,47,.09);--mine:rgba(31,127,184,.07);--code:#f7f5f0;color-scheme:light dark}
+    @media (prefers-color-scheme: dark){:root{--fg:#e6ebf2;--muted:#8693a8;--border:rgba(160,174,196,.10);--sub:#111a2c;--card:#152036;--link:#5bb8ec;--green:#5dbe8a;--red:#e8746a;--purple:#9d8cf0;--add:rgba(93,190,138,.10);--del:rgba(232,116,106,.10);--mine:rgba(91,184,236,.07);--code:#0a101c}}
+
+    """
+
+    private static let brandOverrides = """
+    .box,.thread,.hunk,.event .ic,.pill,button,.md pre{border:0}
+    .head{border-bottom:0}
+    .pill{background:var(--sub)}
+    button:hover{background:var(--border)}
+    .tc{border-bottom:1px solid var(--border)}
 
     """
 
