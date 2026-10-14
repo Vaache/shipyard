@@ -56,6 +56,9 @@ final class PRDetailModel {
         didSet { visitedTabs.insert(tab) }
     }
     var visitedTabs: Set<PRTab> = [.conversation]
+    let commitRows = RowAppearTracker()
+    let checkRows = RowAppearTracker()
+    let fileRows = RowAppearTracker()
     var stack: [StackPR] = []
     @ObservationIgnored private var activeLoad: Task<Void, Never>?
     @ObservationIgnored private var queuedLoad: Task<Void, Never>?
@@ -107,15 +110,19 @@ final class PRDetailModel {
 
     var lastCommitDate: Date? { pr?.lastCommit.nodes.first?.commit.committedDate }
 
-    var reviewersToReRequest: [String] {
-        guard let pr, pr.isOpen, let last = lastCommitDate else { return [] }
+    var staleReviews: [(login: String, commits: Int?)] {
+        guard let pr, pr.isOpen else { return [] }
         let pending = Set(pr.reviewRequests.nodes.compactMap { $0.requestedReviewer?.display })
+        let oids = pr.allCommits.nodes.map(\.commit.oid)
         return pr.latestOpinionatedReviews.nodes.compactMap { r in
             guard let login = r.author?.login, login != viewerLogin, !login.hasSuffix("[bot]"),
-                  !pending.contains(login), let at = r.submittedAt, at < last else { return nil }
-            return login
+                  !pending.contains(login), let oid = r.commit?.oid, oid != pr.headRefOid else { return nil }
+            let after = oids.lastIndex(of: oid).map { oids.count - 1 - $0 }
+            return (login, after.flatMap { $0 > 0 ? $0 : nil })
         }
     }
+
+    var reviewersToReRequest: [String] { staleReviews.map(\.login) }
 
     func load(full: Bool = false) async {
         if full { reloadFiles = true }
@@ -154,6 +161,8 @@ final class PRDetailModel {
                 return
             }
             self.repo = repo
+            commitRows.seed(pr.allCommits.nodes.map(\.commit.oid))
+            checkRows.seed(pr.checks.map(\.id))
             self.pr = pr
             let newHTML = ConversationHTML.render(pr: pr)
             if newHTML != html { html = newHTML }
@@ -210,6 +219,7 @@ final class PRDetailModel {
             if !filesLoaded {
                 collapsed = Set(parsed.filter { viewedPaths.contains($0.id) || $0.lines.count > 1500 }.map(\.id))
             }
+            fileRows.seed(parsed.map(\.id))
             files = parsed
             filesOid = oid
             filesVersion += 1

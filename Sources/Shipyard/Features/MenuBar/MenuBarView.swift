@@ -19,6 +19,8 @@ struct MenuBarLabel: View {
 struct MenuBarView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.openWindow) private var openWindow
+    @State private var rows = RowAppearTracker()
+    @State private var ready = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -36,7 +38,7 @@ struct MenuBarView: View {
             Rectangle().fill(Color.syLine).frame(height: 1)
             if app.phase != .loggedIn {
                 Button("Sign in…") { show(nil) }.padding(12)
-            } else {
+            } else if ready {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
                         section("Review requests", count: app.reviewRequestCount, items: app.reviewRequests, filter: .reviewRequested)
@@ -58,6 +60,8 @@ struct MenuBarView: View {
                     .padding(6)
                 }
                 .frame(maxHeight: 460)
+            } else {
+                Color.clear.frame(height: 120)
             }
             Rectangle().fill(Color.syLine).frame(height: 1)
             HStack {
@@ -71,6 +75,13 @@ struct MenuBarView: View {
         }
         .frame(width: 380)
         .surface(.panel)
+        .onAppear {
+            rows.ingest((app.reviewRequests + app.myPRs).map(\.id), mode: .cascade)
+            ready = true
+        }
+        .onChange(of: (app.reviewRequests + app.myPRs).map(\.id)) { _, ids in
+            rows.ingest(ids, mode: .refresh)
+        }
     }
 
     @ViewBuilder
@@ -106,6 +117,7 @@ struct MenuBarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(MenuRowStyle())
+            .rowAppear(item.id, rows, bleed: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
         Spacer().frame(height: 6)
     }

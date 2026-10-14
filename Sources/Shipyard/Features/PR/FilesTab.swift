@@ -14,6 +14,7 @@ struct FilesTab: View {
                         Divider()
                     }
                     diff
+                        .liveRefresh(updated: model.lastUpdated, refreshing: model.loading, footer: false) { await model.load(full: true) }
                 }
             } else if let e = model.filesError {
                 ErrorStateView(message: e) { Task { await model.loadFiles(force: true) } }
@@ -54,6 +55,7 @@ struct FilesTab: View {
                         Image(systemName: "checkmark.circle.fill").font(.caption).foregroundStyle(Color.ghGreen)
                     }
                 }
+                .rowAppear(f.id, model.fileRows)
                 .tag(f.id)
             }
             .listStyle(.inset)

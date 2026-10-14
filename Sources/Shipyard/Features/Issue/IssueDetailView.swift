@@ -10,6 +10,8 @@ final class IssueDetailModel {
     var html = ""
     var loading = false
     var busy = false
+    var lastUpdated: Date?
+    var refreshError: String?
     var error: String?
     var actionError: String?
     var scrollToBottomToken = 0
@@ -36,10 +38,12 @@ final class IssueDetailModel {
             self.issue = issue
             let h = ConversationHTML.render(issue: issue)
             if h != html { html = h }
+            lastUpdated = Date()
             error = nil
+            refreshError = nil
         } catch {
             if isCancellation(error) { return }
-            if issue == nil { self.error = error.localizedDescription } else { actionError = error.localizedDescription }
+            if issue == nil { self.error = error.localizedDescription } else { refreshError = error.localizedDescription }
         }
     }
 
@@ -98,6 +102,7 @@ struct IssueDetailView: View {
             await m.load()
         }
         .onChange(of: app.refreshTick) { Task { await model?.load() } }
+        .onChange(of: app.liveTick) { Task { await model?.load() } }
     }
 
     private func content(_ model: IssueDetailModel, _ issue: IssueDetail) -> some View {
@@ -134,6 +139,7 @@ struct IssueDetailView: View {
             HTMLView(html: model.html, scrollToBottomToken: model.scrollToBottomToken, onLink: { url in
                 if let route = GitHubURL.parse(url.absoluteString, allowShort: false) { app.open(route, push: true) } else { LinkBrowser.open(url) }
             })
+            .liveRefresh(updated: model.lastUpdated, refreshing: model.loading, footer: false, web: true) { await model.load() }
             Rectangle().fill(Color.syLine).frame(height: 1)
             HStack(alignment: .bottom, spacing: 8) {
                 ComposerBox(text: $text, placeholder: "Comment (Markdown) — ⌘↩ to send", minHeight: 56).frame(height: 64)
@@ -152,7 +158,10 @@ struct IssueDetailView: View {
         .navigationSubtitle("\(ref.repo.full) #\(issue.number)")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                if model.busy || model.loading { ProgressView().controlSize(.small) }
+                if model.busy { ProgressView().controlSize(.small) }
+                RefreshStatus(updated: model.lastUpdated, refreshing: model.loading, error: model.refreshError, compact: true) {
+                    Task { await model.load() }
+                }
                 if issue.viewerCanUpdate {
                     if issue.issueState == "OPEN" {
                         Button { Task { await model.setOpen(false) } } label: { Label("Close", systemImage: "checkmark.circle") }
@@ -163,7 +172,6 @@ struct IssueDetailView: View {
                     }
                 }
                 Button { copyToPasteboard(issue.url) } label: { Label("Copy Link", systemImage: "link") }
-                Button { Task { await model.load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                 Button { openInBrowser(issue.url) } label: { Label("Open in Browser", systemImage: "safari") }
             }
         }

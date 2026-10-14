@@ -160,6 +160,7 @@ final class AppModel {
         myPRs = []
         reviewRequestCount = 0
         unreadCount = 0
+        RowAppearTracker.resetAll()
         phase = .loggedOut
     }
 

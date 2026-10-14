@@ -6,6 +6,8 @@ struct ProjectsListView: View {
     @State private var loading = false
     @State private var error: String?
     @State private var showClosed = false
+    @State private var lastUpdated: Date?
+    @State private var rows = RowAppearTracker.shared("projects")
 
     var body: some View {
         List(selection: Binding(get: { app.detailRoot }, set: { app.select($0) })) {
@@ -35,6 +37,7 @@ struct ProjectsListView: View {
                     }
                 }
                 .padding(.vertical, 4)
+                .rowAppear(p.id, rows)
                 .tag(Route.project(p.ref))
                 .contextMenu { Button("Open in Browser") { openInBrowser(p.url) } }
             }
@@ -43,22 +46,28 @@ struct ProjectsListView: View {
             }
         }
         .overlay { if loading && projects.isEmpty { ProgressView().controlSize(.small) } }
+        .liveRefresh(updated: lastUpdated, refreshing: loading, error: projects.isEmpty ? nil : error) { await load() }
         .navigationTitle("Projects")
         .toolbar {
             ToolbarItem {
                 Toggle(isOn: $showClosed) { Label("Closed", systemImage: "archivebox") }.help("Show closed")
             }
         }
-        .task { await load() }
+        .task { await load(first: true) }
         .onChange(of: app.refreshTick) { Task { await load() } }
+        .onChange(of: app.liveTick) { Task { await load() } }
+        .onChange(of: showClosed) { rows.ingest(projects.filter { showClosed || !$0.closed }.map(\.id), mode: .cascade) }
     }
 
-    private func load() async {
+    private func load(first: Bool = false) async {
         guard let api = app.api else { return }
         loading = true
         defer { loading = false }
         do {
-            projects = try await api.projects()
+            let fetched = try await api.projects()
+            rows.ingest(fetched.filter { showClosed || !$0.closed }.map(\.id), mode: first ? .cascade : .refresh)
+            projects = fetched
+            lastUpdated = Date()
             error = nil
         } catch {
             if isCancellation(error) { return }
@@ -115,12 +124,16 @@ final class ProjectBoardModel {
     var items: [ProjectItem] = []
     var fieldId: String?
     var loading = false
+    var lastUpdated: Date?
     var error: String?
     var actionError: String?
+    let rows: RowAppearTracker
+    @ObservationIgnored private var loaded = false
 
     init(ref: ProjectRef, api: GitHubAPI) {
         self.ref = ref
         self.api = api
+        rows = .shared("project|\(ref.id)")
     }
 
     var groupFields: [ProjectField] {
@@ -137,15 +150,37 @@ final class ProjectBoardModel {
         do {
             let (d, items) = try await api.project(ref.id)
             detail = d
-            self.items = items.filter { !$0.isArchived }
             if fieldId == nil || !groupFields.contains(where: { $0.id == fieldId }) {
                 fieldId = (groupFields.first { $0.name.lowercased() == "status" } ?? groupFields.first)?.id
             }
+            let visible = items.filter { !$0.isArchived }
+            rows.ingest(cascadeOrder(visible), mode: loaded ? .refresh : .cascade)
+            loaded = true
+            self.items = visible
+            lastUpdated = Date()
             error = nil
         } catch {
             if isCancellation(error) { return }
             self.error = error.localizedDescription
         }
+    }
+
+    private func cascadeOrder(_ items: [ProjectItem]) -> [String] {
+        guard let fieldId else { return items.map(\.id) }
+        var groups: [String: [String]] = [:]
+        var order: [String] = []
+        for item in items {
+            let key = item.optionId(for: fieldId) ?? ""
+            if groups[key] == nil { order.append(key) }
+            groups[key, default: []].append(item.id)
+        }
+        var out: [String] = []
+        var depth = 0
+        while out.count < items.count {
+            for key in order where depth < groups[key]!.count { out.append(groups[key]![depth]) }
+            depth += 1
+        }
+        return out
     }
 
     func move(_ itemId: String, to optionId: String?) async {
@@ -194,6 +229,7 @@ struct ProjectBoardView: View {
             await m.load()
         }
         .onChange(of: app.refreshTick) { Task { await model?.load() } }
+        .onChange(of: app.liveTick) { Task { await model?.load() } }
     }
 
     private func board(_ model: ProjectBoardModel) -> some View {
@@ -211,7 +247,6 @@ struct ProjectBoardView: View {
                 TextField("Filter cards", text: $filter).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
                 Spacer()
                 ChipView(text: plural(model.items.count, "item", "items"), color: .syIndigo, icon: "square.stack")
-                if model.loading { ProgressView().controlSize(.small) }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -225,10 +260,12 @@ struct ProjectBoardView: View {
                 .padding(14)
                 .frame(maxHeight: .infinity, alignment: .top)
             }
+            RefreshFooter(updated: model.lastUpdated, refreshing: model.loading, error: model.error) {
+                Task { await model.load() }
+            }
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button { Task { await model.load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                 Button { openInBrowser(project.url) } label: { Label("Open in Browser", systemImage: "safari") }
             }
         }
@@ -300,6 +337,7 @@ struct ProjectColumn: View {
                 LazyVStack(spacing: 8) {
                     ForEach(items) { item in
                         ProjectCard(item: item)
+                            .rowAppear(item.id, model.rows, radius: 8)
                             .draggable(item.id)
                             .contextMenu {
                                 Menu("Move to") {
@@ -319,6 +357,7 @@ struct ProjectColumn: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
             }
+            .liveRefresh(updated: model.lastUpdated, refreshing: model.loading, footer: false) { await model.load() }
         }
         .frame(width: 290)
         .frame(maxHeight: .infinity, alignment: .top)

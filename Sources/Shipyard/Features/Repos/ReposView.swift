@@ -9,6 +9,9 @@ struct ReposView: View {
     @State private var error: String?
     @State private var text = ""
     @State private var hideArchived = true
+    @State private var refreshing = false
+    @State private var lastUpdated: Date?
+    @State private var rows = RowAppearTracker.shared("repos")
 
     private var visible: [RepoSummary] {
         repos.filter { (!hideArchived || !$0.isArchived) && (text.isEmpty || $0.nameWithOwner.localizedCaseInsensitiveContains(text) || ($0.description ?? "").localizedCaseInsensitiveContains(text)) }
@@ -19,6 +22,7 @@ struct ReposView: View {
             if let error { Text(error).foregroundStyle(Color.syRed).font(.caption) }
             ForEach(visible) { r in
                 RepoRow(repo: r)
+                    .rowAppear(r.id, rows)
                     .tag(Route.repo(r.ref ?? RepoRef(owner: "", name: "")))
                     .contextMenu {
                         Button("Open in browser") { openInBrowser(r.url) }
@@ -29,6 +33,7 @@ struct ReposView: View {
             }
         }
         .overlay { if loading && repos.isEmpty { ProgressView().controlSize(.small) } }
+        .liveRefresh(updated: lastUpdated, refreshing: refreshing, error: repos.isEmpty ? nil : error) { await load() }
         .searchable(text: $text, placement: .toolbar, prompt: "Filter repositories")
         .navigationTitle("Repositories")
         .toolbar {
@@ -37,22 +42,31 @@ struct ReposView: View {
                     .help("Hide archived")
             }
         }
-        .task(id: app.api != nil) { if repos.isEmpty { await load() } }
+        .task(id: app.api != nil) { if repos.isEmpty { await load(first: true) } }
         .onChange(of: app.refreshTick) { Task { await load() } }
         .onChange(of: text) { _, t in
             if !t.isEmpty, hasMore { Task { await loadAll() } }
         }
     }
 
-    private func load() async {
+    private func load(first: Bool = false) async {
         guard let api = app.api else { return }
         loading = true
-        defer { loading = false }
+        refreshing = true
+        defer {
+            loading = false
+            refreshing = false
+        }
         do {
             let r = try await api.repos(after: nil)
-            repos = r.nodes
-            cursor = r.pageInfo.endCursor
-            hasMore = r.pageInfo.hasNextPage
+            let keep = repos.count > r.nodes.count ? Array(repos.dropFirst(r.nodes.count)).filter { n in !r.nodes.contains { $0.id == n.id } } : []
+            rows.ingest(r.nodes.map(\.id), mode: first ? .cascade : .refresh)
+            repos = r.nodes + keep
+            if keep.isEmpty {
+                cursor = r.pageInfo.endCursor
+                hasMore = r.pageInfo.hasNextPage
+            }
+            lastUpdated = Date()
             error = nil
         } catch {
             if isCancellation(error) { return }
@@ -65,7 +79,10 @@ struct ReposView: View {
         loading = true
         defer { loading = false }
         if let r = try? await api.repos(after: cursor) {
-            repos += r.nodes
+            let known = Set(repos.map(\.id))
+            let added = r.nodes.filter { !known.contains($0.id) }
+            rows.ingest(added.map(\.id), mode: .append)
+            repos += added
             cursor = r.pageInfo.endCursor
             hasMore = r.pageInfo.hasNextPage
         }
@@ -127,8 +144,13 @@ struct RepoDetailView: View {
     @State private var info: RepoInfoResponse.R?
     @State private var tab: RepoTab = .code
     @State private var stateFilter: StateFilter = .open
-    @State private var model = SearchListModel()
+    @State private var model: SearchListModel
     @State private var code: RepoCodeModel?
+
+    init(repo: RepoRef) {
+        self.repo = repo
+        _model = State(initialValue: SearchListModel(rows: .shared("repo|\(repo.full)")))
+    }
 
     private var query: String {
         ["repo:\(repo.full)", "is:\(tab == .issue ? "issue" : "pr")", stateFilter.query, "sort:updated-desc"].filter { !$0.isEmpty }.joined(separator: " ")
@@ -171,6 +193,9 @@ struct RepoDetailView: View {
                 if tab != .code { await model.load(api: app.api, query: query) }
                 else if let code { await code.openDir(code.dir) }
             }
+        }
+        .onChange(of: app.liveTick) {
+            if tab != .code { Task { await model.load(api: app.api, query: query, silent: true) } }
         }
     }
 
@@ -223,12 +248,15 @@ struct RepoDetailView: View {
         List {
             if let e = model.error { Text(e).foregroundStyle(Color.syRed) }
             ForEach(model.items) { item in
-                NavigationLink(value: item.route) { ItemRow(item: item) }
+                NavigationLink(value: item.route) { ItemRow(item: item).rowAppear(item.id, model.rows) }
                     .contextMenu { ItemContextMenu(item: item) }
                     .onAppear { if item.id == model.items.last?.id { Task { await model.loadMore(api: app.api) } } }
             }
             if model.items.isEmpty, !model.loading { Text("Nothing here").foregroundStyle(Color.syMuted) }
         }
         .overlay { if model.loading && model.items.isEmpty { ProgressView().controlSize(.small) } }
+        .liveRefresh(updated: model.lastUpdated, refreshing: model.refreshing, error: model.items.isEmpty ? nil : model.error) {
+            await model.load(api: app.api, query: query, silent: true)
+        }
     }
 }

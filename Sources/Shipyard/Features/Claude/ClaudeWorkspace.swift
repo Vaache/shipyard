@@ -168,6 +168,8 @@ final class ClaudeWorkspace {
     var selectedTabID: UUID?
     var projects: [ClaudeProject] = []
     var loadingProjects = false
+    var projectsUpdated: Date?
+    let sessionRows = RowAppearTracker()
     var showInspector = true
 
     var model: ClaudeModelOption {
@@ -265,7 +267,10 @@ final class ClaudeWorkspace {
         let profileID = ClaudeProfiles.shared.activeID
         let loaded = await Task.detached(priority: .userInitiated) { ClaudeSessionParser.loadAll(root: root) }.value
         guard profileID == ClaudeProfiles.shared.activeID else { return }
-        projects = Demo.folder.map { f in loaded.filter { $0.path.hasPrefix(f) } } ?? loaded
+        let next = Demo.folder.map { f in loaded.filter { $0.path.hasPrefix(f) } } ?? loaded
+        sessionRows.ingest(next.flatMap { $0.sessions.map(\.id) }, mode: .refresh)
+        projects = next
+        projectsUpdated = Date()
     }
 
     func tab(forSession id: String) -> ClaudeTab? {

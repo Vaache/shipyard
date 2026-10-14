@@ -8,6 +8,13 @@ enum Motion {
     static var smooth: Animation? { reduced ? nil : .smooth(duration: 0.26) }
     static var spring: Animation? { reduced ? nil : .spring(response: 0.32, dampingFraction: 0.82) }
     static var fade: Animation? { reduced ? nil : .easeOut(duration: 0.14) }
+    static var insert: Animation { reduced ? .easeOut(duration: 0.2) : .timingCurve(0.22, 1, 0.36, 1, duration: 0.7) }
+
+    static func rowIn(_ index: Int) -> Animation { rowIn(delay: Double(index) * 0.07) }
+
+    static func rowIn(delay: Double) -> Animation {
+        reduced ? .easeOut(duration: 0.2) : .timingCurve(0.22, 1, 0.36, 1, duration: 0.7).delay(delay)
+    }
 }
 
 extension AnyTransition {

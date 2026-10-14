@@ -525,6 +525,7 @@ struct ConversationTab: View {
     var body: some View {
         VStack(spacing: 0) {
             HTMLView(html: model.html, scrollToBottomToken: model.scrollToBottomToken, onAction: handle, onLink: openLink)
+                .liveRefresh(updated: model.lastUpdated, refreshing: model.loading, footer: false, web: true) { await model.load(full: true) }
             Divider()
             HStack(alignment: .bottom, spacing: 8) {
                 ComposerBox(text: $text, placeholder: "Comment (Markdown) — ⌘↩ to send", minHeight: 56).frame(height: 64)
@@ -593,6 +594,7 @@ struct CommitsTab: View {
                         Text(c.abbreviatedOid).font(.system(.caption, design: .monospaced)).foregroundStyle(Color.syMuted)
                     }
                     .padding(.vertical, 2)
+                    .rowAppear(c.oid, model.commitRows)
                 }
                 .contextMenu {
                     Button("Copy SHA") { copyToPasteboard(c.oid) }
@@ -603,6 +605,7 @@ struct CommitsTab: View {
                 Button("Show all \(pr.allCommits.totalCount ?? 0) commits in browser") { openInBrowser(pr.url + "/commits") }
             }
         }
+        .liveRefresh(updated: model.lastUpdated, refreshing: model.loading, footer: false) { await model.load(full: true) }
     }
 }
 
@@ -643,8 +646,10 @@ struct ChecksTab: View {
                     }
                 }
                 .padding(.vertical, 2)
+                .rowAppear(c.id, model.checkRows)
             }
         }
+        .liveRefresh(updated: model.lastUpdated, refreshing: model.loading, footer: false) { await model.load(full: true) }
         .sheet(item: $logTarget) { c in
             JobLogSheet(api: model.api, repo: model.ref.repo, check: c)
         }

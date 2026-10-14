@@ -9,11 +9,17 @@ struct HTMLView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
+    private static let topScript = """
+    (function(){var last=null;function check(){var top=window.scrollY<=0;if(top!==last){last=top;window.webkit.messageHandlers.app.postMessage({type:"atTop",id:top?"1":"0"});}}window.addEventListener("scroll",check,{passive:true});check();})();
+    """
+
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.userContentController.add(WeakHandler(context.coordinator), name: "app")
+        config.userContentController.addUserScript(WKUserScript(source: Self.topScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         config.preferences.isElementFullscreenEnabled = false
-        let view = WKWebView(frame: .zero, configuration: config)
+        let view = PullWebView(frame: .zero, configuration: config)
+        context.coordinator.webView = view
         view.navigationDelegate = context.coordinator
         view.uiDelegate = context.coordinator
         view.setValue(false, forKey: "drawsBackground")
@@ -41,6 +47,7 @@ struct HTMLView: NSViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         var parent: HTMLView
+        weak var webView: PullWebView?
         private var html = ""
         private var token = 0
         private var restoreY: Double?
@@ -101,6 +108,10 @@ struct HTMLView: NSViewRepresentable {
 
         func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let body = message.body as? [String: Any], let type = body["type"] as? String, let id = body["id"] as? String else { return }
+            if type == "atTop" {
+                webView?.atTop = id == "1"
+                return
+            }
             parent.onAction(type, id)
         }
     }

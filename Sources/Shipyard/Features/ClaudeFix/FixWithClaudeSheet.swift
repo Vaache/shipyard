@@ -293,44 +293,100 @@ struct ClaudeFixBanner: View {
 struct ReReviewBanner: View {
     let model: PRDetailModel
     let pr: PullRequestDetail
+    var inset = true
     let more: () -> Void
-    @State private var sent = false
+    @State private var sending = false
+    @State private var requested: [String]?
 
     var body: some View {
-        let logins = model.reviewersToReRequest
-        if pr.isOpen, !logins.isEmpty, pr.viewerDidAuthor || pr.viewerCanUpdate {
-            HStack(spacing: 8) {
-                IconTile(systemImage: "arrow.triangle.2.circlepath", color: .syIndigo, size: 18)
-                Text("New commits since review by " + logins.map { "@\($0)" }.joined(separator: ", "))
-                    .foregroundStyle(Color.syText)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                if let d = model.lastCommitDate {
-                    Text("· pushed \(Fmt.rel(d))").foregroundStyle(Color.syMuted).lineLimit(1)
+        let stale = model.staleReviews
+        let logins = stale.map(\.login)
+        let canAct = pr.isOpen && (pr.viewerDidAuthor || pr.viewerCanUpdate)
+        Group {
+            if let requested {
+                banner {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.syGreen)
+                    Text("Requested").fontWeight(.semibold).foregroundStyle(Color.syText)
+                    Text("· Review re-requested from " + mentions(requested))
+                        .foregroundStyle(Color.syMuted)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer()
                 }
-                Spacer()
-                Button("Other…", action: more)
-                    .controlSize(.small)
-                Button(logins.count == 1 ? "Re-request review" : "Re-request review (\(logins.count))") {
-                    sent = true
-                    Task {
-                        if !(await model.requestReviewers(logins)) { sent = false }
+                .transition(.opacity)
+            } else if canAct, !logins.isEmpty {
+                banner {
+                    IconTile(systemImage: "arrow.triangle.2.circlepath", color: .sySky, size: 18)
+                    Text(message(stale))
+                        .foregroundStyle(Color.syText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if let d = model.lastCommitDate {
+                        Text("· \(Fmt.rel(d))").foregroundStyle(Color.syMuted).lineLimit(1)
                     }
+                    Spacer()
+                    Button("Other…", action: more)
+                        .controlSize(.small)
+                    Button {
+                        send(logins)
+                    } label: {
+                        HStack(spacing: 5) {
+                            if sending {
+                                ProgressView().controlSize(.mini)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                            }
+                            Text(logins.count == 1 ? "Re-request review" : "Re-request review (\(logins.count))")
+                        }
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.sySky)
+                    .disabled(sending || model.busy)
                 }
-                .controlSize(.small)
-                .buttonStyle(.borderedProminent)
-                .tint(Color.syIndigo)
-                .disabled(sent || model.busy)
+                .transition(.opacity)
             }
+        }
+        .animation(Motion.smooth, value: requested)
+        .animation(Motion.smooth, value: logins)
+    }
+
+    private func banner<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: 8) { content() }
             .font(.callout)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.syIndigo.opacity(0.08)))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.syIndigo.opacity(0.28)))
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
-            .transition(.opacity)
-            .onChange(of: logins) { sent = false }
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.sySky.opacity(0.08)))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.sySky.opacity(0.3)))
+            .padding(.horizontal, inset ? 16 : 0)
+            .padding(.top, inset ? 6 : 0)
+    }
+
+    private func mentions(_ logins: [String]) -> String {
+        logins.map { "@\($0)" }.joined(separator: ", ")
+    }
+
+    private func message(_ stale: [(login: String, commits: Int?)]) -> String {
+        let who = stale.count == 1 ? "@\(stale[0].login)" : stale.dropLast().map { "@\($0.login)" }.joined(separator: ", ") + " and @\(stale.last!.login)"
+        let counts = stale.compactMap(\.commits)
+        let what: String
+        if counts.count == stale.count, let n = counts.max() {
+            what = plural(n, "commit", "commits")
+        } else {
+            what = "new commits"
+        }
+        return pr.viewerDidAuthor ? "You pushed \(what) after \(who) reviewed" : "\(what.prefix(1).uppercased() + what.dropFirst()) pushed after \(who) reviewed"
+    }
+
+    private func send(_ logins: [String]) {
+        sending = true
+        Task {
+            let ok = await model.requestReviewers(logins)
+            sending = false
+            guard ok else { return }
+            requested = logins
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            requested = nil
         }
     }
 }

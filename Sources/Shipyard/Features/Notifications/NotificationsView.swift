@@ -7,6 +7,9 @@ struct NotificationsView: View {
     @State private var error: String?
     @State private var showAll = false
     @State private var selection: String?
+    @State private var lastUpdated: Date?
+    @State private var loadedAll: Bool?
+    @State private var rows = RowAppearTracker.shared("notifications")
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,6 +26,7 @@ struct NotificationsView: View {
                 if let error { Text(error).foregroundStyle(Color.syRed).font(.caption) }
                 ForEach(items) { n in
                     NotificationRow(item: n)
+                        .rowAppear(n.id, rows)
                         .tag(n.id)
                         .contextMenu {
                             if n.unread { Button("Mark as read") { Task { await markRead(n) } } }
@@ -40,7 +44,7 @@ struct NotificationsView: View {
                 }
             }
             .overlay { if loading && items.isEmpty { ProgressView().controlSize(.small) } }
-            .pullToRefresh { await load() }
+            .liveRefresh(updated: lastUpdated, refreshing: loading, error: items.isEmpty ? nil : error) { await load() }
         }
         .navigationTitle("Notifications")
         .toolbar {
@@ -65,7 +69,13 @@ struct NotificationsView: View {
         loading = true
         defer { loading = false }
         do {
-            items = try await api.notifications(all: showAll)
+            let all = showAll
+            let fetched = try await api.notifications(all: all)
+            guard all == showAll else { return }
+            rows.ingest(fetched.map(\.id), mode: loadedAll == all ? .refresh : .cascade)
+            loadedAll = all
+            items = fetched
+            lastUpdated = Date()
             if !showAll { app.unreadCount = items.count }
             error = nil
         } catch {

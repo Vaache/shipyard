@@ -32,6 +32,7 @@ struct ClaudeProjectsColumn: View {
     @Environment(AppModel.self) private var app
     @State private var query = ""
     @State private var expanded: Set<String> = []
+    @State private var ready = false
 
     private var ws: ClaudeWorkspace { app.claude }
 
@@ -65,7 +66,7 @@ struct ClaudeProjectsColumn: View {
                 }
             }
             if ClaudeAccountStore.shared.isLoggedIn {
-                historyContent
+                if ready { historyContent }
             } else if case .checking = ClaudeAccountStore.shared.status {
                 HStack { Spacer(); ProgressView().controlSize(.small); Spacer() }
             } else if case .unknown = ClaudeAccountStore.shared.status {
@@ -83,6 +84,7 @@ struct ClaudeProjectsColumn: View {
         .listStyle(.inset)
         .surface(.list)
         .overlay { if ws.loadingProjects && ws.projects.isEmpty { ProgressView().controlSize(.small) } }
+        .liveRefresh(updated: ws.projectsUpdated, refreshing: ws.loadingProjects) { await ws.reloadProjects() }
         .searchable(text: $query, placement: .toolbar, prompt: "Search sessions")
         .navigationTitle("Claude Code")
         .toolbar {
@@ -90,8 +92,11 @@ struct ClaudeProjectsColumn: View {
                 Button { openFolder() } label: { Label("Open folder", systemImage: "folder.badge.plus") }
                     .disabled(!ClaudeAccountStore.shared.isLoggedIn)
                     .help("New session in folder…")
-                Button { Task { await ws.reloadProjects() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
             }
+        }
+        .onAppear {
+            ws.sessionRows.ingest(cascadeIDs, mode: .cascade)
+            ready = true
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await ClaudeAccountStore.shared.refresh() }
@@ -102,6 +107,11 @@ struct ClaudeProjectsColumn: View {
             if expanded.isEmpty, let first = ws.projects.first { expanded.insert(first.id) }
         }
         .onChange(of: app.refreshTick) { Task { await ws.reloadProjects() } }
+    }
+
+    private var cascadeIDs: [String] {
+        let open = expanded.isEmpty ? Set(ws.projects.prefix(1).map(\.id)) : expanded
+        return filtered.filter { open.contains($0.id) }.flatMap { $0.sessions.prefix(30).map(\.id) }
     }
 
     @ViewBuilder
@@ -147,6 +157,7 @@ struct ClaudeProjectsColumn: View {
                     if expanded.contains(project.id) || !query.isEmpty {
                         ForEach(project.sessions.prefix(query.isEmpty ? 30 : 200)) { s in
                             SessionRow(session: s, open: ws.tab(forSession: s.id) != nil)
+                                .rowAppear(s.id, ws.sessionRows)
                                 .contentShape(Rectangle())
                                 .onTapGesture { ws.resume(s) }
                                 .contextMenu { sessionMenu(s) }
@@ -782,6 +793,8 @@ struct BranchPRPanel: View {
     @State private var error: String?
     @State private var lastUpdated: Date?
     @State private var selected: ItemRef?
+    @State private var rows = RowAppearTracker()
+    @State private var listScope: PRListScope?
 
     private var repo: RepoRef? { tab.git.repo }
 
@@ -859,7 +872,7 @@ struct BranchPRPanel: View {
         }
         .listStyle(.inset)
         .surface(.panel)
-        .pullToRefresh { await load() }
+        .liveRefresh(updated: lastUpdated, refreshing: branchLoading || listLoading, footer: false) { await load() }
     }
 
     private func row(_ item: SearchItem, note: String? = nil) -> some View {
@@ -880,6 +893,7 @@ struct BranchPRPanel: View {
             .font(.caption)
         }
         .padding(.vertical, 2)
+        .rowAppear(item.id, rows)
         .contentShape(Rectangle())
         .onTapGesture { selected = item.ref }
         .contextMenu {
@@ -911,6 +925,7 @@ struct BranchPRPanel: View {
                 linkedItem = try? await api.pullRequestItem(ItemRef(repo: repo, number: number))
             }
             guard branch == tab.git.branch, repo == self.repo else { return }
+            rows.ingest((found + [linkedItem].compactMap { $0 }).map(\.id), mode: .refresh)
             branchPRs = found
             linked = linkedItem
             branchError = nil
@@ -934,6 +949,8 @@ struct BranchPRPanel: View {
             case .mine: items = try await api.search("repo:\(repo.full) is:pr author:@me sort:updated-desc").nodes
             }
             guard scope == self.scope, repo == self.repo else { return }
+            rows.ingest(items.map(\.id), mode: listScope == scope ? .refresh : .cascade)
+            listScope = scope
             list = items
             error = nil
             lastUpdated = Date()
@@ -973,7 +990,7 @@ struct InspectorPRDetail: View {
             ClaudeHairline()
             if let pr = model?.pr {
                 ScrollView { content(pr).padding(12) }
-                    .pullToRefresh { await model?.load(full: true) }
+                    .liveRefresh(updated: model?.lastUpdated, refreshing: model?.loading ?? false, footer: false) { await model?.load(full: true) }
             } else if let e = model?.error {
                 ErrorStateView(message: e) { Task { await model?.load() } }
             } else {
@@ -988,6 +1005,11 @@ struct InspectorPRDetail: View {
         .onChange(of: app.liveTick) { Task { await model?.load() } }
         .onChange(of: app.refreshTick) { Task { await model?.load(full: true) } }
         .onChange(of: tab.busy) { _, busy in if !busy { Task { await model?.load() } } }
+        .alert("Error", isPresented: Binding(get: { model?.actionError != nil }, set: { if !$0 { model?.actionError = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(model?.actionError ?? "")
+        }
     }
 
     @ViewBuilder
@@ -1010,6 +1032,7 @@ struct InspectorPRDetail: View {
             }
             if let m = model, pr.isOpen {
                 MergeStatusBar(model: m, pr: pr, onMerge: { app.section = .prs(.mine); app.open(.pr(ref)) })
+                ReReviewBanner(model: m, pr: pr, inset: false) { app.section = .prs(.mine); app.open(.pr(ref)) }
             }
             HStack(spacing: 14) {
                 let checks = pr.checks

@@ -208,7 +208,12 @@ extension GitHubAPI {
     }
 
     func requestReviewers(_ ref: ItemRef, logins: [String]) async throws {
-        try await send("POST", "/repos/\(ref.repo.full)/pulls/\(ref.number)/requested_reviewers", body: ["reviewers": logins])
+        let teams = logins.filter { $0.contains("/") }.compactMap { $0.split(separator: "/").last.map(String.init) }
+        let users = logins.filter { !$0.contains("/") }
+        var body: [String: [String]] = [:]
+        if !users.isEmpty { body["reviewers"] = users }
+        if !teams.isEmpty { body["team_reviewers"] = teams }
+        try await send("POST", "/repos/\(ref.repo.full)/pulls/\(ref.number)/requested_reviewers", body: body)
     }
 
     func deleteBranch(repo: String, branch: String) async throws {

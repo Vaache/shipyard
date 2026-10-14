@@ -81,7 +81,7 @@ enum Q {
           labels(first: 20) { nodes { name color } }
           assignees(first: 10) { nodes { login avatarUrl } }
           reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login avatarUrl } ... on Team { name } ... on Mannequin { login avatarUrl } } } }
-          latestOpinionatedReviews(first: 20) { nodes { state submittedAt author \(actor) } }
+          latestOpinionatedReviews(first: 20) { nodes { state submittedAt commit { oid } author \(actor) } }
           lastCommit: commits(last: 1) { nodes { commit { oid committedDate statusCheckRollup { state contexts(first: 100) { nodes { __typename
             ... on CheckRun { databaseId name status conclusion detailsUrl startedAt completedAt checkSuite { workflowRun { databaseId workflow { name } } } }
             ... on StatusContext { context state targetUrl description }

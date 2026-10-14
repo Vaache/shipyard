@@ -200,9 +200,14 @@ struct ReviewRequest: Decodable {
     let requestedReviewer: Reviewer?
 }
 
+struct ReviewCommit: Decodable {
+    let oid: String
+}
+
 struct LatestReview: Decodable {
     let state: String
     let submittedAt: Date?
+    let commit: ReviewCommit?
     let author: Actor?
 }
 
