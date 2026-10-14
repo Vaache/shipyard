@@ -249,14 +249,24 @@ struct ClaudeFixBanner: View {
     let action: () -> Void
 
     var body: some View {
-        let unresolved = pr.reviewThreads.nodes.filter { !$0.isResolved }.count
-        let found = FixPromptExtractor.latest(in: pr)
+        let open = pr.reviewThreads.nodes.filter { !$0.isResolved }
+        let unresolved = open.filter { !$0.isOutdated }.count
+        let outdated = open.count - unresolved
+        let lastCommit = pr.lastCommit.nodes.first?.commit.committedDate
+        let found = FixPromptExtractor.latest(in: pr).flatMap { f -> FoundFixPrompt? in
+            guard let d = f.date, let lastCommit, lastCommit > d else { return f }
+            return unresolved > 0 ? f : nil
+        }
         if pr.isOpen, unresolved > 0 || found != nil {
             HStack(spacing: 8) {
                 IconTile(systemImage: "sparkles", color: .syCoral, size: 18)
                 if unresolved > 0 {
                     Text(plural(unresolved, "unresolved comment", "unresolved comments"))
                         .foregroundStyle(Color.syText)
+                }
+                if outdated > 0 {
+                    Text("· \(outdated) outdated").foregroundStyle(Color.syDim)
+                        .help("Code these comments point to has changed since they were written")
                 }
                 if let found {
                     if unresolved > 0 { Text("·").foregroundStyle(Color.syDim) }
@@ -276,6 +286,51 @@ struct ClaudeFixBanner: View {
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.syCoral.opacity(0.28)))
             .padding(.horizontal, 16)
             .padding(.top, 6)
+        }
+    }
+}
+
+struct ReReviewBanner: View {
+    let model: PRDetailModel
+    let pr: PullRequestDetail
+    let more: () -> Void
+    @State private var sent = false
+
+    var body: some View {
+        let logins = model.reviewersToReRequest
+        if pr.isOpen, !logins.isEmpty, pr.viewerDidAuthor || pr.viewerCanUpdate {
+            HStack(spacing: 8) {
+                IconTile(systemImage: "arrow.triangle.2.circlepath", color: .syIndigo, size: 18)
+                Text("New commits since review by " + logins.map { "@\($0)" }.joined(separator: ", "))
+                    .foregroundStyle(Color.syText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if let d = model.lastCommitDate {
+                    Text("· pushed \(Fmt.rel(d))").foregroundStyle(Color.syMuted).lineLimit(1)
+                }
+                Spacer()
+                Button("Other…", action: more)
+                    .controlSize(.small)
+                Button(logins.count == 1 ? "Re-request review" : "Re-request review (\(logins.count))") {
+                    sent = true
+                    Task {
+                        if !(await model.requestReviewers(logins)) { sent = false }
+                    }
+                }
+                .controlSize(.small)
+                .buttonStyle(.borderedProminent)
+                .tint(Color.syIndigo)
+                .disabled(sent || model.busy)
+            }
+            .font(.callout)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.syIndigo.opacity(0.08)))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.syIndigo.opacity(0.28)))
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+            .transition(.opacity)
+            .onChange(of: logins) { sent = false }
         }
     }
 }

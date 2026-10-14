@@ -40,6 +40,7 @@ struct NotificationsView: View {
                 }
             }
             .overlay { if loading && items.isEmpty { ProgressView().controlSize(.small) } }
+            .pullToRefresh { await load() }
         }
         .navigationTitle("Notifications")
         .toolbar {
@@ -51,6 +52,7 @@ struct NotificationsView: View {
         }
         .task(id: showAll) { await load() }
         .onChange(of: app.refreshTick) { Task { await load() } }
+        .onChange(of: app.liveTick) { Task { await load() } }
         .onChange(of: selection) { _, id in
             guard let id, let n = items.first(where: { $0.id == id }) else { return }
             if let route = n.route { app.select(route) } else { openInBrowser(n.webURL) }

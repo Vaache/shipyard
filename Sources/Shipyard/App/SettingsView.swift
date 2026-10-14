@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
-    @AppStorage("pollInterval") private var pollInterval = 120.0
+    @AppStorage("pollInterval") private var pollInterval = 30.0
     @AppStorage("oauthClientID") private var clientID = ""
     @AppStorage(Theme.styleKey) private var themeStyle = ThemeStyle.shipyard.rawValue
     @AppStorage(Theme.appearanceKey) private var appearance = AppearanceMode.auto.rawValue
@@ -61,7 +61,9 @@ struct SettingsView: View {
                 SettingsHeader(title: "Links", icon: "link", color: .syIndigo)
             }
             Section {
-                Picker("Check counters", selection: $pollInterval) {
+                Picker("Auto-refresh pull requests", selection: $pollInterval) {
+                    Text("Every 15 seconds").tag(15.0)
+                    Text("Every 30 seconds").tag(30.0)
                     Text("Every minute").tag(60.0)
                     Text("Every 2 minutes").tag(120.0)
                     Text("Every 5 minutes").tag(300.0)

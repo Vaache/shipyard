@@ -97,6 +97,7 @@ struct MainView: View {
         .overlay(alignment: .bottom) { ClipboardBanner() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             app.checkClipboard()
+            app.didBecomeActive()
         }
         .onAppear { app.checkClipboard() }
     }

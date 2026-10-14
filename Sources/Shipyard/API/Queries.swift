@@ -5,6 +5,10 @@ enum Q {
     fragment PRItem on PullRequest { number title url prState: state isDraft createdAt updatedAt baseRefName author { login avatarUrl } repository { nameWithOwner defaultBranchRef { name } } reviewDecision additions deletions comments { totalCount } labels(first: 6) { nodes { name color } } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
     """
 
+    static let prItem = """
+    query($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { pullRequest(number: $num) { __typename ...PRItem } } }
+    """ + prItemFragment
+
     static let repoPullRequests = """
     query($o: String!, $n: String!, $b: String, $states: [PullRequestState!], $first: Int!) { repository(owner: $o, name: $n) { pullRequests(headRefName: $b, states: $states, first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { __typename ...PRItem } } } }
     """ + prItemFragment
@@ -77,8 +81,8 @@ enum Q {
           labels(first: 20) { nodes { name color } }
           assignees(first: 10) { nodes { login avatarUrl } }
           reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login avatarUrl } ... on Team { name } ... on Mannequin { login avatarUrl } } } }
-          latestOpinionatedReviews(first: 20) { nodes { state author \(actor) } }
-          lastCommit: commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 100) { nodes { __typename
+          latestOpinionatedReviews(first: 20) { nodes { state submittedAt author \(actor) } }
+          lastCommit: commits(last: 1) { nodes { commit { oid committedDate statusCheckRollup { state contexts(first: 100) { nodes { __typename
             ... on CheckRun { databaseId name status conclusion detailsUrl startedAt completedAt checkSuite { workflowRun { databaseId workflow { name } } } }
             ... on StatusContext { context state targetUrl description }
           } } } } } }

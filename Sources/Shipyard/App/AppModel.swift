@@ -89,6 +89,7 @@ final class AppModel {
     var detailRoot: Route?
     var detailPath: [Route] = []
     var refreshTick = 0
+    var liveTick = 0
     var showOpenLink = false
     var clipboardRoute: Route?
     var reviewRequests: [SearchItem] = []
@@ -97,6 +98,7 @@ final class AppModel {
     var myPRCount = 0
     var unreadCount = 0
     var lastBadgeRefresh: Date?
+    private var lastLiveRefresh = Date()
     let claude = ClaudeWorkspace()
 
     private var lastClipboard: String?
@@ -162,6 +164,7 @@ final class AppModel {
     }
 
     func refresh() {
+        lastLiveRefresh = Date()
         refreshTick += 1
         Task { await refreshBadges() }
     }
@@ -261,15 +264,35 @@ final class AppModel {
         }
     }
 
+    static var refreshInterval: TimeInterval {
+        max(UserDefaults.standard.double(forKey: "pollInterval"), 15)
+    }
+
     func startPolling() {
         pollTask?.cancel()
+        lastLiveRefresh = Date()
+        Task { await refreshBadges() }
         pollTask = Task { [weak self] in
+            var cycle = 0
             while !Task.isCancelled {
-                await self?.refreshBadges()
-                let interval = max(UserDefaults.standard.double(forKey: "pollInterval"), 60)
-                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(Self.refreshInterval * 1_000_000_000))
+                guard !Task.isCancelled, let self else { return }
+                cycle += 1
+                let due = Date().timeIntervalSince(self.lastLiveRefresh) >= Self.refreshInterval * 0.8
+                if due, NSApp.isActive || cycle % 4 == 0 { self.tickLive() }
             }
         }
+    }
+
+    func didBecomeActive() {
+        guard phase == .loggedIn, Date().timeIntervalSince(lastLiveRefresh) > 10 else { return }
+        tickLive()
+    }
+
+    private func tickLive() {
+        lastLiveRefresh = Date()
+        liveTick += 1
+        Task { await refreshBadges() }
     }
 
     func refreshBadges() async {

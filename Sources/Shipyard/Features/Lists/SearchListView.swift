@@ -29,6 +29,7 @@ final class SearchListModel {
         let total: Int
         let cursor: String?
         let hasMore: Bool
+        let updated: Date
     }
 
     private static var cache: [String: Snapshot] = [:]
@@ -36,14 +37,20 @@ final class SearchListModel {
     var items: [SearchItem] = []
     var total = 0
     var loading = false
+    var refreshing = false
+    var lastUpdated: Date?
     var error: String?
     private var cursor: String?
     private var hasMore = false
+    private var loadingMore = false
     private var currentQuery = ""
+    private var generation = 0
 
-    func load(api: GitHubAPI?, query: String) async {
+    func load(api: GitHubAPI?, query: String, silent: Bool = false) async {
         guard let api else { return }
+        var switched = false
         if query != currentQuery {
+            switched = true
             currentQuery = query
             error = nil
             if let snap = Self.cache[query] {
@@ -51,21 +58,36 @@ final class SearchListModel {
             } else {
                 items = []
                 total = 0
+                lastUpdated = nil
             }
         }
-        loading = true
+        generation += 1
+        let gen = generation
+        if !silent || switched { loading = true }
+        refreshing = true
         do {
             let r = try await api.search(query)
-            guard query == currentQuery else { return }
-            let snap = Snapshot(items: r.nodes, total: r.issueCount, cursor: r.pageInfo?.endCursor, hasMore: r.pageInfo?.hasNextPage ?? false)
+            guard gen == generation else { return }
+            var merged = r.nodes
+            var nextCursor = r.pageInfo?.endCursor
+            var more = r.pageInfo?.hasNextPage ?? false
+            if !switched, items.count > r.nodes.count {
+                let fresh = Set(r.nodes.map(\.id))
+                merged += items.dropFirst(r.nodes.count).filter { !fresh.contains($0.id) }
+                nextCursor = cursor
+                more = hasMore
+            }
+            let snap = Snapshot(items: merged, total: r.issueCount, cursor: nextCursor, hasMore: more, updated: Date())
             Self.cache[query] = snap
             apply(snap)
             error = nil
             loading = false
+            refreshing = false
         } catch {
-            guard query == currentQuery else { return }
+            guard gen == generation else { return }
             loading = false
-            if Task.isCancelled || (error as? URLError)?.code == .cancelled || error is CancellationError { return }
+            refreshing = false
+            if isCancellation(error) { return }
             self.error = error.localizedDescription
         }
     }
@@ -75,18 +97,20 @@ final class SearchListModel {
         total = snap.total
         cursor = snap.cursor
         hasMore = snap.hasMore
+        lastUpdated = snap.updated
     }
 
     func loadMore(api: GitHubAPI?) async {
-        guard let api, hasMore, !loading, let cursor else { return }
+        guard let api, hasMore, !loadingMore, let cursor else { return }
         let query = currentQuery
-        loading = true
-        defer { loading = false }
+        loadingMore = true
+        defer { loadingMore = false }
         if let r = try? await api.search(query, after: cursor), query == currentQuery {
-            items += r.nodes
+            let known = Set(items.map(\.id))
+            items += r.nodes.filter { !known.contains($0.id) }
             self.cursor = r.pageInfo?.endCursor
             hasMore = r.pageInfo?.hasNextPage ?? false
-            Self.cache[query] = Snapshot(items: items, total: total, cursor: self.cursor, hasMore: hasMore)
+            Self.cache[query] = Snapshot(items: items, total: total, cursor: self.cursor, hasMore: hasMore, updated: lastUpdated ?? Date())
         }
     }
 }
@@ -136,7 +160,7 @@ struct SearchListView: View {
             LoadingBar(active: model.loading && !model.items.isEmpty)
             Divider()
             List(selection: Binding(get: { app.detailRoot }, set: { app.select($0) })) {
-                if let e = model.error {
+                if let e = model.error, model.items.isEmpty {
                     Text(e).foregroundStyle(.red).font(.caption)
                 }
                 ForEach(model.items) { item in
@@ -158,6 +182,10 @@ struct SearchListView: View {
             .overlay {
                 if model.loading && model.items.isEmpty { ProgressView().controlSize(.small) }
             }
+            .pullToRefresh { await model.load(api: app.api, query: query, silent: true) }
+            RefreshFooter(updated: model.lastUpdated, refreshing: model.refreshing, error: model.items.isEmpty ? nil : model.error) {
+                Task { await model.load(api: app.api, query: query, silent: true) }
+            }
         }
         .searchable(text: $text, placement: .toolbar, prompt: "Filter: text, repo:org/name, label:bug")
         .navigationTitle(title)
@@ -168,6 +196,7 @@ struct SearchListView: View {
             await model.load(api: app.api, query: query)
         }
         .onChange(of: app.refreshTick) { Task { await model.load(api: app.api, query: query) } }
+        .onChange(of: app.liveTick) { Task { await model.load(api: app.api, query: query, silent: true) } }
     }
 }
 

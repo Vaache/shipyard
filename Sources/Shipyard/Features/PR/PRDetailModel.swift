@@ -47,6 +47,8 @@ final class PRDetailModel {
     var viewerLogin = ""
     var notPR = false
     var loading = false
+    var lastUpdated: Date?
+    var refreshError: String?
     var error: String?
     var actionError: String?
     var busy = false
@@ -55,7 +57,12 @@ final class PRDetailModel {
     }
     var visitedTabs: Set<PRTab> = [.conversation]
     var stack: [StackPR] = []
-    private var mergeStateRetried = false
+    @ObservationIgnored private var activeLoad: Task<Void, Never>?
+    @ObservationIgnored private var queuedLoad: Task<Void, Never>?
+    @ObservationIgnored private var reloadFiles = false
+    @ObservationIgnored private var filesOid: String?
+    @ObservationIgnored private var mergeRecheck: Task<Void, Never>?
+    @ObservationIgnored private var mergeRechecks = 0
     var html = ""
     var scrollToBottomToken = 0
 
@@ -98,8 +105,45 @@ final class PRDetailModel {
         return result
     }
 
-    func load() async {
-        guard !loading else { return }
+    var lastCommitDate: Date? { pr?.lastCommit.nodes.first?.commit.committedDate }
+
+    var reviewersToReRequest: [String] {
+        guard let pr, pr.isOpen, let last = lastCommitDate else { return [] }
+        let pending = Set(pr.reviewRequests.nodes.compactMap { $0.requestedReviewer?.display })
+        return pr.latestOpinionatedReviews.nodes.compactMap { r in
+            guard let login = r.author?.login, login != viewerLogin, !login.hasSuffix("[bot]"),
+                  !pending.contains(login), let at = r.submittedAt, at < last else { return nil }
+            return login
+        }
+    }
+
+    func load(full: Bool = false) async {
+        if full { reloadFiles = true }
+        if let queuedLoad {
+            await queuedLoad.value
+            return
+        }
+        if let activeLoad {
+            let next = Task { [weak self] () -> Void in
+                await activeLoad.value
+                await self?.startLoad()
+            }
+            queuedLoad = next
+            await next.value
+            return
+        }
+        await startLoad()
+    }
+
+    private func startLoad() async {
+        queuedLoad = nil
+        let task = Task { [weak self] () -> Void in await self?.fetch() }
+        activeLoad = task
+        await task.value
+        if activeLoad == task { activeLoad = nil }
+    }
+
+    private func fetch() async {
         loading = true
         defer { loading = false }
         do {
@@ -116,22 +160,37 @@ final class PRDetailModel {
             viewedPaths = Set(pr.files?.nodes.filter { $0.viewerViewedState == "VIEWED" }.map(\.path) ?? [])
             indexThreads(pr.reviewThreads.nodes)
             error = nil
+            refreshError = nil
+            lastUpdated = Date()
             Task(priority: .utility) { await self.loadStack() }
-            if pr.mergeStateStatus == "UNKNOWN", pr.isOpen, !mergeStateRetried {
-                mergeStateRetried = true
-                Task {
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    await self.load()
-                }
-            }
-            if filesLoaded {
-                await loadFiles(force: true)
-            } else if !filesLoading {
+            scheduleMergeRecheck(pr)
+            let filesStale = reloadFiles || (filesOid != nil && filesOid != pr.headRefOid)
+            reloadFiles = false
+            if filesLoaded, filesStale {
+                Task(priority: .utility) { await self.loadFiles(force: true) }
+            } else if !filesLoaded, !filesLoading {
                 Task(priority: .utility) { await self.loadFiles() }
             }
         } catch {
             if isCancellation(error) { return }
-            if pr == nil { self.error = error.localizedDescription } else { actionError = error.localizedDescription }
+            if pr == nil { self.error = error.localizedDescription } else { refreshError = error.localizedDescription }
+        }
+    }
+
+    private func scheduleMergeRecheck(_ pr: PullRequestDetail) {
+        let unknown = pr.isOpen && (pr.mergeStateStatus == "UNKNOWN" || pr.mergeable == "UNKNOWN")
+        guard unknown else {
+            mergeRechecks = 0
+            return
+        }
+        guard mergeRechecks < 5 else { return }
+        mergeRechecks += 1
+        let delay = UInt64(mergeRechecks * 2) * 1_000_000_000
+        mergeRecheck?.cancel()
+        mergeRecheck = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            await self?.load()
         }
     }
 
@@ -144,6 +203,7 @@ final class PRDetailModel {
         guard force || (!filesLoaded && !filesLoading) else { return }
         filesLoading = true
         defer { filesLoading = false }
+        let oid = pr?.headRefOid
         do {
             let raw = try await api.pullRequestFiles(ref)
             let parsed = await Task.detached(priority: .userInitiated) { raw.map(DiffFile.init) }.value
@@ -151,6 +211,7 @@ final class PRDetailModel {
                 collapsed = Set(parsed.filter { viewedPaths.contains($0.id) || $0.lines.count > 1500 }.map(\.id))
             }
             files = parsed
+            filesOid = oid
             filesVersion += 1
             filesLoaded = true
             filesError = nil

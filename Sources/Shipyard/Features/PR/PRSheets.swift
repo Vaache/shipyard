@@ -176,22 +176,56 @@ struct ReviewersSheet: View {
     let model: PRDetailModel
     @Environment(\.dismiss) private var dismiss
     @State private var logins = ""
+    @State private var selected: Set<String> = []
+
+    private var candidates: [(login: String, avatar: String?, state: String)] {
+        model.reviewers.filter { $0.login != model.viewerLogin && !$0.login.hasSuffix("[bot]") && !$0.login.contains("/") }
+    }
+
+    private var typed: [String] {
+        logins.split(whereSeparator: { $0 == "," || $0 == " " }).map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "@ ")) }.filter { !$0.isEmpty }
+    }
+
+    private var requested: [String] {
+        var seen = Set<String>()
+        return (candidates.map(\.login).filter(selected.contains) + typed).filter { seen.insert($0).inserted }
+    }
 
     var body: some View {
         SheetFrame(title: "Request review") {
-            TextField("Comma-separated logins, e.g. alice, bob", text: $logins).textFieldStyle(.roundedBorder)
+            if !candidates.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Reviewers on this pull request").font(.caption).foregroundStyle(Color.syMuted)
+                    ForEach(candidates, id: \.login) { r in
+                        Toggle(isOn: Binding(get: { selected.contains(r.login) }, set: { if $0 { selected.insert(r.login) } else { selected.remove(r.login) } })) {
+                            HStack(spacing: 6) {
+                                ReviewerBadge(login: r.login, avatar: r.avatar, state: r.state)
+                                Text(r.login)
+                                if model.reviewersToReRequest.contains(r.login) {
+                                    Text("reviewed before latest push").font(.caption).foregroundStyle(Color.syAmber)
+                                } else if r.state == "PENDING" {
+                                    Text("already requested").font(.caption).foregroundStyle(Color.syMuted)
+                                }
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                }
+            }
+            TextField("Other logins, comma-separated, e.g. alice, bob", text: $logins).textFieldStyle(.roundedBorder)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Request") {
-                    let list = logins.split(whereSeparator: { $0 == "," || $0 == " " }).map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "@ ")) }.filter { !$0.isEmpty }
+                Button(requested.isEmpty ? "Request" : "Request (\(requested.count))") {
+                    let list = requested
                     Task { if await model.requestReviewers(list) { dismiss() } }
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(logins.trimmingCharacters(in: .whitespaces).isEmpty || model.busy)
+                .disabled(requested.isEmpty || model.busy)
             }
         }
+        .onAppear { selected = Set(model.reviewersToReRequest) }
     }
 }
 

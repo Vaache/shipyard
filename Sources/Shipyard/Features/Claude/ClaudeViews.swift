@@ -776,8 +776,11 @@ struct BranchPRPanel: View {
     @State private var linked: SearchItem?
     @State private var list: [SearchItem] = []
     @State private var scope: PRListScope = .open
-    @State private var loading = false
+    @State private var branchLoading = false
+    @State private var listLoading = false
+    @State private var branchError: String?
     @State private var error: String?
+    @State private var lastUpdated: Date?
     @State private var selected: ItemRef?
 
     private var repo: RepoRef? { tab.git.repo }
@@ -796,13 +799,20 @@ struct BranchPRPanel: View {
                 listView
             }
         }
-        .task(id: "\(repo?.full ?? "")|\(tab.git.branch ?? "")|\(scope.rawValue)") { await load() }
+        .task(id: "\(repo?.full ?? "")|\(tab.git.branch ?? "")") { await loadBranch() }
+        .task(id: "\(repo?.full ?? "")|\(scope.rawValue)") { await loadList() }
+        .onChange(of: app.liveTick) { if selected == nil { Task { await load() } } }
+        .onChange(of: app.refreshTick) { if selected == nil { Task { await load() } } }
+        .onChange(of: tab.busy) { _, busy in if !busy { Task { await loadBranch() } } }
+        .onChange(of: tab.git.ahead) { Task { await loadBranch() } }
     }
 
     private var listView: some View {
         List {
             Section {
-                if branchPRs.isEmpty && linked == nil {
+                if let branchError, branchPRs.isEmpty {
+                    Text(branchError).font(.caption).foregroundStyle(Color.syRed)
+                } else if branchPRs.isEmpty && linked == nil && !branchLoading {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("No PR for branch \(tab.git.branch ?? "?")")
                             .font(.callout).foregroundStyle(Color.syMuted)
@@ -832,7 +842,7 @@ struct BranchPRPanel: View {
                 .labelsHidden()
                 .listRowSeparator(.hidden)
                 if let error { Text(error).font(.caption).foregroundStyle(Color.syRed) }
-                if list.isEmpty, !loading {
+                if list.isEmpty, !listLoading, error == nil {
                     Text("Nothing here").font(.callout).foregroundStyle(Color.syDim)
                 }
                 ForEach(list) { item in row(item) }
@@ -840,15 +850,16 @@ struct BranchPRPanel: View {
                 HStack {
                     Text(repo?.full ?? "")
                     Spacer()
-                    if loading { ProgressView().controlSize(.mini) }
-                    Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
-                        .buttonStyle(.borderless)
+                    RefreshStatus(updated: lastUpdated, refreshing: branchLoading || listLoading, error: branchError ?? error, compact: true) {
+                        Task { await load() }
+                    }
                 }
                 .textCase(nil)
             }
         }
         .listStyle(.inset)
         .surface(.panel)
+        .pullToRefresh { await load() }
     }
 
     private func row(_ item: SearchItem, note: String? = nil) -> some View {
@@ -879,27 +890,53 @@ struct BranchPRPanel: View {
     }
 
     private func load() async {
+        async let b: Void = loadBranch()
+        async let l: Void = loadList()
+        _ = await (b, l)
+    }
+
+    private func loadBranch() async {
         guard let api = app.api, let repo else { return }
-        loading = true
-        defer { loading = false }
+        let branch = tab.git.branch
+        branchLoading = true
+        defer { branchLoading = false }
         do {
-            if let b = tab.git.branch, b != "HEAD" {
-                branchPRs = try await api.repoPullRequests(repo, headRefName: b, states: ["OPEN", "MERGED", "CLOSED"], first: 5)
-            } else {
-                branchPRs = []
+            var found: [SearchItem] = []
+            if let branch, branch != "HEAD" {
+                found = try await api.repoPullRequests(repo, headRefName: branch, states: ["OPEN", "MERGED", "CLOSED"], first: 5)
             }
+            var linkedItem: SearchItem?
             if let number = app.claude.projects.flatMap(\.sessions).first(where: { $0.id == tab.sessionId })?.prNumber,
-               !branchPRs.contains(where: { $0.number == number }) {
-                linked = try? await api.search("repo:\(repo.full) is:pr \(number)").nodes.first { $0.number == number }
-            } else {
-                linked = nil
+               !found.contains(where: { $0.number == number }) {
+                linkedItem = try? await api.pullRequestItem(ItemRef(repo: repo, number: number))
             }
+            guard branch == tab.git.branch, repo == self.repo else { return }
+            branchPRs = found
+            linked = linkedItem
+            branchError = nil
+            lastUpdated = Date()
+        } catch {
+            if isCancellation(error) { return }
+            branchError = error.localizedDescription
+        }
+    }
+
+    private func loadList() async {
+        guard let api = app.api, let repo else { return }
+        let scope = scope
+        listLoading = true
+        defer { listLoading = false }
+        do {
+            let items: [SearchItem]
             switch scope {
-            case .open: list = try await api.repoPullRequests(repo, states: ["OPEN"])
-            case .merged: list = try await api.repoPullRequests(repo, states: ["MERGED"])
-            case .mine: list = try await api.search("repo:\(repo.full) is:pr author:@me sort:updated-desc").nodes
+            case .open: items = try await api.repoPullRequests(repo, states: ["OPEN"])
+            case .merged: items = try await api.repoPullRequests(repo, states: ["MERGED"])
+            case .mine: items = try await api.search("repo:\(repo.full) is:pr author:@me sort:updated-desc").nodes
             }
+            guard scope == self.scope, repo == self.repo else { return }
+            list = items
             error = nil
+            lastUpdated = Date()
         } catch {
             if isCancellation(error) { return }
             self.error = error.localizedDescription
@@ -921,6 +958,11 @@ struct InspectorPRDetail: View {
                 Button(action: onBack) { Label("Back", systemImage: "chevron.left") }
                     .buttonStyle(.borderless)
                 Spacer()
+                if let model {
+                    RefreshStatus(updated: model.lastUpdated, refreshing: model.loading, error: model.refreshError, compact: true) {
+                        Task { await model.load(full: true) }
+                    }
+                }
                 Button { openInBrowser("https://github.com/\(ref.repo.full)/pull/\(ref.number)") } label: { Image(systemName: "safari") }
                     .buttonStyle(.borderless)
                     .help("Open in browser")
@@ -931,6 +973,7 @@ struct InspectorPRDetail: View {
             ClaudeHairline()
             if let pr = model?.pr {
                 ScrollView { content(pr).padding(12) }
+                    .pullToRefresh { await model?.load(full: true) }
             } else if let e = model?.error {
                 ErrorStateView(message: e) { Task { await model?.load() } }
             } else {
@@ -942,6 +985,9 @@ struct InspectorPRDetail: View {
             model = m
             await m?.load()
         }
+        .onChange(of: app.liveTick) { Task { await model?.load() } }
+        .onChange(of: app.refreshTick) { Task { await model?.load(full: true) } }
+        .onChange(of: tab.busy) { _, busy in if !busy { Task { await model?.load() } } }
     }
 
     @ViewBuilder

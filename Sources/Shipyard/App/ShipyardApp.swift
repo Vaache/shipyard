@@ -7,7 +7,7 @@ enum Main {
             SelfTest.run()
         } else {
             LegacyMigration.run()
-            UserDefaults.standard.register(defaults: ["pollInterval": 120.0])
+            UserDefaults.standard.register(defaults: ["pollInterval": 30.0])
             ShipyardApp.main()
         }
     }

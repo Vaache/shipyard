@@ -36,6 +36,15 @@ extension GitHubAPI {
         return r.repository?.pullRequests.nodes ?? []
     }
 
+    func pullRequestItem(_ ref: ItemRef) async throws -> SearchItem? {
+        struct R: Decodable {
+            struct Repo: Decodable { let pullRequest: SearchItem? }
+            let repository: Repo?
+        }
+        let r: R = try await graphQL(Q.prItem, ["o": ref.repo.owner, "n": ref.repo.name, "num": ref.number])
+        return r.repository?.pullRequest
+    }
+
     func pullRequestStack(_ ref: ItemRef) async throws -> [StackPR] {
         struct R: Decodable {
             struct Entry: Decodable { let position: Int; let pullRequest: StackPR }

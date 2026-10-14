@@ -202,6 +202,7 @@ struct ReviewRequest: Decodable {
 
 struct LatestReview: Decodable {
     let state: String
+    let submittedAt: Date?
     let author: Actor?
 }
 
@@ -279,6 +280,7 @@ struct StatusRollup: Decodable {
 
 struct LastCommit: Decodable {
     let oid: String
+    let committedDate: Date?
     let statusCheckRollup: StatusRollup?
 }
 

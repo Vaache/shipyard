@@ -27,6 +27,9 @@ struct PRDetailView: View {
             await m?.load()
         }
         .onChange(of: app.refreshTick) {
+            Task { await model?.load(full: true) }
+        }
+        .onChange(of: app.liveTick) {
             Task { await model?.load() }
         }
     }
@@ -51,6 +54,7 @@ struct PRDetailContent: View {
     var body: some View {
         VStack(spacing: 0) {
             PRHeaderView(model: model, pr: pr, onMerge: { showMerge = true })
+            ReReviewBanner(model: model, pr: pr) { showReviewers = true }
             ClaudeFixBanner(pr: pr) { showFix = true }
             TabStrip(items: [
                 TabItem(id: PRTab.conversation, title: "Conversation", icon: "bubble.left.and.bubble.right", badge: commentsBadge),
@@ -106,7 +110,7 @@ struct PRDetailContent: View {
     }
 
     private var commentsBadge: String? {
-        let unresolved = pr.reviewThreads.nodes.filter { !$0.isResolved }.count
+        let unresolved = pr.reviewThreads.nodes.filter { !$0.isResolved && !$0.isOutdated }.count
         return unresolved > 0 ? "\(unresolved)" : nil
     }
 
@@ -164,8 +168,11 @@ struct PRDetailContent: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            if model.busy || model.loading {
+            if model.busy {
                 ProgressView().controlSize(.small)
+            }
+            RefreshStatus(updated: model.lastUpdated, refreshing: model.loading, error: model.refreshError, compact: true) {
+                Task { await model.load(full: true) }
             }
             if pr.isOpen {
                 Menu {
@@ -180,6 +187,10 @@ struct PRDetailContent: View {
                 }
                 .help("Submit review")
             }
+            if pr.isOpen {
+                Button { showReviewers = true } label: { Label("Request review", systemImage: "person.crop.circle.badge.plus") }
+                    .help("Request or re-request review")
+            }
             Button { showFix = true } label: { Label("Fix with Claude", systemImage: "sparkles") }
                 .help("Send review comments to a new Claude Code session")
             if canMerge {
@@ -191,8 +202,6 @@ struct PRDetailContent: View {
             } label: {
                 Label("More", systemImage: "ellipsis.circle")
             }
-            Button { Task { await model.load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                .help("Refresh")
             Button { openInBrowser(pr.url) } label: { Label("Open in browser", systemImage: "safari") }
                 .help("Open on github.com")
         }
