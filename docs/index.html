@@ -53,6 +53,8 @@ h1 .grad{background:linear-gradient(92deg,var(--violet),var(--sky) 45%,var(--cor
 .lead{font-size:clamp(17px,2vw,20px);color:var(--muted);max-width:680px;margin:0 auto 34px}
 .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 .meta{margin-top:16px;color:var(--dim);font-size:13.5px}
+.meta a{color:inherit;text-decoration:none;border-bottom:1px dotted currentColor}
+.meta a:hover{color:var(--text)}
 
 .shot{position:relative;margin:64px auto 0;max-width:1100px}
 .shot:before{content:"";position:absolute;inset:8% 6% -4%;background:radial-gradient(closest-side,rgba(56,189,248,.18),transparent);filter:blur(40px);z-index:-1}
@@ -162,7 +164,7 @@ footer a:hover{color:var(--text)}
         View source
       </a>
     </div>
-    <div class="meta">Universal · Apple Silicon &amp; Intel · macOS 14 Sonoma or later · ~9 MB</div>
+    <div class="meta"><a href="https://github.com/Vaache/shipyard/releases/latest" data-version>Version 2.3.1</a> · Universal · Apple Silicon &amp; Intel · macOS 14 Sonoma or later · ~9 MB</div>
 
     <div class="shot reveal">
       <div id="demo" class="demo" role="application" aria-label="Interactive Shipyard demo">
@@ -189,7 +191,7 @@ footer a:hover{color:var(--text)}
       <div class="card reveal">
         <div class="ic" style="background:rgba(167,139,250,.14);color:var(--violet)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V10a3 3 0 0 0-3-3h-4"/><path d="m13 5-2 2 2 2"/></svg></div>
         <h4>Full pull request review</h4>
-        <p>Conversation, review threads, commits, checks and files. Comment, approve, request changes, merge — and see stacked PRs as one chain.</p>
+        <p>Conversation, review threads, commits, checks and files. Comment, approve, merge, see stacked PRs as one chain — and re-request review in one click after you push.</p>
       </div>
       <div class="card reveal">
         <div class="ic" style="background:rgba(251,113,133,.14);color:var(--coral)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></div>
@@ -198,8 +200,8 @@ footer a:hover{color:var(--text)}
       </div>
       <div class="card reveal">
         <div class="ic" style="background:rgba(251,191,36,.14);color:var(--amber)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
-        <h4>Inbox that keeps up</h4>
-        <p>Notifications, issues and review requests with a menu bar badge, so you know when someone is waiting on you.</p>
+        <h4>Always up to date</h4>
+        <p>Pull requests refresh on their own every 30 seconds, with “Updated 12s ago” in view and pull to refresh on the trackpad. A menu bar badge shows who's waiting on you.</p>
       </div>
       <div class="card reveal">
         <div class="ic" style="background:rgba(45,212,191,.14);color:#2dd4bf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
@@ -256,12 +258,12 @@ footer a:hover{color:var(--text)}
     <div class="reveal">
       <div class="eyebrow">Install</div>
       <h2>Up and running in a minute.</h2>
-      <p class="sub">Shipyard isn't notarized yet, so macOS asks once before the first launch.</p>
+      <p class="sub">Shipyard isn't notarized yet, so macOS asks once before the first launch. After that, updates install from inside the app with no extra steps.</p>
     </div>
     <div class="steps">
       <div class="step reveal"><h4>Download</h4><p>Get the latest universal DMG from GitHub Releases.</p></div>
       <div class="step reveal"><h4>Drag to Applications</h4><p>Open the DMG and drop Shipyard into your Applications folder.</p></div>
-      <div class="step reveal"><h4>Allow first launch</h4><p>System Settings → Privacy &amp; Security → Open Anyway. The DMG has a short guide, or run the command below.</p></div>
+      <div class="step reveal"><h4>Allow first launch</h4><p>System Settings → Privacy &amp; Security → Open Anyway, or run the command below. Only needed once.</p></div>
     </div>
     <div class="code reveal"><code id="cmd">xattr -dr com.apple.quarantine /Applications/Shipyard.app</code><button type="button" id="copy">Copy</button></div>
     <div class="req reveal">
@@ -281,7 +283,8 @@ footer a:hover{color:var(--text)}
       </div>
       <div class="faq-col">
         <details class="reveal"><summary>Where does my data go?</summary><p>Straight from your Mac to api.github.com. Your token is stored in the macOS Keychain. Shipyard has no backend and no analytics.</p></details>
-        <details class="reveal"><summary>How do I update?</summary><p>Choose <b>Shipyard → Check for Updates…</b> — Shipyard downloads the new release from GitHub, installs it and restarts. It also checks once a day on its own; you can turn that off in Settings.</p></details>
+        <details class="reveal"><summary>How do I update?</summary><p>Choose <b>Shipyard → Check for Updates…</b> — Shipyard downloads the new release from GitHub, replaces itself in place and restarts. No disk image, no dragging to Applications. If that folder needs admin rights, macOS asks for your password. Shipyard also checks once a day on its own; you can turn that off in Settings.</p></details>
+        <details class="reveal"><summary>How fresh is what I see?</summary><p>Pull request lists, the open pull request and notifications refresh every 30 seconds while Shipyard is in front, and right away when you switch back to it. The footer shows when the list was last updated. Pull down on the trackpad or press <b>⌘R</b> to refresh now, or change the interval in Settings.</p></details>
       </div>
     </div>
   </div>
@@ -315,6 +318,8 @@ footer a:hover{color:var(--text)}
       var r=document.createRange();r.selectNodeContents(document.getElementById("cmd"));var s=getSelection();s.removeAllRanges();s.addRange(r);
     });
   });
+  var version=document.querySelector("[data-version]");
+  if(version&&window.fetch)fetch("https://api.github.com/repos/Vaache/shipyard/releases/latest").then(function(r){return r.ok?r.json():null}).then(function(j){if(j&&j.tag_name)version.textContent="Version "+j.tag_name.replace(/^v/i,"")}).catch(function(){});
   var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   document.querySelectorAll(".faq details").forEach(function(d){
     var summary=d.querySelector("summary"), body=d.querySelector("p"), running=null;

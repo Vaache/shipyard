@@ -33,6 +33,8 @@ A browser tab with GitHub can use a gigabyte of memory just to show one diff. Sh
 - Comment, approve, request changes and merge
 - Fast diff viewer with sticky file headers, built on `NSTableView`
 - Stacked pull requests: the whole stack in the PR header, jump up and down the chain, "stacked on" markers in lists
+- Live refresh: lists and the open PR update every 30 seconds (15 s to 15 min in Settings), right after you switch back to the app, and on pull to refresh; "Updated 12s ago" shows how fresh the data is
+- Re-request review in one click when you push after someone reviewed; outdated review threads aren't counted as unresolved
 
 **Everything else you open GitHub for**
 - Notifications and issues
@@ -41,7 +43,7 @@ A browser tab with GitHub can use a gigabyte of memory just to show one diff. Sh
 - Menu bar badge with the number of pending review requests
 - Shipyard theme in light and dark, or the native macOS look
 - Open any GitHub link inside the app (`⌘L`)
-- Built-in updates: **Shipyard → Check for Updates…** downloads and installs new releases
+- Built-in updates: **Shipyard → Check for Updates…** downloads the new release, replaces the app in place and restarts
 
 **Claude Code workspace**
 - Native chat for the official Claude Code CLI, next to the PR, changed files and branch
@@ -63,7 +65,7 @@ A browser tab with GitHub can use a gigabyte of memory just to show one diff. Sh
    xattr -dr com.apple.quarantine /Applications/Shipyard.app
    ```
 
-After that, updates install from inside the app: **Shipyard → Check for Updates…**
+This is needed only once: Shipyard clears the quarantine flag from itself on launch, and updates install from inside the app (**Shipyard → Check for Updates…**) with no disk image or drag to Applications.
 
 **Requirements:** macOS 14 Sonoma or later. Optional: [GitHub CLI](https://cli.github.com) for one-click sign-in, [Claude Code](https://docs.claude.com/en/docs/claude-code) for the Claude workspace.
 
