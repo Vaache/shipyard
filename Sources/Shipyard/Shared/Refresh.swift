@@ -197,35 +197,42 @@ private struct PullIndicator: View {
     }
 }
 
+struct PullGesture {
+    private(set) var value: CGFloat = 0
+    private var active = false
+
+    mutating func handle(_ event: NSEvent, atTop: Bool) -> (pull: CGFloat?, fire: Bool) {
+        guard event.hasPreciseScrollingDeltas, event.momentumPhase == [] else { return (nil, false) }
+        if event.phase.contains(.began) || event.phase.contains(.mayBegin) {
+            active = true
+            value = 0
+        }
+        if active, event.phase.contains(.changed) {
+            if atTop || value > 0 { value = max(0, value + event.scrollingDeltaY) }
+            return (value, false)
+        }
+        if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            let fire = active && event.phase.contains(.ended) && value >= pullThreshold * 0.8
+            active = false
+            value = 0
+            return (0, fire)
+        }
+        return (nil, false)
+    }
+}
+
 final class PullWebView: WKWebView {
     var atTop = true
     var onPull: ((CGFloat) -> Void)?
     var onTrigger: (() -> Void)?
-    private var accumulated: CGFloat = 0
-    private var tracking = false
+    private var gesture = PullGesture()
 
     override func scrollWheel(with event: NSEvent) {
         super.scrollWheel(with: event)
-        guard onPull != nil, event.momentumPhase == [] else { return }
-        if event.phase.contains(.began) || event.phase.contains(.mayBegin) {
-            accumulated = 0
-            tracking = true
-        }
-        if tracking, event.phase.contains(.changed) {
-            if atTop {
-                accumulated = max(0, accumulated + event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.8 : 0))
-            } else {
-                accumulated = 0
-            }
-            onPull?(accumulated)
-        }
-        if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
-            let fire = tracking && accumulated >= pullThreshold * 0.85 && event.phase.contains(.ended)
-            tracking = false
-            accumulated = 0
-            onPull?(0)
-            if fire { onTrigger?() }
-        }
+        guard onPull != nil else { return }
+        let r = gesture.handle(event, atTop: atTop)
+        if let p = r.pull { onPull?(p) }
+        if r.fire { onTrigger?() }
     }
 }
 
@@ -318,9 +325,8 @@ private struct ScrollPullProbe: NSViewRepresentable {
         weak var webView: PullWebView?
         var onPull: (CGFloat) -> Void = { _ in }
         var onTrigger: () -> Void = {}
-        private var observers: [NSObjectProtocol] = []
-        private var maxPull: CGFloat = 0
-        private var tracking = false
+        private var monitor: Any?
+        private var gesture = PullGesture()
 
         var attached: Bool { scrollView != nil || webView != nil }
 
@@ -337,67 +343,35 @@ private struct ScrollPullProbe: NSViewRepresentable {
             detach()
             scrollView = scroll
             scroll.verticalScrollElasticity = .allowed
-            let clip = scroll.contentView
-            clip.postsBoundsChangedNotifications = true
-            let center = NotificationCenter.default
-            observers.append(center.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.boundsChanged() }
-            })
-            observers.append(center.addObserver(forName: NSScrollView.willStartLiveScrollNotification, object: scroll, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.tracking = true
-                    self?.maxPull = 0
-                }
-            })
-            observers.append(center.addObserver(forName: NSScrollView.didEndLiveScrollNotification, object: scroll, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.endTracking() }
-            })
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                MainActor.assumeIsolated { self?.handle(event) }
+                return event
+            }
         }
 
         func detach() {
-            observers.forEach(NotificationCenter.default.removeObserver)
-            observers = []
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
             scrollView = nil
             webView?.onPull = nil
             webView?.onTrigger = nil
             webView = nil
         }
 
-        private var currentPull: CGFloat {
-            guard let scroll = scrollView else { return 0 }
+        private var atTop: Bool {
+            guard let scroll = scrollView else { return false }
             let clip = scroll.contentView
-            guard clip.isFlipped else { return 0 }
-            return max(0, -(clip.bounds.minY + clip.contentInsets.top))
+            guard clip.isFlipped else { return false }
+            return clip.bounds.minY + clip.contentInsets.top <= 1
         }
 
-        private func boundsChanged() {
-            let value = currentPull
-            let event = NSApp.currentEvent
-            let fingerDown = event?.type == .scrollWheel
-                && event?.momentumPhase == []
-                && event?.hasPreciseScrollingDeltas == true
-                && !(event?.phase ?? []).isDisjoint(with: [.began, .changed, .stationary, .mayBegin])
-            if tracking, fingerDown {
-                maxPull = max(maxPull, value)
-                onPull(value)
-                return
-            }
-            onPull(0)
-            if tracking, maxPull >= pullThreshold * 0.85 { fire() }
-        }
-
-        private func endTracking() {
-            if maxPull >= pullThreshold * 0.85 { fire() }
-            tracking = false
-            maxPull = 0
-            onPull(0)
-        }
-
-        private func fire() {
-            maxPull = 0
-            tracking = false
-            onPull(0)
-            onTrigger()
+        private func handle(_ event: NSEvent) {
+            guard let scroll = scrollView, event.window === scroll.window, scroll.window != nil else { return }
+            let point = scroll.convert(event.locationInWindow, from: nil)
+            guard scroll.bounds.contains(point) else { return }
+            let r = gesture.handle(event, atTop: atTop)
+            if let p = r.pull { onPull(p) }
+            if r.fire { onTrigger() }
         }
     }
 }
