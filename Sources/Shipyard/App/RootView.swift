@@ -179,7 +179,10 @@ struct SidebarRow: View {
         Label {
             Text(title)
         } icon: {
-            IconTile(systemImage: icon, color: color, size: 20)
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(color)
+                .frame(width: 20)
         }
     }
 }

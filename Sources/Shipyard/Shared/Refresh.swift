@@ -80,7 +80,7 @@ extension View {
     }
 }
 
-private let pullThreshold: CGFloat = 44
+private let pullThreshold: CGFloat = 36
 private let heldMargin: CGFloat = 48
 
 enum PullPhase: Equatable {
@@ -200,20 +200,27 @@ private struct PullIndicator: View {
 struct PullGesture {
     private(set) var value: CGFloat = 0
     private var active = false
+    private var fired = false
 
     mutating func handle(_ event: NSEvent, atTop: Bool) -> (pull: CGFloat?, fire: Bool) {
         guard event.hasPreciseScrollingDeltas, event.momentumPhase == [] else { return (nil, false) }
         if event.phase.contains(.began) || event.phase.contains(.mayBegin) {
             active = true
+            fired = false
             value = 0
         }
         if active, event.phase.contains(.changed) {
             if atTop || value > 0 { value = max(0, value + event.scrollingDeltaY) }
+            if !fired, value >= pullThreshold {
+                fired = true
+                return (value, true)
+            }
             return (value, false)
         }
         if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
-            let fire = active && event.phase.contains(.ended) && value >= pullThreshold * 0.8
+            let fire = active && !fired && event.phase.contains(.ended) && value >= pullThreshold * 0.7
             active = false
+            fired = false
             value = 0
             return (0, fire)
         }
@@ -366,8 +373,10 @@ private struct ScrollPullProbe: NSViewRepresentable {
         }
 
         private func handle(_ event: NSEvent) {
-            guard let scroll = scrollView, event.window === scroll.window, scroll.window != nil else { return }
-            let point = scroll.convert(event.locationInWindow, from: nil)
+            guard let scroll = scrollView, let window = scroll.window else { return }
+            if let w = event.window, w !== window { return }
+            let inWindow = event.window == nil ? window.convertPoint(fromScreen: event.locationInWindow) : event.locationInWindow
+            let point = scroll.convert(inWindow, from: nil)
             guard scroll.bounds.contains(point) else { return }
             let r = gesture.handle(event, atTop: atTop)
             if let p = r.pull { onPull(p) }
