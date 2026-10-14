@@ -44,7 +44,7 @@ A browser tab with GitHub can use a gigabyte of memory just to show one diff. Sh
 - Menu bar badge with the number of pending review requests
 - Shipyard theme in light and dark, or the native macOS look
 - Open any GitHub link inside the app (`⌘L`)
-- Built-in updates: **Shipyard → Check for Updates…** downloads the new release, replaces the app in place and restarts
+- Built-in updates: Shipyard checks for a new release every 6 hours, tells you with a notification and an "Update to …" item in the sidebar and menu bar, then downloads it, replaces the app in place and restarts (also **Shipyard → Check for Updates…**)
 
 **Claude Code workspace**
 - Native chat for the official Claude Code CLI, next to the PR, changed files and branch
