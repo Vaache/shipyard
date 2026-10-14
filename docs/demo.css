@@ -10,7 +10,8 @@
 .d-h{font-size:11px;font-weight:600;color:var(--t3);padding:9px 8px 4px}
 .d-it{display:flex!important;align-items:center;gap:9px;width:100%;padding:5px 8px!important;border-radius:7px;white-space:nowrap;transition:background .15s}
 .d-it:hover{background:rgba(255,255,255,.05)}
-.d-it.on{background:rgba(255,255,255,.11)}
+.d-it.on{background:rgba(255,255,255,.06);box-shadow:inset 3px 0 0 var(--c,#5bb8ec)}
+.d-it.on span:not(.d-tile):not(.d-c){font-weight:600}
 .d-tile{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;flex:none;color:var(--c,#fff);background:color-mix(in srgb,var(--c,#8693a8) 14%,transparent)}
 .d-tile .ti{width:12px;height:12px;stroke-width:2.4}
 .d-tile.sm{width:22px;height:22px}.d-tile.md{width:36px;height:36px;border-radius:9px}.d-tile.md .ti{width:18px;height:18px}
@@ -181,7 +182,6 @@
 }
 
 .d-it .d-tile{background:rgba(255,255,255,.04);box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
-.d-it.on .d-tile{color:var(--t1)}
 .d-row.d-in{animation:dRowIn .7s cubic-bezier(.22,1,.36,1) both}
 .d-row.d-new{animation:dRowIn .7s cubic-bezier(.22,1,.36,1) both,dFresh 2.4s ease-out both}
 @keyframes dRowIn{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:none}}

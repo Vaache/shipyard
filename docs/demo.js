@@ -200,7 +200,7 @@
       if (s.h) { h += '<div class="d-h">' + s.h + "</div>"; return; }
       var on = state.section === s.id ? " on" : "";
       var c = s.count ? '<span class="d-c' + (s.id === "review" ? " hot" : "") + '">' + s.count + "</span>" : "";
-      h += '<button class="d-it' + on + '" data-sec="' + s.id + '"><span class="d-tile" style="--c:' + s.color + '">' + icon(s.icon, "ti") + "</span><span>" + s.title + "</span>" + c + "</button>";
+      h += '<button class="d-it' + on + '" data-sec="' + s.id + '" style="--c:' + s.color + '"><span class="d-tile" style="--c:' + s.color + '">' + icon(s.icon, "ti") + "</span><span>" + s.title + "</span>" + c + "</button>";
     });
     h += '<div class="d-me">' + avatar("arivera") + '<div><b>Alex Rivera</b><small>@arivera</small></div></div></div>';
     return h;

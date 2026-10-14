@@ -121,37 +121,29 @@ struct SidebarView: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        @Bindable var app = app
-        List(selection: $app.section) {
+        List {
             Section("Inbox") {
-                SidebarRow(title: "Notifications", icon: "bell.fill", color: .syAmber)
-                    .badge(app.unreadCount)
-                    .tag(SidebarSection.notifications)
+                SidebarRow(section: .notifications, title: "Notifications", icon: "bell.fill", color: .syAmber, count: app.unreadCount)
             }
             Section("Pull requests") {
                 ForEach(PRFilter.allCases) { f in
-                    SidebarRow(title: f.title, icon: f.tileIcon, color: f.tint)
-                        .badge(f == .reviewRequested ? app.reviewRequestCount : (f == .mine ? app.myPRCount : 0))
-                        .tag(SidebarSection.prs(f))
+                    SidebarRow(section: .prs(f), title: f.title, icon: f.tileIcon, color: f.tint, count: f == .reviewRequested ? app.reviewRequestCount : (f == .mine ? app.myPRCount : 0))
                 }
             }
             Section("Issues") {
                 ForEach(IssueFilter.allCases) { f in
-                    SidebarRow(title: f.title, icon: f.tileIcon, color: f.tint).tag(SidebarSection.issues(f))
+                    SidebarRow(section: .issues(f), title: f.title, icon: f.tileIcon, color: f.tint)
                 }
             }
             Section("Code") {
-                SidebarRow(title: "Repositories", icon: "book.closed.fill", color: .syTeal).tag(SidebarSection.repos)
-                SidebarRow(title: "Projects", icon: "rectangle.split.3x1.fill", color: .syIndigo).tag(SidebarSection.projects)
+                SidebarRow(section: .repos, title: "Repositories", icon: "book.closed.fill", color: .syTeal)
+                SidebarRow(section: .projects, title: "Projects", icon: "rectangle.split.3x1.fill", color: .syIndigo)
             }
             Section("AI") {
-                SidebarRow(title: "Claude Code", icon: "sparkles", color: .syCoral)
-                    .badge(app.claude.attentionCount > 0 ? app.claude.attentionCount : app.claude.tabs.filter(\.running).count)
-                    .tag(SidebarSection.claude)
+                SidebarRow(section: .claude, title: "Claude Code", icon: "sparkles", color: .syCoral, count: app.claude.attentionCount > 0 ? app.claude.attentionCount : app.claude.tabs.filter(\.running).count)
             }
         }
         .listStyle(.sidebar)
-        .background(SidebarFocusProbe())
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 0) {
                 if let version = Updater.shared.availableVersion {
@@ -206,65 +198,43 @@ struct UpdateAvailableRow: View {
 }
 
 struct SidebarRow: View {
+    @Environment(AppModel.self) private var app
+    let section: SidebarSection
     let title: String
     let icon: String
     let color: Color
+    var count = 0
+    @State private var hovering = false
 
     var body: some View {
-        Label {
-            Text(title)
-        } icon: {
+        let selected = app.section == section
+        HStack(spacing: 8) {
             SidebarIcon(systemImage: icon, color: color)
-        }
-    }
-}
-
-struct SidebarFocusProbe: NSViewRepresentable {
-    func makeNSView(context: Context) -> ProbeView { ProbeView() }
-    func updateNSView(_ view: ProbeView, context: Context) {}
-
-    final class ProbeView: NSView {
-        private var done = false
-
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            done = false
-            guard window != nil else { return }
-            DispatchQueue.main.async { [weak self] in self?.apply() }
-        }
-
-        override func layout() {
-            super.layout()
-            if !done { apply() }
-        }
-
-        private func apply() {
-            guard !done, window != nil else { return }
-            let target = convert(bounds, to: nil)
-            guard target.width > 0 else { return }
-            var ancestor = superview
-            while let a = ancestor {
-                var queue: [NSView] = [a]
-                while !queue.isEmpty {
-                    let v = queue.removeFirst()
-                    if let table = v as? NSTableView {
-                        let r = table.enclosingScrollView.map { $0.convert($0.bounds, to: nil) } ?? .zero
-                        if r.intersects(target), abs(r.width - target.width) < 2 {
-                            done = true
-                            if !table.refusesFirstResponder {
-                                table.refusesFirstResponder = true
-                                if table.window?.firstResponder === table { table.window?.makeFirstResponder(nil) }
-                            }
-                            return
-                        }
-                    }
-                    queue.append(contentsOf: v.subviews)
-                }
-                ancestor = a.superview
+            Text(title)
+                .foregroundStyle(Color.syText)
+                .fontWeight(selected ? .medium : .regular)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if count > 0 {
+                Text("\(count)").font(.callout.monospacedDigit()).foregroundStyle(Color.syMuted)
             }
         }
+        .padding(.leading, 9)
+        .padding(.trailing, 8)
+        .padding(.vertical, 5)
+        .background {
+            ZStack(alignment: .leading) {
+                Color.syText.opacity(selected ? 0.06 : hovering ? 0.035 : 0)
+                if selected { color.frame(width: 3) }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { app.section = section }
+        .onHover { hovering = $0 }
+        .animation(Motion.fade, value: selected)
+        .listRowInsets(EdgeInsets(top: 1, leading: 6, bottom: 1, trailing: 6))
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
