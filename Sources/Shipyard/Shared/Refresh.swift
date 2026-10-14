@@ -234,6 +234,10 @@ final class PullWebView: WKWebView {
     var onTrigger: (() -> Void)?
     private var gesture = PullGesture()
 
+    override func reload(_ sender: Any?) { onTrigger?() }
+
+    override func reloadFromOrigin(_ sender: Any?) { onTrigger?() }
+
     override func scrollWheel(with event: NSEvent) {
         super.scrollWheel(with: event)
         guard onPull != nil else { return }

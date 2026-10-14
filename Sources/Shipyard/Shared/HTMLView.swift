@@ -93,6 +93,10 @@ struct HTMLView: NSViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            if action.navigationType == .reload || action.navigationType == .backForward {
+                decisionHandler(.cancel)
+                return
+            }
             if action.navigationType == .linkActivated, let url = action.request.url {
                 decisionHandler(.cancel)
                 parent.onLink(url)
