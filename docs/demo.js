@@ -200,7 +200,7 @@
       if (s.h) { h += '<div class="d-h">' + s.h + "</div>"; return; }
       var on = state.section === s.id ? " on" : "";
       var c = s.count ? '<span class="d-c' + (s.id === "review" ? " hot" : "") + '">' + s.count + "</span>" : "";
-      h += '<button class="d-it' + on + '" data-sec="' + s.id + '"><span class="d-tile" style="background:' + s.color + '">' + icon(s.icon, "ti") + "</span><span>" + s.title + "</span>" + c + "</button>";
+      h += '<button class="d-it' + on + '" data-sec="' + s.id + '"><span class="d-tile" style="--c:' + s.color + '">' + icon(s.icon, "ti") + "</span><span>" + s.title + "</span>" + c + "</button>";
     });
     h += '<div class="d-me">' + avatar("arivera") + '<div><b>Alex Rivera</b><small>@arivera</small></div></div></div>';
     return h;
@@ -233,16 +233,16 @@
       });
     } else if (state.section === "repos") {
       REPOS.forEach(function (r, i) {
-        h += '<button class="d-row' + (state.detail === "repo" && state.repo === i ? " on" : "") + '" data-repo="' + i + '"><span class="d-tile sm" style="background:#2dd4bf">' + icon("book", "ti") + '</span><span class="d-rt"><b>' + r[0] + "</b><small>" + r[3] + '</small><small><i class="d-lang" style="background:' + r[2] + '"></i>' + r[1] + " · ★ " + r[4] + "</small></span></button>";
+        h += '<button class="d-row' + (state.detail === "repo" && state.repo === i ? " on" : "") + '" data-repo="' + i + '"><span class="d-tile sm" style="--c:#2dd4bf">' + icon("book", "ti") + '</span><span class="d-rt"><b>' + r[0] + "</b><small>" + r[3] + '</small><small><i class="d-lang" style="background:' + r[2] + '"></i>' + r[1] + " · ★ " + r[4] + "</small></span></button>";
       });
     } else if (state.section === "projects") {
-      h += '<button class="d-row on"><span class="d-tile sm" style="background:#6366f1">' + icon("board", "ti") + '</span><span class="d-rt"><b>Q4 roadmap</b><small>12 items · 3 columns</small></span></button>';
+      h += '<button class="d-row on"><span class="d-tile sm" style="--c:#6366f1">' + icon("board", "ti") + '</span><span class="d-rt"><b>Q4 roadmap</b><small>12 items · 3 columns</small></span></button>';
     } else if (state.section === "claude") {
       h += '<div class="d-sub">Open</div>';
       h += '<button class="d-row on"><span class="d-sdot" style="background:' + (state.chat && state.chat.waiting ? "#e8b44c" : "#5dbe8a") + '"></span><span class="d-rt"><b>Cancel stale searches</b><small>web-app · <i class="d-chip v">feat/search-debounce</i></small></span></button>';
       h += '<div class="d-sub">Projects</div>';
       [["web-app", "#5bb8ec", 6], ["api", "#9d8cf0", 12], ["ios", "#fb923c", 3]].forEach(function (p) {
-        h += '<div class="d-proj"><span class="d-tile sm" style="background:' + p[1] + '">' + icon("folder", "ti") + "</span><b>" + p[0] + "</b><small>" + p[2] + "</small></div>";
+        h += '<div class="d-proj"><span class="d-tile sm" style="--c:' + p[1] + '">' + icon("folder", "ti") + "</span><b>" + p[0] + "</b><small>" + p[2] + "</small></div>";
       });
     }
     return h + "</div>";
@@ -268,7 +268,7 @@
     if (state.section === "claude") return '<div class="d-det">' + back + chatView() + "</div>";
     if (state.detail === "repo") return '<div class="d-det">' + back + repoView() + "</div>";
     if (state.section === "projects") return '<div class="d-det">' + back + boardView() + "</div>";
-    if (state.detail !== "pr") return '<div class="d-det d-placeholder"><span class="d-tile lg" style="background:var(--violet)">' + icon("pr", "ti") + "</span><p>Select a pull request</p></div>";
+    if (state.detail !== "pr") return '<div class="d-det d-placeholder"><span class="d-tile lg" style="--c:var(--violet)">' + icon("pr", "ti") + "</span><p>Select a pull request</p></div>";
     var p = PRS[state.pr];
     var col = stateColor(p.state);
     var h = '<div class="d-det">' + back + '<div class="d-head"><h3>' + esc(p.title) + " <span>#" + state.pr + '</span></h3><div class="d-meta"><span class="d-pill" style="background:' + col + '">' + icon(stateIcon(p.state), "ti") + p.state.charAt(0).toUpperCase() + p.state.slice(1) + "</span>" + avatar(p.author) + "<b>" + p.author + '</b><i class="d-chip s">' + p.base + '</i><span class="d-arrow">←</span><i class="d-chip v">' + p.head + '</i><i class="g">+' + p.add + '</i><i class="r">−' + p.del + '</i><span class="d-ago">' + p.ago + " ago</span></div>";
@@ -320,7 +320,7 @@
 
   function repoView() {
     var r = REPOS[state.repo];
-    return '<div class="d-repo"><div class="d-card d-rhead"><span class="d-tile md" style="background:#2dd4bf">' + icon("book", "ti") + "</span><div><b>" + r[0] + "</b><small>" + r[3] + '</small><div class="d-meta"><i class="d-chip a">★ ' + r[4] + '</i><i class="d-chip s">main</i></div></div></div><div class="d-tree">' +
+    return '<div class="d-repo"><div class="d-card d-rhead"><span class="d-tile md" style="--c:#2dd4bf">' + icon("book", "ti") + "</span><div><b>" + r[0] + "</b><small>" + r[3] + '</small><div class="d-meta"><i class="d-chip a">★ ' + r[4] + '</i><i class="d-chip s">main</i></div></div></div><div class="d-tree">' +
       ["src", "tests", ".github"].map(function (d) { return '<div class="d-tr">' + icon("folder", "ti s") + d + "</div>"; }).join("") +
       ["README.md", "package.json", "tsconfig.json"].map(function (d) { return '<div class="d-tr">' + icon("file", "ti dim") + d + "</div>"; }).join("") +
       '</div><div class="d-card d-readme"><h4>' + r[0].split("/")[1] + "</h4><p>" + r[3] + ". Run <code>make dev</code> to start it locally.</p></div></div>";
@@ -346,7 +346,7 @@
   function chatView() {
     var c = state.chat || { step: 0, items: [] };
     var h = '<div class="d-chat"><div class="d-ctab"><span class="d-ct">' + icon("chat", "ti") + 'Cancel stale searches <small>web-app</small></span><span class="d-cplus">+</span><span class="d-cmodel">opus</span></div><div class="d-msgs" id="d-msgs">';
-    if (!c.items.length) h += '<div class="d-welcome"><span class="d-tile lg" style="background:var(--coral)">' + icon("spark", "ti") + '</span><b>Claude Code</b><p>Open a PR and press <em>Fix with Claude Code</em>, or start here.</p><button class="d-start" data-fix>' + icon("spark", "ti") + "Fix review on #482</button></div>";
+    if (!c.items.length) h += '<div class="d-welcome"><span class="d-tile lg" style="--c:var(--coral)">' + icon("spark", "ti") + '</span><b>Claude Code</b><p>Open a PR and press <em>Fix with Claude Code</em>, or start here.</p><button class="d-start" data-fix>' + icon("spark", "ti") + "Fix review on #482</button></div>";
     c.items.forEach(function (it, i) { h += i === c.fresh ? it.replace('<div class="', '<div class="new ') : it; });
     if (c.busy) h += '<div class="d-working"><span class="d-spin"></span>Working…</div>';
     h += '</div><form class="d-ccomp" data-compose><input placeholder="Ask Claude or describe a task…" aria-label="Message"><div class="d-crow"><span>Accept edits ▾</span><span>Opus ▾</span><span>effort ▾</span><span class="d-ring"></span><button type="submit" aria-label="Send">' + icon("send", "ti") + "</button></div></form></div>";
@@ -510,14 +510,19 @@
   }
   root.addEventListener("wheel", function (e) {
     var list = e.target.closest && e.target.closest(".d-list");
-    if (!list || refreshing || e.deltaMode !== 0 || Math.abs(e.deltaY) > 60) return;
-    if (list.scrollTop > 0 || e.deltaY >= 0) { if (pulling && e.deltaY > 0) { pull = Math.max(0, pull - e.deltaY); setPull(pull); } return; }
+    if (!list || e.deltaMode !== 0 || Math.abs(e.deltaY) > 60) return;
+    if (refreshing) { if (list.scrollTop <= 0 && e.deltaY < 0) e.preventDefault(); return; }
+    if (list.scrollTop > 0 || e.deltaY >= 0) {
+      if (pulling && e.deltaY > 0) { e.preventDefault(); pull = Math.max(0, pull - e.deltaY); setPull(pull); }
+      return;
+    }
+    e.preventDefault();
     pulling = true;
     pull += -e.deltaY * 0.8;
     setPull(pull);
     clearTimeout(pullTimer);
     pullTimer = setTimeout(finishPull, 140);
-  }, { passive: true });
+  }, { passive: false });
 
   setInterval(function () {
     var ago = root.querySelector("[data-ago]");

@@ -338,6 +338,7 @@ private struct ScrollPullProbe: NSViewRepresentable {
         var onTrigger: () -> Void = {}
         private var monitor: Any?
         private var gesture = PullGesture()
+        private var settle: DispatchWorkItem?
 
         var attached: Bool { scrollView != nil || webView != nil }
 
@@ -345,7 +346,7 @@ private struct ScrollPullProbe: NSViewRepresentable {
             guard web !== webView else { return }
             detach()
             webView = web
-            web.onPull = { [weak self] in self?.onPull($0) }
+            web.onPull = { [weak self] in self?.report($0) }
             web.onTrigger = { [weak self] in self?.onTrigger() }
         }
 
@@ -383,8 +384,20 @@ private struct ScrollPullProbe: NSViewRepresentable {
             let point = scroll.convert(inWindow, from: nil)
             guard scroll.bounds.contains(point) else { return }
             let r = gesture.handle(event, atTop: atTop)
-            if let p = r.pull { onPull(p) }
+            if let p = r.pull { report(p) }
             if r.fire { onTrigger() }
+        }
+
+        private func report(_ value: CGFloat) {
+            onPull(value)
+            settle?.cancel()
+            guard value > 0 else { return }
+            let item = DispatchWorkItem { [weak self] in
+                self?.gesture = PullGesture()
+                self?.onPull(0)
+            }
+            settle = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: item)
         }
     }
 }

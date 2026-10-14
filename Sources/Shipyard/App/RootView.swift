@@ -124,25 +124,25 @@ struct SidebarView: View {
         @Bindable var app = app
         List(selection: $app.section) {
             Section("Inbox") {
-                SidebarRow(title: "Notifications", icon: "bell.fill", color: .syMuted)
+                SidebarRow(title: "Notifications", icon: "bell.fill", color: .syAmber)
                     .badge(app.unreadCount)
                     .tag(SidebarSection.notifications)
             }
             Section("Pull requests") {
                 ForEach(PRFilter.allCases) { f in
-                    SidebarRow(title: f.title, icon: f.tileIcon, color: .syMuted)
+                    SidebarRow(title: f.title, icon: f.tileIcon, color: f.tint)
                         .badge(f == .reviewRequested ? app.reviewRequestCount : (f == .mine ? app.myPRCount : 0))
                         .tag(SidebarSection.prs(f))
                 }
             }
             Section("Issues") {
                 ForEach(IssueFilter.allCases) { f in
-                    SidebarRow(title: f.title, icon: f.tileIcon, color: .syMuted).tag(SidebarSection.issues(f))
+                    SidebarRow(title: f.title, icon: f.tileIcon, color: f.tint).tag(SidebarSection.issues(f))
                 }
             }
             Section("Code") {
-                SidebarRow(title: "Repositories", icon: "book.closed.fill", color: .syMuted).tag(SidebarSection.repos)
-                SidebarRow(title: "Projects", icon: "rectangle.split.3x1.fill", color: .syMuted).tag(SidebarSection.projects)
+                SidebarRow(title: "Repositories", icon: "book.closed.fill", color: .syTeal).tag(SidebarSection.repos)
+                SidebarRow(title: "Projects", icon: "rectangle.split.3x1.fill", color: .syIndigo).tag(SidebarSection.projects)
             }
             Section("AI") {
                 SidebarRow(title: "Claude Code", icon: "sparkles", color: .syCoral)
