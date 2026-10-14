@@ -186,11 +186,6 @@
 .d-row.d-new{animation:dRowIn .7s cubic-bezier(.22,1,.36,1) both,dFresh 2.4s ease-out both}
 @keyframes dRowIn{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:none}}
 @keyframes dFresh{0%,50%{background:rgba(91,184,236,.10);box-shadow:inset 3px 0 0 #5bb8ec}100%{background:transparent;box-shadow:inset 3px 0 0 transparent}}
-.d-ptr{height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:6px;flex:none;transition:height .25s cubic-bezier(.22,1,.36,1);--p:0%}
-.d-ptr i{width:20px;height:20px;border-radius:50%;background:conic-gradient(#5bb8ec 0 var(--p),rgba(255,255,255,.12) 0);-webkit-mask:radial-gradient(circle,transparent 6.5px,#000 7px);mask:radial-gradient(circle,transparent 6.5px,#000 7px)}
-.d-ptr span{display:none;font-size:11.5px;color:var(--t2)}
-.d-ptr.spin i{--p:28%;animation:dSpin .8s linear infinite}
-.d-ptr.done i{display:none}.d-ptr.done span{display:inline}
 .d-upd{margin-top:auto;padding:9px 14px;text-align:center;font-size:11.5px;color:var(--t3);border-top:1px solid var(--ln);flex:none}
 .d-rerq{display:flex;align-items:center;gap:10px;margin-top:12px;padding:7px 8px 7px 12px;border-radius:9px;background:rgba(91,184,236,.08);font-size:12.5px;color:#cfe6f7}
 .d-rerq span{display:flex;align-items:center;gap:6px}

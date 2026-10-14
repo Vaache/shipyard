@@ -221,7 +221,6 @@
         var st = PRS[id].state;
         return state.filter === "all" || (state.filter === "open" ? st !== "merged" : st === "merged");
       });
-      h += '<div class="d-ptr"><i></i><span>Updated just now</span></div>';
       if (!ids.length) h += '<div class="d-empty">Nothing here</div>';
       ids.forEach(function (id) { h += prRow(id); });
       h += '<div class="d-upd">Updated <span data-ago>' + agoText() + "</span></div>";
@@ -479,51 +478,6 @@
     render();
   });
 
-  var pull = 0, pulling = false, pullTimer = null, refreshing = false;
-  function ring() { return root.querySelector(".d-list .d-ptr"); }
-  function setPull(v) {
-    var r = ring();
-    if (!r) return;
-    var p = Math.min(1, v / 44);
-    r.style.height = Math.min(48, v) + "px";
-    r.style.setProperty("--p", Math.round(p * 100) + "%");
-    r.classList.toggle("armed", p >= 1);
-  }
-  function finishPull() {
-    pulling = false;
-    if (pull < 38 || refreshing) { pull = 0; setPull(0); return; }
-    refreshing = true;
-    var r = ring();
-    if (r) { r.style.height = "48px"; r.classList.add("spin"); }
-    setTimeout(function () {
-      state.updated = Date.now();
-      var r2 = ring();
-      if (r2) { r2.classList.remove("spin"); r2.classList.add("done"); }
-      var ago = root.querySelector("[data-ago]");
-      if (ago) ago.textContent = agoText();
-      setTimeout(function () {
-        refreshing = false; pull = 0;
-        var r3 = ring();
-        if (r3) { r3.classList.remove("done", "armed"); r3.style.height = "0px"; }
-      }, 800);
-    }, 900);
-  }
-  root.addEventListener("wheel", function (e) {
-    var list = e.target.closest && e.target.closest(".d-list");
-    if (!list || e.deltaMode !== 0 || Math.abs(e.deltaY) > 60) return;
-    if (refreshing) { if (list.scrollTop <= 0 && e.deltaY < 0) e.preventDefault(); return; }
-    if (list.scrollTop > 0 || e.deltaY >= 0) {
-      if (pulling && e.deltaY > 0) { e.preventDefault(); pull = Math.max(0, pull - e.deltaY); setPull(pull); }
-      return;
-    }
-    e.preventDefault();
-    pulling = true;
-    pull += -e.deltaY * 0.8;
-    setPull(pull);
-    clearTimeout(pullTimer);
-    pullTimer = setTimeout(finishPull, 140);
-  }, { passive: false });
-
   setInterval(function () {
     var ago = root.querySelector("[data-ago]");
     if (ago) ago.textContent = agoText();
@@ -537,7 +491,7 @@
     state.fresh = 91;
     state.freshDone = false;
     state.updated = Date.now();
-    if (state.section === "review" && !refreshing) render();
+    if (state.section === "review") render();
   }, 6000);
 
   state.detail = "pr";
