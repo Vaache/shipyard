@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Shipyard.Core.Api;
 using Windows.UI;
+using VisualState = Shipyard.Core.Api.VisualState;
 
 namespace Shipyard.Services;
 
@@ -117,5 +118,5 @@ public static class Palette
         _ => null
     };
 
-    public static Color Transparent => Colors.Transparent;
+    public static Color Transparent => Microsoft.UI.Colors.Transparent;
 }

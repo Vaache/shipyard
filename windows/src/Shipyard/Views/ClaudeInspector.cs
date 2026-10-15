@@ -9,6 +9,7 @@ using Shipyard.Core.Html;
 using Shipyard.Core.Util;
 using Shipyard.Services;
 using Shipyard.ViewModels;
+using VisualState = Shipyard.Core.Api.VisualState;
 
 namespace Shipyard.Views;
 

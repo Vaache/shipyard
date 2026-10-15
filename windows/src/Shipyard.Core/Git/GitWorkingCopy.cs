@@ -146,12 +146,16 @@ public sealed partial class GitWorkingCopy : ObservableObject, IDisposable
         var p = e.FullPath;
         if (Ignored.Any(i => p.Contains(i, StringComparison.OrdinalIgnoreCase))) return;
         debounce?.Dispose();
-        debounce = new Timer(_ =>
-        {
-            if (context is not null) context.Post(_ => _ = Refresh(), null);
-            else _ = Refresh();
-        }, null, 800, Timeout.Infinite);
+        debounce = new Timer(FireRefresh, null, 800, Timeout.Infinite);
     }
+
+    private void FireRefresh(object? state)
+    {
+        if (context is not null) context.Post(RefreshFromContext, null);
+        else _ = Refresh();
+    }
+
+    private void RefreshFromContext(object? state) => _ = Refresh();
 
     public void Dispose()
     {

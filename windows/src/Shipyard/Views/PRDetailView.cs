@@ -13,6 +13,7 @@ using Shipyard.Core.Util;
 using Shipyard.Services;
 using Shipyard.ViewModels;
 using Windows.System;
+using VisualState = Shipyard.Core.Api.VisualState;
 
 namespace Shipyard.Views;
 

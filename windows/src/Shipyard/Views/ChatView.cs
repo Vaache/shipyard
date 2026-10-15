@@ -43,7 +43,7 @@ public sealed class ChatView : Grid
     private readonly ListView completions = new() { SelectionMode = ListViewSelectionMode.Single, MaxHeight = 260, IsItemClickEnabled = true };
     private readonly Grid bottomBar = new();
     private readonly List<ChatImage> attached = new();
-    private DispatcherQueueTimer? flushTimer;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? flushTimer;
     private bool ready;
     private List<string> files = new();
     private bool filesLoading;
