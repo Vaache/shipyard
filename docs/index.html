@@ -104,8 +104,10 @@ summary::-webkit-details-marker{display:none}
 summary:after{content:"+";color:var(--dim);font-weight:400;font-size:22px;line-height:1;display:inline-block;transition:transform .35s cubic-bezier(.3,1.4,.5,1),color .25s}
 details.is-open summary:after{transform:rotate(45deg);color:var(--text)}
 details p{color:var(--muted);margin:12px 0 0;font-size:15px}
+details p a{color:var(--text);text-decoration:underline;text-underline-offset:3px}
 
 .final{text-align:center;padding:120px 0}
+.final .pizza{margin:18px auto 0;color:var(--dim);font-size:13.5px}
 .final img{width:96px;height:96px;margin-bottom:22px;filter:drop-shadow(0 12px 22px rgba(0,0,0,.35))}
 footer{border-top:1px solid var(--line);padding:34px 0 46px;color:var(--dim);font-size:13.5px}
 footer .wrap{display:flex;gap:20px;justify-content:space-between;flex-wrap:wrap}
@@ -141,6 +143,7 @@ footer a:hover{color:var(--text)}
       <a href="#tour">Tour</a>
       <a href="#install">Install</a>
       <a href="https://github.com/pullyard/pullyard" data-repo>GitHub</a>
+      <a href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1">Buy me a pizza 🍕</a>
     </div>
     <a class="btn btn-primary btn-sm" href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg" data-download>Download</a>
   </div>
@@ -292,6 +295,7 @@ footer a:hover{color:var(--text)}
       <div class="faq-col">
         <details class="reveal"><summary>Where does my data go?</summary><p>From your Mac straight to api.github.com. Your token is stored in the macOS Keychain. PullYard has no backend and no analytics.</p></details>
         <details class="reveal"><summary>How do I update?</summary><p>Choose <b>PullYard → Check for Updates…</b>. PullYard downloads the new release from GitHub, replaces itself and restarts, so there's no disk image to open. If your Applications folder needs admin rights, macOS asks for your password. PullYard also checks on its own every 6 hours; you can turn that off in Settings.</p></details>
+        <details class="reveal"><summary>What do I get for a pizza?</summary><p>A PullYard Supporter license, sent to your email right after checkout. Paste the key into <b>PullYard → Settings</b> to unlock supporter extras: alternate app icons and a supporter badge. You choose the price, from $3. PullYard itself stays free and open source, and nothing else is locked. <a href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1">Buy me a pizza 🍕</a></p></details>
         <details class="reveal"><summary>How fresh is what I see?</summary><p>Pull request lists, the open pull request and notifications refresh every 30 seconds while PullYard is in front, and again as soon as you switch back to it. The footer shows when the list was last updated. Pull down on the trackpad or press <b>⌘R</b> to refresh now. You can change the interval in Settings.</p></details>
       </div>
     </div>
@@ -306,13 +310,15 @@ footer a:hover{color:var(--text)}
     <div class="cta">
       <a class="btn btn-primary" href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg" data-download>Download PullYard</a>
       <a class="btn btn-ghost" href="https://github.com/pullyard/pullyard/releases" data-repo-releases>All releases</a>
+      <a class="btn btn-ghost" href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1">Buy me a pizza 🍕</a>
     </div>
+    <p class="pizza">Get a PullYard Supporter license · pay what you want, from $3</p>
   </div>
 </div>
 
 <footer>
   <div class="wrap">
-    <span>© 2026 PullYard contributors</span>
+    <span>© 2026 PullYard contributors · <a href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1">Buy me a pizza 🍕</a></span>
     <span>Not affiliated with GitHub, Inc. or Anthropic. GitHub and Claude are trademarks of their respective owners.</span>
   </div>
 </footer>
