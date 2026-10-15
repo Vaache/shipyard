@@ -85,7 +85,7 @@ enum ConversationHTML {
         """
     }
 
-    static func render(pr: PullRequestDetail) -> String {
+    static func render(pr: PullRequestDetail, conflicts: ConflictState? = nil, repo: RepoRef? = nil) -> String {
         let authorLogin = pr.author?.login
         var out = commentBox(author: pr.author, date: pr.createdAt, html: pr.bodyHTML, note: "description", highlight: true)
         var byReview: [String: [ReviewThread]] = [:]
@@ -109,7 +109,37 @@ enum ConversationHTML {
         if !rest.isEmpty {
             out += "<h3 class=\"sec\">\("Review threads")</h3>" + rest.map(thread).joined()
         }
+        if let conflicts {
+            out += conflictBox(conflicts, pr: pr, repo: repo)
+        }
         return page(out)
+    }
+
+    private static func conflictBox(_ state: ConflictState, pr: PullRequestDetail, repo: RepoRef?) -> String {
+        let base = "<code>\(esc(pr.baseRefName))</code>"
+        var content: String
+        switch state {
+        case .checking:
+            content = "<p class=\"note\">\("Checking which files conflict with") \(base)…</p>"
+        case .files(let files) where files.isEmpty:
+            content = "<p class=\"note\">\("No conflicts when merging locally — GitHub may still be updating its status.") <a class=\"act\" onclick=\"post('rescanConflicts','')\">\("Check again")</a></p>"
+        case .files(let files):
+            let rows = files.map { f in
+                "<li data-path=\"\(esc(f))\" onclick=\"post('file',this.dataset.path)\" title=\"\("View in files")\"><span class=\"fi\">⚠︎</span>\(esc(f))</li>"
+            }.joined()
+            content = "<p class=\"note\">\(plural(files.count, "file conflicts", "files conflict")) \("with") \(base):</p><ul class=\"cfiles\">\(rows)</ul>"
+        case .noClone:
+            let name = esc(repo?.full ?? "this repository")
+            content = "<p class=\"note\">\("This branch has conflicts with") \(base). \("Link a local clone of") <b>\(name)</b> \("to see which files conflict.")</p><div class=\"actions\"><button onclick=\"post('chooseClone','')\">\("Choose local folder…")</button></div>"
+        case .unavailable(let message):
+            content = "<p class=\"note\">\("This branch has conflicts with") \(base). \(esc(message)) <a class=\"act\" onclick=\"post('rescanConflicts','')\">\("Try again")</a></p>"
+        }
+        let actions = "<div class=\"actions\"><button class=\"claude\" onclick=\"post('resolveConflicts','')\">✦ \("Resolve Conflicts with Claude Code")</button><a href=\"\(esc(pr.url))/conflicts\">\("Resolve on GitHub")</a></div>"
+        return """
+        <div class="item conflict"><span class="cic">!</span><div class="box">
+        <div class="head"><b>\("This branch has conflicts that must be resolved")</b></div>
+        <div class="cbody">\(content)\(actions)</div></div></div>
+        """
     }
 
     static func render(issue: IssueDetail) -> String {
@@ -194,14 +224,14 @@ enum ConversationHTML {
     static var css: String { Theme.isBrand ? brandVars + baseCSS + brandOverrides : systemVars + baseCSS }
 
     private static let systemVars = """
-    :root{--fg:#1f2328;--muted:#59636e;--border:#d1d9e0;--sub:#f6f8fa;--card:transparent;--link:#0969da;--green:#1a7f37;--red:#d1242f;--purple:#8250df;--add:#dafbe1;--del:#ffebe9;--mine:#ddf4ff;--code:#fff;color-scheme:light dark}
-    @media (prefers-color-scheme: dark){:root{--fg:#e6edf3;--muted:#9198a1;--border:#3d444d;--sub:#151b23;--link:#4493f8;--green:#3fb950;--red:#f85149;--purple:#ab7df8;--add:rgba(46,160,67,.18);--del:rgba(248,81,73,.18);--mine:rgba(56,139,253,.12);--code:transparent}}
+    :root{--coral:#ff2d55;--fg:#1f2328;--muted:#59636e;--border:#d1d9e0;--sub:#f6f8fa;--card:transparent;--link:#0969da;--green:#1a7f37;--red:#d1242f;--purple:#8250df;--add:#dafbe1;--del:#ffebe9;--mine:#ddf4ff;--code:#fff;color-scheme:light dark}
+    @media (prefers-color-scheme: dark){:root{--fg:#e6edf3;--muted:#9198a1;--border:#3d444d;--sub:#151b23;--link:#4493f8;--green:#3fb950;--red:#f85149;--purple:#ab7df8;--add:rgba(46,160,67,.18);--del:rgba(248,81,73,.18);--mine:rgba(56,139,253,.12);--code:transparent;--coral:#ff375f}}
 
     """
 
     private static let brandVars = """
-    :root{--fg:#1a2333;--muted:#5f6b7e;--border:rgba(26,35,51,.09);--sub:#f3f1ec;--card:#ffffff;--link:#1f7fb8;--green:#2e8a57;--red:#c2412f;--purple:#6b55d6;--add:rgba(46,138,87,.10);--del:rgba(194,65,47,.09);--mine:rgba(31,127,184,.07);--code:#f7f5f0;color-scheme:light dark}
-    @media (prefers-color-scheme: dark){:root{--fg:#e6ebf2;--muted:#8693a8;--border:rgba(160,174,196,.10);--sub:#111a2c;--card:#152036;--link:#5bb8ec;--green:#5dbe8a;--red:#e8746a;--purple:#9d8cf0;--add:rgba(93,190,138,.10);--del:rgba(232,116,106,.10);--mine:rgba(91,184,236,.07);--code:#0a101c}}
+    :root{--coral:#d8513f;--fg:#1a2333;--muted:#5f6b7e;--border:rgba(26,35,51,.09);--sub:#f3f1ec;--card:#ffffff;--link:#1f7fb8;--green:#2e8a57;--red:#c2412f;--purple:#6b55d6;--add:rgba(46,138,87,.10);--del:rgba(194,65,47,.09);--mine:rgba(31,127,184,.07);--code:#f7f5f0;color-scheme:light dark}
+    @media (prefers-color-scheme: dark){:root{--fg:#e6ebf2;--muted:#8693a8;--border:rgba(160,174,196,.10);--sub:#111a2c;--card:#152036;--link:#5bb8ec;--green:#5dbe8a;--red:#e8746a;--purple:#9d8cf0;--add:rgba(93,190,138,.10);--del:rgba(232,116,106,.10);--mine:rgba(91,184,236,.07);--code:#0a101c;--coral:#ee6f5f}}
 
     """
 
@@ -266,5 +296,21 @@ enum ConversationHTML {
     button{font:12px -apple-system;padding:3px 10px;border-radius:7px;border:1px solid var(--border);background:var(--sub);color:var(--fg);cursor:pointer}
     button:hover{border-color:var(--muted)}button.ghost{background:transparent;color:var(--muted)}
     h3.sec{margin:24px 0 8px 44px;font-size:13px;color:var(--muted)}
+    .conflict{margin-top:24px}
+    .conflict .cic{width:32px;height:32px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;background:var(--red);color:#fff;font-weight:700;font-size:15px}
+    .conflict .box{border-color:var(--red)}
+    .conflict .head{background:var(--del)}
+    .cbody{padding:10px 14px}
+    .cbody .note{margin:0 0 8px;color:var(--muted)}
+    .cbody .note code{background:rgba(129,139,152,.16);padding:.1em .35em;border-radius:5px}
+    .cbody .actions{padding:4px 0 0;align-items:center;gap:12px}
+    .act{cursor:pointer}
+    .cfiles{list-style:none;margin:0 0 8px;padding:0;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .cfiles li{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;padding:5px 10px;cursor:pointer;display:flex;gap:8px;align-items:center;border-top:1px solid var(--border)}
+    .cfiles li:first-child{border-top:0}
+    .cfiles li:hover{background:var(--sub);color:var(--link)}
+    .cfiles .fi{color:var(--red);font-size:11px}
+    button.claude{background:var(--coral);border-color:transparent;color:#fff;font-weight:600;padding:4px 12px}
+    button.claude:hover{filter:brightness(1.08);background:var(--coral)}
     """
 }

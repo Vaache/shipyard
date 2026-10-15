@@ -33,11 +33,6 @@ struct FixWithClaudeSheet: View {
 
     private var prompt: String { custom ?? generated }
 
-    private var folderMatches: Bool {
-        guard let folder else { return false }
-        return LocalRepoStore.remoteMatches(folder, repo: model.ref.repo)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
@@ -62,9 +57,9 @@ struct FixWithClaudeSheet: View {
             .toggleStyle(.checkbox)
             .onChange(of: options.push) { _, push in if !push { options.replyAndResolve = false } }
             promptEditor
-            folderRow
+            ClaudeFolderRow(repo: model.ref.repo, folder: $folder, detecting: detecting)
             if let error { Text(error).font(.caption).foregroundStyle(Color.syRed) }
-            launchRow
+            ClaudeLaunchRow(target: $target, mode: $mode, canLaunch: !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (target == .copy || folder != nil), onLaunch: launch)
         }
         .padding(20)
         .frame(width: 780, height: 680)
@@ -165,78 +160,9 @@ struct FixWithClaudeSheet: View {
         }
     }
 
-    private var folderRow: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "folder.fill").foregroundStyle(Color.syTeal)
-            if detecting {
-                ProgressView().controlSize(.small)
-                Text("Looking for a local clone of \(model.ref.repo.full)…").font(.callout).foregroundStyle(Color.syMuted)
-            } else if let folder {
-                Text(folder.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"))
-                    .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(Color.syText)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if !folderMatches {
-                    Label("remote doesn't match \(model.ref.repo.full)", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(Color.syAmber)
-                }
-            } else {
-                Text("No local clone found").font(.callout).foregroundStyle(Color.syAmber)
-                Button("Copy “gh repo clone”") { copyToPasteboard("gh repo clone \(model.ref.repo.full)") }
-                    .buttonStyle(.link)
-                    .font(.caption)
-            }
-            Spacer()
-            Button("Choose folder…") {
-                if let p = LocalRepoStore.choose(model.ref.repo) { folder = p }
-            }
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .card(radius: 8)
-    }
-
-    private var launchRow: some View {
-        HStack(spacing: 10) {
-            Picker("Open in", selection: $target) {
-                ForEach(ClaudeTarget.allCases.filter(\.available)) { Text($0.title).tag($0) }
-            }
-            .frame(width: 220)
-            Picker("Mode", selection: $mode) {
-                ForEach(ClaudePermissionMode.allCases) { Text($0.title).tag($0) }
-            }
-            .frame(width: 250)
-            .disabled(target == .desktop || target == .copy || target == .app)
-            Spacer()
-            Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-            Button(target == .copy ? "Copy" : "Launch") { launch() }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.syCoral)
-                .keyboardShortcut(.return, modifiers: .command)
-                .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (target != .copy && folder == nil))
-        }
-        .overlay(alignment: .topLeading) {
-            if target == .desktop {
-                Text("Prompt will be copied — paste it into the new session (⌘V)")
-                    .font(.caption)
-                    .foregroundStyle(Color.syMuted)
-                    .offset(y: -18)
-            }
-        }
-    }
-
     private func launch() {
-        if target == .app, let folder {
-            app.claude.newSession(folder: folder, prompt: prompt, name: "Fix PR #\(pr.number): \(pr.title)")
-            app.section = .claude
-            dismiss()
-            return
-        }
         do {
-            try ClaudeLauncher.launch(prompt: prompt, folder: folder ?? "", target: target, mode: mode, sessionName: "Fix PR #\(pr.number): \(pr.title)", configDir: ClaudeProfiles.shared.activeOverride)
+            try ClaudeLauncher.start(app: app, prompt: prompt, folder: folder, target: target, mode: mode, name: "Fix PR #\(pr.number): \(pr.title)")
             dismiss()
         } catch {
             self.error = error.localizedDescription
