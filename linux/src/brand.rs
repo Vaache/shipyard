@@ -3,6 +3,7 @@ pub const APP_ID: &str = env!("BRAND_APP_ID");
 pub const BIN_NAME: &str = env!("BRAND_BIN_NAME");
 pub const GITHUB_OWNER: &str = env!("BRAND_GITHUB_OWNER");
 pub const GITHUB_REPO: &str = env!("BRAND_GITHUB_REPO");
+pub const DONATE_URL: &str = env!("BRAND_DONATE_URL");
 pub const URL_SCHEME: &str = env!("BRAND_URL_SCHEME");
 pub const ENV_PREFIX: &str = env!("BRAND_ENV_PREFIX");
 pub const TAGLINE: &str = env!("BRAND_APP_SUMMARY");

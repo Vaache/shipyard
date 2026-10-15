@@ -239,6 +239,10 @@ pub fn open_url(uri: &str) {
             }
         }
     }
+    open_in_default_browser(uri);
+}
+
+pub fn open_in_default_browser(uri: &str) {
     let launcher = gtk::UriLauncher::new(uri);
     let window = crate::app::main_window();
     launcher.launch(window.as_ref(), None::<&gio::Cancellable>, |_| {});

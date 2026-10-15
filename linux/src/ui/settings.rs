@@ -267,6 +267,16 @@ pub fn show() {
     oauth.add(&entry);
     page.add(&oauth);
 
+    let support = group(&format!("Support {}", crate::brand::APP_NAME), "sy-star-symbolic", "coral");
+    let pizza = adw::ActionRow::new();
+    pizza.set_title("Buy me a pizza 🍕");
+    pizza.set_subtitle(&format!("Pay what you want, from $3. {} stays free and open source.", crate::brand::APP_NAME));
+    pizza.set_activatable(true);
+    pizza.add_suffix(&icon("sy-external-symbolic", 16));
+    pizza.connect_activated(|_| util::open_in_default_browser(crate::brand::DONATE_URL));
+    support.add(&pizza);
+    page.add(&support);
+
     dialog.add(&page);
     crate::rt::spawn_local(async { accounts::store().refresh().await });
     let w = app::main_window();

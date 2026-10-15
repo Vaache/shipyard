@@ -109,6 +109,7 @@ impl Sidebar {
         menu.section(None);
         menu.item("Preferences", || ui_activate("preferences"));
         menu.item("Check for Updates…", || ui_activate("check-updates"));
+        menu.item("Buy Me a Pizza…", || ui_activate("donate"));
         menu.item(&format!("About {}", brand::APP_NAME), || ui_activate("about"));
         menu.section(None);
         menu.item("Quit", || ui_activate("quit"));
