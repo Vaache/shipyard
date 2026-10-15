@@ -164,7 +164,7 @@ docs/         website (GitHub Pages)
 
 ## Buy me a pizza 🍕
 
-PullYard is free and open source. If it saves you time, you can buy a **PullYard Supporter** license: you pay what you want (from $3) and get a license key by email that unlocks supporter extras in the app, such as alternate app icons and a supporter badge. Nothing else is locked.
+PullYard is free and open source, and every feature is there for everyone. If it saves you time, you can buy me a pizza: pay what you want, from $3. The link is also in the app under **Settings → Support PullYard**.
 
 <a href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1"><b>Buy me a pizza 🍕</b></a>
 
