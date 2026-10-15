@@ -35,7 +35,7 @@ jobs:
         run: python windows/tools/strings.py --check
 
       - name: Run unit tests
-        run: dotnet test windows/tests/Shipyard.Core.Tests/Shipyard.Core.Tests.csproj -c Release --logger "console;verbosity=normal"
+        run: dotnet test windows/tests/PullYard.Core.Tests/PullYard.Core.Tests.csproj -c Release --logger "console;verbosity=normal"
 
   build:
     name: Build ${{ matrix.arch }}
@@ -78,7 +78,7 @@ jobs:
       - name: Publish
         shell: pwsh
         run: |
-          dotnet publish windows/src/Shipyard/Shipyard.csproj `
+          dotnet publish windows/src/PullYard/PullYard.csproj `
             -c Release `
             -r win-${{ matrix.arch }} `
             -p:Platform=${{ matrix.platform }} `

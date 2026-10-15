@@ -4,7 +4,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = ROOT / "src" / "Shipyard"
+SOURCES = ROOT / "src" / "PullYard"
 OUTPUT = SOURCES / "Strings" / "en-US" / "Resources.resw"
 EXTRA = {"App_Tagline": "Pull requests, without the browser"}
 

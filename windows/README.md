@@ -37,10 +37,10 @@ Keyboard: Ctrl+R refresh, Ctrl+L open by link, Ctrl+1…6 sections, Ctrl+Shift+1
 
 ## Build
 
-Needs Windows 10/11 with the .NET 8 SDK. Visual Studio 2022 (with the "Windows application development" workload) is optional: open `windows/src/Shipyard/Shipyard.csproj`.
+Needs Windows 10/11 with the .NET 8 SDK. Visual Studio 2022 (with the "Windows application development" workload) is optional: open `windows/src/PullYard/PullYard.csproj`.
 
 ```powershell
-dotnet publish windows/src/Shipyard/Shipyard.csproj -c Release -r win-x64 -p:Platform=x64 -o windows/dist/x64/app
+dotnet publish windows/src/PullYard/PullYard.csproj -c Release -r win-x64 -p:Platform=x64 -o windows/dist/x64/app
 .\windows\dist\x64\app\PullYard.exe
 ```
 
@@ -49,7 +49,7 @@ For ARM64 use `-r win-arm64 -p:Platform=ARM64`. The output is self-contained (th
 Unit tests for the platform-independent core (API models, URL parsing, diff parsing, prompt building, updater logic):
 
 ```powershell
-dotnet test windows/tests/Shipyard.Core.Tests/Shipyard.Core.Tests.csproj
+dotnet test windows/tests/PullYard.Core.Tests/PullYard.Core.Tests.csproj
 ```
 
 Smoke checks the CI also runs:
@@ -75,7 +75,7 @@ iscc /DArch=x64 /DAppVersion=2.5.0 /DSourceDir=$PWD\windows\dist\x64\app /DOutpu
 
 ## Renaming
 
-The product name (PullYard), app ID (`PullYard.PullYard`), executable name, URL scheme (`pullyard://`), environment variable prefix (`PULLYARD_`) and GitHub owner/repo (`pullyard/pullyard`) live in one file, `windows/Branding.props` (`Brand*` properties). The C# code reads them at runtime from assembly metadata (`Shipyard.Core.AppInfo`), the CI passes them to the installer, and the updater uses them for the release URL and asset names. After a rename, also update the text in this README. The C# project, folder and namespace names (`Shipyard`, `Shipyard.Core`) are internal code names and don't appear in the product.
+The product name (PullYard), app ID (`PullYard.PullYard`), executable name, URL scheme (`pullyard://`), environment variable prefix (`PULLYARD_`) and GitHub owner/repo (`pullyard/pullyard`) live in one file, `windows/Branding.props` (`Brand*` properties). The C# code reads them at runtime from assembly metadata (`PullYard.Core.AppInfo`), the CI passes them to the installer, and the updater uses them for the release URL and asset names. After a rename, also update the text in this README.
 
 Settings, the token and WebView2 data are stored under the display name (`%LOCALAPPDATA%\<name>`, credential `<AppId>:github-token`), so a rename starts with a fresh profile.
 
@@ -84,20 +84,20 @@ Settings, the token and WebView2 data are stored under the display name (`%LOCAL
 ```
 windows/
   Branding.props            name, app id, exe, owner/repo, version
-  src/Shipyard.Core/        platform-independent logic: GitHub API + models, HTML renderers, git, Claude (CLI launcher, sessions, chat protocol, ConPTY), updater
-  src/Shipyard/             WinUI 3 app: views, view models, services (credentials, tray, notifications, theme), Web/ (HTML/JS for WebView2)
-  tests/Shipyard.Core.Tests xUnit tests
+  src/PullYard.Core/        platform-independent logic: GitHub API + models, HTML renderers, git, Claude (CLI launcher, sessions, chat protocol, ConPTY), updater
+  src/PullYard/             WinUI 3 app: views, view models, services (credentials, tray, notifications, theme), Web/ (HTML/JS for WebView2)
+  tests/PullYard.Core.Tests xUnit tests
   installer/setup.iss    Inno Setup script
   tools/                    icon packer, resource generator
 ```
 
-Localized strings are in `src/Shipyard/Strings/<language>/Resources.resw`. Code calls `L.T("Key", "English default")`; `python windows/tools/strings.py` regenerates the English file from those defaults (CI checks it is up to date). To add a language, copy `en-US` to another folder and translate the values.
+Localized strings are in `src/PullYard/Strings/<language>/Resources.resw`. Code calls `L.T("Key", "English default")`; `python windows/tools/strings.py` regenerates the English file from those defaults (CI checks it is up to date). To add a language, copy `en-US` to another folder and translate the values.
 
-The app icon is `src/Shipyard/Assets/AppIcon.ico`, generated from `Resources/Brand/icon.svg` with `scripts/make_icon.swift` and `tools/make-ico.py`.
+The app icon is `src/PullYard/Assets/AppIcon.ico`, generated from `Resources/Brand/icon.svg` with `scripts/make_icon.swift` and `tools/make-ico.py`.
 
 ## Third-party code
 
 - [xterm.js](https://github.com/xtermjs/xterm.js) and addons (MIT)
 - [marked](https://github.com/markedjs/marked) (MIT)
 
-See `src/Shipyard/Web/vendor/THIRD-PARTY-NOTICES.txt`.
+See `src/PullYard/Web/vendor/THIRD-PARTY-NOTICES.txt`.
