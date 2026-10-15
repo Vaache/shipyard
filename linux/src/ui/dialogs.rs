@@ -40,10 +40,6 @@ impl Sheet {
         self.dialog.present(w.as_ref());
     }
 
-    pub fn close(&self) {
-        self.dialog.close();
-    }
-
     pub fn add_footer_spacer(&self) {
         self.footer.append(&spacer());
     }
@@ -79,14 +75,6 @@ pub fn error(message: &str) {
     let d = adw::AlertDialog::new(Some("Error"), Some(message));
     d.add_response("ok", "OK");
     d.set_default_response(Some("ok"));
-    d.set_close_response("ok");
-    let w = crate::app::main_window();
-    d.present(w.as_ref());
-}
-
-pub fn info(heading: &str, message: &str) {
-    let d = adw::AlertDialog::new(Some(heading), Some(message));
-    d.add_response("ok", "OK");
     d.set_close_response("ok");
     let w = crate::app::main_window();
     d.present(w.as_ref());

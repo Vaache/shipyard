@@ -127,10 +127,6 @@ fn save(s: &Settings) {
     }
 }
 
-pub fn get() -> Settings {
-    SETTINGS.with(|s| s.borrow().clone())
-}
-
 pub fn read<T>(f: impl FnOnce(&Settings) -> T) -> T {
     SETTINGS.with(|s| f(&s.borrow()))
 }

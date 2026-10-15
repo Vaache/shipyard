@@ -86,10 +86,6 @@ impl Composer {
         self.view.grab_focus();
     }
 
-    pub fn set_monospace(&self) {
-        self.view.set_monospace(true);
-    }
-
     pub fn on_changed(&self, f: impl Fn() + 'static) {
         self.view.buffer().connect_changed(move |_| f());
     }

@@ -39,6 +39,7 @@ pub struct PrPage {
     rerequested: RefCell<Option<Vec<String>>>,
     sending_rerequest: Cell<bool>,
     replaced: Cell<bool>,
+    actions_key: RefCell<String>,
 }
 
 pub struct Conversation {
@@ -117,6 +118,7 @@ impl PrPage {
             rerequested: RefCell::new(None),
             sending_rerequest: Cell::new(false),
             replaced: Cell::new(false),
+            actions_key: RefCell::new(String::new()),
         });
         *holder.borrow_mut() = Some(Rc::downgrade(&me));
 
@@ -180,7 +182,13 @@ impl PrPage {
                 }
             }
             Change::ActionError(e) => dialogs::error(e),
-            Change::Files | Change::Diff | Change::Reveal(_) => {}
+            Change::Diff => {
+                let pr = self.model.pr.borrow().clone();
+                if let Some(pr) = pr {
+                    self.render_actions(&pr);
+                }
+            }
+            Change::Files | Change::Reveal(_) => {}
         }
     }
 
@@ -692,8 +700,27 @@ impl PrPage {
     }
 
     fn render_actions(self: &Rc<Self>, pr: &PullRequestDetail) {
-        clear(&self.actions);
         let m = self.model.clone();
+        let key = format!(
+            "{}|{}|{}|{}|{}|{}|{}|{:?}|{}|{}|{}|{}",
+            pr.number,
+            pr.state,
+            pr.is_draft,
+            pr.merged,
+            pr.viewer_can_update,
+            pr.viewer_did_author,
+            m.can_write(),
+            pr.merge_state_status,
+            pr.auto_merge_request.is_some(),
+            pr.head_ref.is_some(),
+            m.pending.borrow().len(),
+            pr.head_ref_name
+        );
+        if *self.actions_key.borrow() == key {
+            return;
+        }
+        *self.actions_key.borrow_mut() = key;
+        clear(&self.actions);
         if pr.is_open() {
             let pending = m.pending.borrow().len();
             let split = adw::SplitButton::new();

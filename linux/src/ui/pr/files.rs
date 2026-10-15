@@ -178,7 +178,8 @@ impl FilesTab {
             let Some(row) = row else { return };
             let path = me.file_keys.borrow().get(row.index().max(0) as usize).cloned();
             if let Some(p) = path {
-                me.model.reveal_file(&p);
+                let m = me.model.clone();
+                glib::idle_add_local_once(move || m.reveal_file(&p));
             }
         });
         let w = Rc::downgrade(&me);

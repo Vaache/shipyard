@@ -279,18 +279,6 @@ pub fn installed_browsers() -> Vec<BrowserApp> {
     list
 }
 
-pub fn first_line(s: &str) -> String {
-    s.lines().next().unwrap_or("").to_string()
-}
-
-pub fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        s.chars().take(max).collect()
-    }
-}
-
 pub fn contains_ci(haystack: &str, needle: &str) -> bool {
     haystack.to_lowercase().contains(&needle.to_lowercase())
 }

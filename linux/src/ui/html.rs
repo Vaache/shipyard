@@ -118,17 +118,6 @@ impl HtmlView {
         });
     }
 
-    pub fn force_reload(self: &Rc<Self>) {
-        let html = self.html.borrow().clone();
-        self.html.borrow_mut().clear();
-        self.set_html(&html);
-    }
-
-    pub fn scroll_to_bottom(&self) {
-        self.scroll_bottom.set(false);
-        self.view.evaluate_javascript("window.scrollTo(0, document.body.scrollHeight)", None, None, None::<&gtk::gio::Cancellable>, |_| {});
-    }
-
     pub fn scroll_to_bottom_after_load(&self) {
         self.scroll_bottom.set(true);
     }

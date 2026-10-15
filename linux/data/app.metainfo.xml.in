@@ -5,7 +5,7 @@
   <project_license>MIT</project_license>
   <name>@APP_NAME@</name>
   <summary>@APP_SUMMARY@</summary>
-  <developer id="com.github.@GITHUB_OWNER@">
+  <developer id="io.github.@OWNER_ID@">
     <name>@DEVELOPER_NAME@</name>
   </developer>
   <description>

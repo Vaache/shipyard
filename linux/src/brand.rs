@@ -12,10 +12,6 @@ pub fn user_agent() -> String {
     format!("{APP_NAME}-Linux/{VERSION}")
 }
 
-pub fn repo_slug() -> String {
-    format!("{GITHUB_OWNER}/{GITHUB_REPO}")
-}
-
 pub fn repo_url() -> String {
     format!("https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}")
 }

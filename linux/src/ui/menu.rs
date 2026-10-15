@@ -59,30 +59,10 @@ impl Menu {
         self
     }
 
-    pub fn item_if(&self, cond: bool, label: &str, f: impl Fn() + 'static) -> &Self {
-        if cond {
-            self.item(label, f);
-        }
-        self
-    }
-
     pub fn disabled(&self, label: &str) -> &Self {
         let name = self.action_name();
         let action = gio::SimpleAction::new(&name, None);
         action.set_enabled(false);
-        self.group.add_action(&action);
-        self.current.append(Some(label), Some(&format!("{}.{name}", self.prefix)));
-        self
-    }
-
-    pub fn check(&self, label: &str, on: bool, f: impl Fn() + 'static) -> &Self {
-        let name = self.action_name();
-        let action = gio::SimpleAction::new_stateful(&name, None, &on.to_variant());
-        action.connect_activate(move |a, _| {
-            let now = a.state().and_then(|s| s.get::<bool>()).unwrap_or(false);
-            a.set_state(&(!now).to_variant());
-            f();
-        });
         self.group.add_action(&action);
         self.current.append(Some(label), Some(&format!("{}.{name}", self.prefix)));
         self
@@ -112,14 +92,6 @@ impl Menu {
         let b = gtk::MenuButton::new();
         b.set_icon_name(icon_name);
         b.set_tooltip_text(Some(tooltip));
-        b.set_menu_model(Some(&self.model));
-        self.attach(&b);
-        b
-    }
-
-    pub fn text_button(&self, label: &str) -> gtk::MenuButton {
-        let b = gtk::MenuButton::new();
-        b.set_label(label);
         b.set_menu_model(Some(&self.model));
         self.attach(&b);
         b

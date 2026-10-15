@@ -8,6 +8,7 @@ VERSION="${SHIPYARD_VERSION:-$(sed -n 's/^version = "\(.*\)"/\1/p' "$here/Cargo.
 VERSION="${VERSION#v}"
 DATE="$(date -u +%Y-%m-%d)"
 REPO_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}"
+OWNER_ID="$(printf %s "$GITHUB_OWNER" | tr "[:upper:]" "[:lower:]" | tr -c "a-z0-9_.\n-" "_")"
 out="${1:-$here/dist}"
 svg="$here/../Resources/Brand/icon.svg"
 subst() {
@@ -18,6 +19,7 @@ subst() {
       -e "s|@APP_SUMMARY@|${APP_SUMMARY}|g" \
       -e "s|@APP_DESCRIPTION@|${APP_DESCRIPTION}|g" \
       -e "s|@GITHUB_OWNER@|${GITHUB_OWNER}|g" \
+      -e "s|@OWNER_ID@|${OWNER_ID}|g" \
       -e "s|@DEVELOPER_NAME@|${DEVELOPER_NAME}|g" \
       -e "s|@REPO_URL@|${REPO_URL}|g" \
       -e "s|@VERSION@|${VERSION}|g" \

@@ -16,6 +16,7 @@ use crate::{app, util};
 
 struct Column {
     list: gtk::Box,
+    tabs_box: gtk::Box,
     query: RefCell<String>,
     expanded: RefCell<HashSet<String>>,
     status: Rc<RefreshStatus>,
@@ -209,6 +210,17 @@ impl Column {
                 return;
             }
         }
+        self.list.append(&self.tabs_box);
+        self.render_tabs();
+        self.render_projects();
+    }
+
+    fn render_tabs(self: &Rc<Self>) {
+        clear(&self.tabs_box);
+        if !accounts::store().is_logged_in() {
+            return;
+        }
+        let ws = app::get().claude.clone();
         let tabs: Vec<Rc<Tab>> = ws.tabs.borrow().clone();
         let selected = ws.selected.get();
         if !tabs.is_empty() {
@@ -227,7 +239,7 @@ impl Column {
                 head.append(&sleep);
             }
             head.set_tooltip_text(Some("Memory used by running Claude processes"));
-            self.list.append(&head);
+            self.tabs_box.append(&head);
             let lb = gtk::ListBox::new();
             lb.add_css_class("sy-sidebar-list");
             for t in &tabs {
@@ -261,8 +273,12 @@ impl Column {
                     app::get().claude.select(*id);
                 }
             });
-            self.list.append(&lb);
+            self.tabs_box.append(&lb);
         }
+    }
+
+    fn render_projects(self: &Rc<Self>) {
+        let ws = app::get().claude.clone();
         let query = self.query.borrow().to_lowercase();
         let projects: Vec<Project> = ws
             .projects
@@ -355,6 +371,7 @@ pub fn build() -> gtk::Widget {
     });
     let me = Rc::new(Column {
         list,
+        tabs_box: vbox(0),
         query: RefCell::new(String::new()),
         expanded: RefCell::new(HashSet::new()),
         status,
@@ -393,8 +410,9 @@ pub fn build() -> gtk::Widget {
     let w = Rc::downgrade(&me);
     app::get().claude.changed.connect(move |e| match w.upgrade() {
         Some(me) => {
-            if matches!(e, WsEvent::Tabs | WsEvent::Selection | WsEvent::Projects | WsEvent::TabState) {
-                me.render();
+            match e {
+                WsEvent::TabState => me.render_tabs(),
+                _ => me.render(),
             }
             true
         }

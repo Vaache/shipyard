@@ -70,10 +70,6 @@ thread_local! {
     static PRESENT: Signal<()> = Signal::new();
 }
 
-pub fn shared() -> Rc<RefCell<Updater>> {
-    UPDATER.with(|u| u.clone())
-}
-
 pub fn state() -> State {
     UPDATER.with(|u| u.borrow().state.clone())
 }

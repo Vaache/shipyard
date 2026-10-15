@@ -896,7 +896,8 @@ pub struct ChatComposer {
     items: RefCell<Vec<CompletionItem>>,
     files: RefCell<Vec<String>>,
     loading_files: Cell<bool>,
-    bottom: gtk::Box,
+    left: gtk::Box,
+    left_key: RefCell<String>,
     stop: gtk::Button,
     send: gtk::Button,
     usage: gtk::MenuButton,
@@ -974,6 +975,9 @@ impl ChatComposer {
         images_row.set_visible(false);
         let bottom = hbox(6);
         bottom.add_css_class("sy-small");
+        let left = hbox(6);
+        bottom.append(&left);
+        bottom.append(&spacer());
         let stop = gtk::Button::from_icon_name("sy-stop-symbolic");
         stop.add_css_class("tint-red");
         stop.set_tooltip_text(Some("Stop (Esc)"));
@@ -1001,7 +1005,8 @@ impl ChatComposer {
             items: RefCell::new(vec![]),
             files: RefCell::new(vec![]),
             loading_files: Cell::new(false),
-            bottom,
+            left,
+            left_key: RefCell::new(String::new()),
             stop: stop.clone(),
             send: send.clone(),
             usage,
@@ -1079,6 +1084,9 @@ impl ChatComposer {
             }
         });
         me.usage.set_popover(Some(&popover));
+        bottom.append(&me.usage);
+        bottom.append(&me.stop);
+        bottom.append(&me.send);
         me.render_state();
         me
     }
@@ -1360,11 +1368,21 @@ impl ChatComposer {
         let pct = c.context.borrow().as_ref().map(|x| x.percentage).or(c.context_percent.get()).unwrap_or(0);
         self.usage.set_label(&format!("ctx {pct}%"));
         self.usage.set_tooltip_text(Some(&format!("Context {pct}% — click for usage and limits")));
-        let mut c2 = self.bottom.first_child();
-        while let Some(w) = c2 {
-            c2 = w.next_sibling();
-            self.bottom.remove(&w);
+        let models = c.models.borrow().clone();
+        let current = c.model_value.borrow().clone();
+        let key = format!(
+            "{}|{}|{}|{}|{}",
+            c.permission_mode.borrow(),
+            current,
+            c.effort.borrow(),
+            c.model.borrow(),
+            models.iter().map(|m| format!("{}:{}", m.value, m.efforts.join(","))).collect::<Vec<_>>().join(";")
+        );
+        if *self.left_key.borrow() == key {
+            return;
         }
+        *self.left_key.borrow_mut() = key;
+        clear(&self.left);
         let mode = ClaudeMode::from_key(&c.permission_mode.borrow()).unwrap_or(ClaudeMode::Standard);
         let mode_menu = Menu::new();
         for m in ClaudeMode::ALL {
@@ -1374,9 +1392,7 @@ impl ChatComposer {
         let mb = crate::ui::menu::dropdown_button(mode.title(), Some(mode.icon()), &mode_menu);
         mb.add_css_class("flat");
         mb.set_tooltip_text(Some("Permission mode (Shift+Tab to cycle)"));
-        self.bottom.append(&mb);
-        let models = c.models.borrow().clone();
-        let current = c.model_value.borrow().clone();
+        self.left.append(&mb);
         let model_title = models.iter().find(|m| m.value == current).map(|m| m.display_name.clone()).unwrap_or_else(|| {
             let m = c.model.borrow().replace("claude-", "");
             if m.is_empty() {
@@ -1394,7 +1410,7 @@ impl ChatComposer {
         let modb = crate::ui::menu::dropdown_button(&model_title, Some("sy-memory-symbolic"), &model_menu);
         modb.add_css_class("flat");
         modb.set_sensitive(!models.is_empty());
-        self.bottom.append(&modb);
+        self.left.append(&modb);
         let efforts = models.iter().find(|m| m.value == current).map(|m| m.efforts.clone()).or_else(|| models.first().map(|m| m.efforts.clone())).unwrap_or_default();
         if !efforts.is_empty() {
             let cur = c.effort.borrow().clone();
@@ -1408,7 +1424,7 @@ impl ChatComposer {
             }
             let eb = crate::ui::menu::dropdown_button(if cur.is_empty() { "effort" } else { &cur }, Some("sy-gauge-symbolic"), &em);
             eb.add_css_class("flat");
-            self.bottom.append(&eb);
+            self.left.append(&eb);
         }
         let attach = icon_button("sy-photo-symbolic", "Attach image");
         let w = Rc::downgrade(self);
@@ -1422,11 +1438,7 @@ impl ChatComposer {
                 }
             });
         });
-        self.bottom.append(&attach);
-        self.bottom.append(&spacer());
-        self.bottom.append(&self.usage);
-        self.bottom.append(&self.stop);
-        self.bottom.append(&self.send);
+        self.left.append(&attach);
     }
 
     fn usage_overlay(self: &Rc<Self>) -> gtk::Widget {

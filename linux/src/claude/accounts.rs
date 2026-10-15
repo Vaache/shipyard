@@ -100,18 +100,6 @@ pub fn add(label: &str, share: bool) -> Result<ClaudeProfile, String> {
     Ok(p)
 }
 
-pub fn rename(id: &str, label: &str) {
-    let name = label.trim();
-    if name.is_empty() {
-        return;
-    }
-    let mut list = profiles();
-    if let Some(p) = list.iter_mut().find(|p| p.id == id) {
-        p.label = name.to_string();
-    }
-    save(list, active_id());
-}
-
 pub fn remove(id: &str) {
     if id == DEFAULT_ID {
         return;
@@ -247,13 +235,6 @@ pub fn store() -> Rc<AccountStore> {
 impl AccountStore {
     pub fn is_logged_in(&self) -> bool {
         matches!(*self.status.borrow(), Status::LoggedIn(_))
-    }
-
-    pub fn info(&self) -> Option<AccountInfo> {
-        match &*self.status.borrow() {
-            Status::LoggedIn(i) => Some(i.clone()),
-            _ => None,
-        }
     }
 
     fn set_status(&self, s: Status) {

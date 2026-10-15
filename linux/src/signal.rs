@@ -33,12 +33,4 @@ impl<T> Signal<T> {
         kept.extend(added);
         *self.handlers.borrow_mut() = kept;
     }
-
-    pub fn len(&self) -> usize {
-        self.handlers.borrow().len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
 }

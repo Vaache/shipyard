@@ -26,6 +26,10 @@ struct View {
     tab_widgets: RefCell<HashMap<u64, (gtk::Widget, Option<Rc<ChatView>>)>>,
     inspectors: RefCell<HashMap<u64, Rc<Inspector>>>,
     terminal_overlays: RefCell<HashMap<u64, gtk::Box>>,
+    tab_badges: RefCell<HashMap<u64, gtk::Box>>,
+    tab_bar_key: RefCell<String>,
+    control_key: RefCell<String>,
+    control_badge: RefCell<Option<gtk::Box>>,
 }
 
 fn control_menu(icon_name: &str, title: &str, help: &str, menu: &Menu) -> gtk::MenuButton {
@@ -115,10 +119,36 @@ impl View {
         self.empty.append(&list);
     }
 
+    fn update_badges(&self) {
+        let ws = app::get().claude.clone();
+        for t in ws.tabs.borrow().iter() {
+            if let Some(b) = self.tab_badges.borrow().get(&t.id) {
+                clear(b);
+                b.append(&super::state_badge(t.state(), None, true));
+            }
+        }
+        if let (Some(b), Some(tab)) = (self.control_badge.borrow().as_ref(), ws.selected_tab()) {
+            clear(b);
+            b.append(&super::state_badge(tab.state(), Some(tab.memory_bytes()), false));
+        }
+    }
+
     fn render_tab_bar(self: &Rc<Self>) {
-        clear(&self.tab_bar);
         let ws = app::get().claude.clone();
         let selected = ws.selected.get();
+        let key = format!(
+            "{:?}|{}|{}",
+            selected,
+            ws.tabs.borrow().iter().map(|t| format!("{}:{}:{}:{}", t.id, t.title.borrow(), t.kind.key(), t.folder)).collect::<Vec<_>>().join(";"),
+            ws.projects.borrow().iter().filter(|p| p.exists()).take(12).map(|p| p.path.clone()).collect::<Vec<_>>().join(";")
+        );
+        if *self.tab_bar_key.borrow() == key {
+            self.update_badges();
+            return;
+        }
+        *self.tab_bar_key.borrow_mut() = key;
+        clear(&self.tab_bar);
+        self.tab_badges.borrow_mut().clear();
         for t in ws.tabs.borrow().iter() {
             let chip_box = hbox(6);
             chip_box.add_css_class("claude-tab");
@@ -130,7 +160,10 @@ impl View {
             edge.set_size_request(3, 14);
             edge.set_valign(gtk::Align::Center);
             chip_box.append(&edge);
-            chip_box.append(&super::state_badge(t.state(), None, true));
+            let badge_box = hbox(0);
+            badge_box.append(&super::state_badge(t.state(), None, true));
+            chip_box.append(&badge_box);
+            self.tab_badges.borrow_mut().insert(t.id, badge_box);
             chip_box.append(&colored_icon(if t.kind == TabKind::Chat { "sy-comment-symbolic" } else { "sy-terminal-symbolic" }, 11, "muted"));
             let title = ellipsized(&t.title.borrow(), &[if selected == Some(t.id) { "sy-text" } else { "sy-muted" }]);
             title.set_max_width_chars(22);
@@ -170,16 +203,38 @@ impl View {
     }
 
     fn render_control_bar(self: &Rc<Self>, tab: &Rc<Tab>) {
-        clear(&self.control_bar);
         let ws = app::get().claude.clone();
+        let key = format!(
+            "{}|{}|{:?}|{}|{}|{}|{}|{:?}|{}|{}|{}|{}",
+            tab.id,
+            tab.kind.key(),
+            tab.git.branch.borrow(),
+            tab.running(),
+            tab.session_id.borrow().is_empty(),
+            ws.model().key(),
+            ws.effort(),
+            ws.mode(),
+            ws.idle_minutes(),
+            ws.preferred_kind().key(),
+            tab.chat.as_ref().map(|c| c.model.borrow().clone()).unwrap_or_default(),
+            tab.chat.as_ref().map(|c| c.total_cost.get() > 0.0 || c.session_id.borrow().is_some()).unwrap_or(false)
+        );
+        if *self.control_key.borrow() == key {
+            self.update_badges();
+            return;
+        }
+        *self.control_key.borrow_mut() = key;
+        clear(&self.control_bar);
         self.control_bar.append(&icon_tile("sy-folder-symbolic", crate::theme::palette_for(&tab.folder), 18));
         self.control_bar.append(&ellipsized(&tab.project_name(), &["sy-bold", "sy-text"]));
         if let Some(b) = tab.git.branch.borrow().as_ref().filter(|b| *b != "HEAD") {
             self.control_bar.append(&branch_tag(b));
         }
-        let badge = super::state_badge(tab.state(), Some(tab.memory_bytes()), false);
+        let badge = hbox(0);
+        badge.append(&super::state_badge(tab.state(), Some(tab.memory_bytes()), false));
         badge.set_margin_start(4);
         self.control_bar.append(&badge);
+        *self.control_badge.borrow_mut() = Some(badge);
         self.control_bar.append(&spacer());
         if tab.kind == TabKind::Terminal {
             let model_menu = Menu::new();
@@ -262,8 +317,12 @@ impl View {
             gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(600), move || app::get().claude.restart(&tt));
         });
         let tt = tab.clone();
-        if tab.running() && !matches!(tab.state(), TabState::Working | TabState::Waiting) {
-            more.item("Free memory now", move || tt.sleep_now());
+        if tab.running() {
+            more.item("Free memory now", move || {
+                if !matches!(tt.state(), TabState::Working | TabState::Waiting) {
+                    tt.sleep_now();
+                }
+            });
         } else {
             more.disabled("Free memory now");
         }
@@ -452,6 +511,10 @@ pub fn build() -> gtk::Widget {
         tab_widgets: RefCell::new(HashMap::new()),
         inspectors: RefCell::new(HashMap::new()),
         terminal_overlays: RefCell::new(HashMap::new()),
+        tab_badges: RefCell::new(HashMap::new()),
+        tab_bar_key: RefCell::new(String::new()),
+        control_key: RefCell::new(String::new()),
+        control_badge: RefCell::new(None),
     });
     let ib = inspector_bin.clone();
     inspector_btn.connect_toggled(move |b| {

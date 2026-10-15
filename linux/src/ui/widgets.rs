@@ -35,13 +35,6 @@ pub fn ellipsized(text: &str, classes: &[&str]) -> gtk::Label {
     l
 }
 
-pub fn markup(m: &str) -> gtk::Label {
-    let l = gtk::Label::new(None);
-    l.set_markup(m);
-    l.set_xalign(0.0);
-    l
-}
-
 pub fn selectable(l: gtk::Label) -> gtk::Label {
     l.set_selectable(true);
     l
@@ -61,20 +54,8 @@ pub fn spacer() -> gtk::Box {
     b
 }
 
-pub fn vspacer() -> gtk::Box {
-    let b = vbox(0);
-    b.set_vexpand(true);
-    b
-}
-
 pub fn line() -> gtk::Separator {
     let s = gtk::Separator::new(gtk::Orientation::Horizontal);
-    s.add_css_class("sy-line");
-    s
-}
-
-pub fn vline() -> gtk::Separator {
-    let s = gtk::Separator::new(gtk::Orientation::Vertical);
     s.add_css_class("sy-line");
     s
 }
@@ -106,10 +87,6 @@ pub fn clear(container: &gtk::Box) {
     while let Some(child) = container.first_child() {
         container.remove(&child);
     }
-}
-
-pub fn clear_list(list: &gtk::ListBox) {
-    list.remove_all();
 }
 
 pub fn button(label: &str) -> gtk::Button {
@@ -161,10 +138,6 @@ pub fn icon_label_button(icon_name: &str, text: &str) -> gtk::Button {
     content.set_label(text);
     b.set_child(Some(&content));
     b
-}
-
-pub fn on_click(b: &gtk::Button, f: impl Fn() + 'static) {
-    b.connect_clicked(move |_| f());
 }
 
 pub fn chip(text: &str, color: &str, icon_name: Option<&str>, mono: bool) -> gtk::Box {
@@ -536,26 +509,9 @@ pub fn pr_tag(number: i64) -> gtk::Box {
     chip(&format!("#{number}"), "violet", Some("sy-pr-symbolic"), false)
 }
 
-pub fn row_with_data(child: &impl IsA<gtk::Widget>, name: &str) -> gtk::ListBoxRow {
-    let row = gtk::ListBoxRow::new();
-    row.set_child(Some(child));
-    row.set_widget_name(name);
-    row
-}
-
 pub fn keep_alive<W: IsA<gtk::Widget>, T: 'static>(widget: &W, value: T) {
     let holder = RefCell::new(Some(value));
     widget.connect_destroy(move |_| {
         holder.borrow_mut().take();
     });
-}
-
-pub fn bin<W: IsA<gtk::Widget>>(child: &W) -> adw::Bin {
-    let b = adw::Bin::new();
-    b.set_child(Some(child));
-    b
-}
-
-pub fn set_bin<W: IsA<gtk::Widget>>(bin: &adw::Bin, child: &W) {
-    bin.set_child(Some(child));
 }

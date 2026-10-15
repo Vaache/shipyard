@@ -119,10 +119,6 @@ impl GitHubApi {
         GitHubApi { inner: Arc::new(Inner { token: token.to_string(), client, no_redirect, plain }) }
     }
 
-    pub fn token(&self) -> &str {
-        &self.inner.token
-    }
-
     fn auth(&self) -> String {
         format!("Bearer {}", self.inner.token)
     }

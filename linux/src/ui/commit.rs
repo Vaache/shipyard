@@ -104,13 +104,6 @@ impl PlainDiff {
         *self.rows.borrow_mut() = rows;
     }
 
-    pub fn scroll_to_file(&self, path: &str) {
-        let files = self.files.borrow();
-        if let Some(i) = self.rows.borrow().iter().position(|r| matches!(r, Row::Header(fi) if files.get(*fi).map(|f| f.id.as_str()) == Some(path))) {
-            self.view.scroll_to(i as u32, gtk::ListScrollFlags::NONE, Some(gtk::ScrollInfo::new()));
-        }
-    }
-
     fn row_widget(self: &Rc<Self>, row: &Row) -> gtk::Widget {
         match row {
             Row::Header(fi) => {

@@ -426,7 +426,7 @@ impl App {
     async fn restore(self: Rc<Self>) {
         let token = match brand::env_var("TOKEN") {
             Some(t) => Some(t),
-            None => secret::load(settings::config_dir()).await,
+            None => crate::rt::run(secret::load(settings::config_dir())).await,
         };
         let Some(token) = token else {
             self.set_phase(Phase::LoggedOut);
@@ -435,7 +435,7 @@ impl App {
         match self.clone().login(token.clone(), false).await {
             Ok(()) => {}
             Err(e) if e.status == 401 => {
-                secret::delete(settings::config_dir()).await;
+                crate::rt::run(secret::delete(settings::config_dir())).await;
                 self.set_phase(Phase::LoggedOut);
             }
             Err(_) => {
@@ -451,7 +451,7 @@ impl App {
         let a2 = api.clone();
         let (user, scopes) = crate::rt::run(async move { a2.current_user().await }).await?;
         if persist {
-            secret::save(settings::config_dir(), token.clone()).await;
+            crate::rt::run(secret::save(settings::config_dir(), token.clone())).await;
         }
         {
             let mut s = self.state.borrow_mut();
@@ -493,7 +493,7 @@ impl App {
             s.known_review_requests = None;
         }
         self.pr_models.borrow_mut().clear();
-        crate::rt::spawn_local(async { secret::delete(settings::config_dir()).await });
+        crate::rt::spawn_local(async { crate::rt::run(secret::delete(settings::config_dir())).await });
         self.set_phase(Phase::LoggedOut);
         self.badges.emit(&());
     }
