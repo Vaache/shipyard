@@ -11,6 +11,8 @@ public static class Program
 {
     public static bool SmokeUi { get; private set; }
 
+    public static bool SmokeTour { get; private set; }
+
     [DllImport("ole32.dll")]
     private static extern uint CoWaitForMultipleObjects(uint dwFlags, uint dwMilliseconds, ulong nHandles, IntPtr[] pHandles, out uint dwIndex);
 
@@ -34,7 +36,8 @@ public static class Program
             ConsoleOutput.Attach();
             return SelfTest.Run().GetAwaiter().GetResult();
         }
-        SmokeUi = args.Contains("--smoke-ui");
+        SmokeTour = args.Contains("--smoke-tour");
+        SmokeUi = args.Contains("--smoke-ui") || SmokeTour;
         WebViewEnvironment.Prepare();
         WinRT.ComWrappersSupport.InitializeComWrappers();
         if (!SmokeUi)

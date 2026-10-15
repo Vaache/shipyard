@@ -115,6 +115,45 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "UI smoke test exited with $($p.ExitCode)" }
           Write-Host "Window opened and closed cleanly"
 
+      - name: UI tour with screenshots
+        if: matrix.arch == 'x64'
+        continue-on-error: true
+        shell: pwsh
+        env:
+          SHIPYARD_TOKEN: ${{ github.token }}
+          SHIPYARD_DEMO_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $exe = "windows/dist/x64/app/${{ steps.brand.outputs.exe }}.exe"
+          $shots = New-Item -ItemType Directory -Force -Path "windows/dist/shots"
+          $pr = gh pr list --repo $env:GITHUB_REPOSITORY --state all --limit 1 --json number -q '.[0].number'
+          $link = if ($pr) { "${{ steps.brand.outputs.scheme }}://github.com/$env:GITHUB_REPOSITORY/pull/$pr" } else { "" }
+          $p = Start-Process -FilePath $exe -ArgumentList @('--smoke-tour', $link) -PassThru
+          $i = 0
+          while (-not $p.HasExited -and $i -lt 40) {
+            Start-Sleep -Seconds 3
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save((Join-Path $shots ("shot-{0:D2}.png" -f $i)), [System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose(); $bmp.Dispose()
+            $i++
+          }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          $data = Join-Path $env:LOCALAPPDATA "${{ steps.brand.outputs.name }}"
+          foreach ($f in @('tour.log', 'errors.log')) { $path = Join-Path $data $f; if (Test-Path $path) { Write-Host "--- $f"; Get-Content $path | Write-Host } }
+          Write-Host "Exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw "UI tour exited with $($p.ExitCode)" }
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.arch == 'x64' && always()
+        with:
+          name: ui-tour-screenshots
+          path: windows/dist/shots/*
+          if-no-files-found: ignore
+
       - name: Install Inno Setup
         shell: pwsh
         run: |

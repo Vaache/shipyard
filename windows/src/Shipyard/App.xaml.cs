@@ -21,6 +21,7 @@ public partial class App : Application
         UnhandledException += (_, e) =>
         {
             e.Handled = true;
+            if (Program.SmokeUi) ExitCode = 4;
             try
             {
                 File.AppendAllText(Path.Combine(AppInfo.DataDirectory, "errors.log"), $"{DateTimeOffset.Now:o} {e.Exception}\n");
@@ -46,7 +47,11 @@ public partial class App : Application
         MainWindow.Activate();
         CreateTray();
         AppViewModel.Shared.HandleArguments(Environment.CommandLine);
-        if (Program.SmokeUi)
+        if (Program.SmokeTour)
+        {
+            Services.SmokeTour.Run(MainWindow).Forget();
+        }
+        else if (Program.SmokeUi)
         {
             var timer = MainWindow.DispatcherQueue.CreateTimer();
             timer.Interval = TimeSpan.FromSeconds(6);
