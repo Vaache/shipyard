@@ -1,0 +1,5 @@
+target/
+dist/
+*.flatpak
+.flatpak-builder/
+flatpak-repo/
