@@ -62,13 +62,27 @@ pub async fn device_start(client_id: String) -> ApiResult<DeviceCode> {
 pub async fn device_poll(client_id: String, code: DeviceCode) -> ApiResult<String> {
     let mut interval = code.interval.max(5);
     let deadline = Instant::now() + Duration::from_secs(code.expires_in);
+    let mut failures = 0;
     while Instant::now() < deadline {
         tokio::time::sleep(Duration::from_secs(interval)).await;
-        let obj = post(
+        let obj = match post(
             "https://github.com/login/oauth/access_token",
             &[("client_id", &client_id), ("device_code", &code.device_code), ("grant_type", "urn:ietf:params:oauth:grant-type:device_code")],
         )
-        .await?;
+        .await
+        {
+            Ok(obj) => {
+                failures = 0;
+                obj
+            }
+            Err(e) => {
+                failures += 1;
+                if failures >= 5 {
+                    return Err(e);
+                }
+                continue;
+            }
+        };
         if let Some(token) = obj.get("access_token").and_then(|v| v.as_str()) {
             return Ok(token.to_string());
         }

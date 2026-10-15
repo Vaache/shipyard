@@ -39,13 +39,22 @@ public static class Proc
         {
             return new Result("", e.Message, -1);
         }
-        if (input is not null)
-        {
-            await p.StandardInput.WriteAsync(input).ConfigureAwait(false);
-            p.StandardInput.Close();
-        }
         var outTask = p.StandardOutput.ReadToEndAsync();
         var errTask = p.StandardError.ReadToEndAsync();
+        if (input is not null)
+        {
+            try
+            {
+                await p.StandardInput.WriteAsync(input).ConfigureAwait(false);
+                p.StandardInput.Close();
+            }
+            catch (IOException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         if (timeout is { } t) cts.CancelAfter(t);
         try
@@ -58,10 +67,13 @@ public static class Proc
             {
                 p.Kill(true);
             }
-            catch
+            catch (Exception e)
             {
+                ErrorLog.Write(e, $"Failed to kill timed out process {file}");
             }
-            return new Result(await SafeAwait(outTask), "timed out", -1);
+            var partial = await SafeAwait(outTask);
+            await SafeAwait(errTask);
+            return new Result(partial, "timed out", -1);
         }
         return new Result(await outTask.ConfigureAwait(false), await errTask.ConfigureAwait(false), p.ExitCode);
     }

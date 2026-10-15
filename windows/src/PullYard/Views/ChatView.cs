@@ -120,7 +120,7 @@ public sealed class ChatView : Grid
                 ClaudeAccountStore.Shared.Refresh().Forget();
                 break;
             case "open":
-                if (msg.Str("path") is { } path) Proc.OpenUrl(path);
+                if (msg.Str("path") is { } path) PathGuard.OpenWithinWorkspace(tab.Folder, path);
                 break;
         }
     }

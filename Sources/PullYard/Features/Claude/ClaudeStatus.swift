@@ -15,6 +15,9 @@ enum ProcessMemory {
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice
         guard (try? p.run()) != nil else { return [:] }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 30) { [weak p] in
+            if p?.isRunning == true { p?.terminate() }
+        }
         let data = out.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         var map: [pid_t: Entry] = [:]

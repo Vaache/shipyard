@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
 
 use crate::brand;
@@ -36,7 +36,14 @@ pub async fn load(config_dir: PathBuf) -> Option<String> {
     std::fs::read_to_string(fallback_path(config_dir)).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
 
-pub async fn save(config_dir: PathBuf, token: String) -> bool {
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Saved {
+    Keyring,
+    File,
+    Failed,
+}
+
+pub async fn save(config_dir: PathBuf, token: String) -> Saved {
     let label = format!("{} GitHub token", brand::APP_NAME);
     let stored = match keyring().await {
         Ok(k) => k.create_item(&label, &attributes(), token.as_str(), true).await.is_ok(),
@@ -45,12 +52,19 @@ pub async fn save(config_dir: PathBuf, token: String) -> bool {
     let path = fallback_path(config_dir.clone());
     if stored {
         let _ = std::fs::remove_file(path);
-        return true;
+        return Saved::Keyring;
     }
     let _ = std::fs::create_dir_all(&config_dir);
     match std::fs::OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&path) {
-        Ok(mut f) => f.write_all(token.as_bytes()).is_ok(),
-        Err(_) => false,
+        Ok(mut f) => {
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+            if f.write_all(token.as_bytes()).is_ok() {
+                Saved::File
+            } else {
+                Saved::Failed
+            }
+        }
+        Err(_) => Saved::Failed,
     }
 }
 

@@ -110,10 +110,16 @@ fn path() -> PathBuf {
 }
 
 fn load() -> Settings {
-    std::fs::read(path())
-        .ok()
-        .and_then(|data| serde_json::from_slice::<Settings>(&data).ok())
-        .unwrap_or_default()
+    let Ok(data) = std::fs::read(path()) else {
+        return Settings::default();
+    };
+    match serde_json::from_slice::<Settings>(&data) {
+        Ok(settings) => settings,
+        Err(_) => {
+            let _ = std::fs::rename(path(), config_dir().join("settings.json.corrupt"));
+            Settings::default()
+        }
+    }
 }
 
 fn save(s: &Settings) {
@@ -121,7 +127,11 @@ fn save(s: &Settings) {
     let _ = std::fs::create_dir_all(&dir);
     if let Ok(data) = serde_json::to_vec_pretty(s) {
         let tmp = dir.join("settings.json.tmp");
-        if std::fs::write(&tmp, data).is_ok() {
+        let written = std::fs::File::create(&tmp).and_then(|mut f| {
+            std::io::Write::write_all(&mut f, &data)?;
+            f.sync_all()
+        });
+        if written.is_ok() {
             let _ = std::fs::rename(&tmp, path());
         }
     }

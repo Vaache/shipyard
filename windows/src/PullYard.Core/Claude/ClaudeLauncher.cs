@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text;
+using System.Text.RegularExpressions;
 using PullYard.Core.Util;
 
 namespace PullYard.Core.Claude;
@@ -9,6 +11,8 @@ public sealed record ClaudeCommand(string File, IReadOnlyList<string> PrefixArgs
         string.Join(" ", new[] { Proc.QuoteArg(File) }.Concat(PrefixArgs.Concat(args).Select(Proc.QuoteArg)));
 
     public string Directory => Path.GetDirectoryName(File) ?? "";
+
+    public bool UsesCmdShell => PrefixArgs.Count >= 2 && PrefixArgs[0] == "/d" && PrefixArgs[1] == "/c";
 }
 
 public enum ClaudeTarget { App, Terminal, Desktop, Copy }
@@ -205,29 +209,78 @@ public static class ClaudeLauncher
             Process.Start(psi);
             return;
         }
+        if (command.UsesCmdShell && !string.IsNullOrWhiteSpace(prompt))
+            throw new InvalidOperationException("The npm claude.cmd shim cannot pass a prompt safely. Install claude.exe or Node.js, or use Copy only.");
+        var workDir = string.IsNullOrWhiteSpace(folder) ? null : Path.GetFullPath(folder);
+        if (workDir is not null && !System.IO.Directory.Exists(workDir)) throw new DirectoryNotFoundException($"Folder not found: {workDir}");
+        var title = SanitizeName(sessionName);
         var args = new List<string>();
         if (mode != ClaudePermissionMode.Standard) args.AddRange(new[] { "--permission-mode", mode.Raw() });
         if (resumeId is not null) args.AddRange(new[] { "--resume", resumeId });
-        else args.AddRange(new[] { "-n", sessionName });
-        if (!string.IsNullOrWhiteSpace(prompt)) args.Add(prompt);
-        var line = command.CommandLine(args);
+        else args.AddRange(new[] { "-n", title });
+        var script = WriteLauncherScript(command, args, string.IsNullOrWhiteSpace(prompt) ? "" : prompt, configDir);
+        var powershell = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+        if (!File.Exists(powershell)) powershell = "powershell.exe";
         if (WindowsTerminal is { } wt)
         {
             var psi = new ProcessStartInfo(wt) { UseShellExecute = false };
-            psi.ArgumentList.Add("-d");
-            psi.ArgumentList.Add(folder);
+            if (workDir is not null)
+            {
+                psi.ArgumentList.Add("-d");
+                psi.ArgumentList.Add(WtArg(workDir));
+            }
             psi.ArgumentList.Add("--title");
-            psi.ArgumentList.Add(sessionName);
-            psi.ArgumentList.Add(command.File);
-            foreach (var a in command.PrefixArgs.Concat(args)) psi.ArgumentList.Add(a);
+            psi.ArgumentList.Add(WtArg(title));
+            psi.ArgumentList.Add(WtArg(powershell));
+            foreach (var a in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File" }) psi.ArgumentList.Add(a);
+            psi.ArgumentList.Add(WtArg(script));
             Apply(psi, configDir);
             Process.Start(psi);
             return;
         }
-        var shell = new ProcessStartInfo("cmd.exe") { UseShellExecute = true, WorkingDirectory = folder };
-        shell.Arguments = $"/k \"{line}\"";
-        if (configDir is not null) shell.Arguments = $"/k \"set \"CLAUDE_CONFIG_DIR={configDir}\" && {line}\"";
+        var shell = new ProcessStartInfo(powershell) { UseShellExecute = true };
+        if (workDir is not null) shell.WorkingDirectory = workDir;
+        shell.Arguments = string.Join(" ", new[] { "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Proc.QuoteArg(script) });
         Process.Start(shell);
+    }
+
+    public static string SanitizeName(string? name)
+    {
+        var clean = Regex.Replace(name ?? "", @"[^A-Za-z0-9 #._\-]", " ").Trim();
+        if (clean.Length > 120) clean = clean[..120].TrimEnd();
+        return clean.Length == 0 ? "Claude" : clean;
+    }
+
+    private static string WtArg(string value) => value.Replace(";", "\\;");
+
+    private static string PsQuote(string value) =>
+        "'" + value.Replace("'", "''").Replace("\u2018", "\u2018\u2018").Replace("\u2019", "\u2019\u2019").Replace("\u201A", "\u201A\u201A").Replace("\u201B", "\u201B\u201B") + "'";
+
+    private const string EscapePromptScript = """
+$p = $p -replace '(\\*)"', '$1$1\"'
+$p = $p -replace '(\\+)\z', '$1$1'
+""";
+
+    private static string WriteLauncherScript(ClaudeCommand command, IEnumerable<string> args, string prompt, string? configDir)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "PullYard", Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(dir);
+        var sb = new StringBuilder();
+        if (configDir is not null) sb.Append("$env:CLAUDE_CONFIG_DIR = ").Append(PsQuote(configDir)).Append("\r\n");
+        sb.Append("$a = @(").Append(string.Join(",", command.PrefixArgs.Concat(args).Select(PsQuote))).Append(")\r\n");
+        if (prompt.Length > 0)
+        {
+            var promptFile = Path.Combine(dir, "prompt.txt");
+            File.WriteAllText(promptFile, prompt, new UTF8Encoding(false));
+            sb.Append("$p = [System.IO.File]::ReadAllText(").Append(PsQuote(promptFile)).Append(", [System.Text.Encoding]::UTF8)\r\n");
+            sb.Append(EscapePromptScript.ReplaceLineEndings("\r\n")).Append("\r\n");
+            sb.Append("$a += $p\r\n");
+        }
+        sb.Append("Remove-Item -LiteralPath $PSScriptRoot -Recurse -Force -ErrorAction SilentlyContinue\r\n");
+        sb.Append("& ").Append(PsQuote(command.File)).Append(" @a\r\n");
+        var script = Path.Combine(dir, "launch.ps1");
+        File.WriteAllText(script, sb.ToString(), new UTF8Encoding(true));
+        return script;
     }
 
     private static void Apply(ProcessStartInfo psi, string? configDir)

@@ -319,8 +319,9 @@ public sealed partial class ClaudeWorkspace : ObservableObject
         }
         var sessionId = Guid.NewGuid().ToString().ToLowerInvariant();
         var args = new List<string> { "--session-id", sessionId };
-        if (!string.IsNullOrEmpty(name)) args.AddRange(new[] { "-n", name });
-        if (!string.IsNullOrEmpty(prompt)) args.Add(prompt);
+        var viaShim = ClaudeLauncher.Command?.UsesCmdShell == true;
+        if (!string.IsNullOrEmpty(name)) args.AddRange(new[] { "-n", viaShim ? ClaudeLauncher.SanitizeName(name) : name });
+        if (!viaShim && !string.IsNullOrEmpty(prompt)) args.Add(prompt);
         var t = MakeTab(folder, ClaudeTabKind.Terminal, title, sessionId);
         LaunchTerminal(t, args, mode);
         return t;

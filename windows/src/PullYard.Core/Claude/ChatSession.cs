@@ -397,7 +397,17 @@ public sealed partial class ChatSession : ObservableObject
         {
             return;
         }
-        if (obj is not null) Handle(obj);
+        if (obj is null) return;
+        try
+        {
+            Handle(obj);
+        }
+        catch (Exception e)
+        {
+            ErrorLog.Write(e, $"chat message handling failed for line: {(line.Length > 2000 ? line[..2000] : line)}");
+            Busy = false;
+            LastError = e.Message;
+        }
     }
 
     private void Handle(JsonObject o)

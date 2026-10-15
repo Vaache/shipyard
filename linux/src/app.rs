@@ -464,7 +464,11 @@ impl App {
         let a2 = api.clone();
         let (user, scopes) = crate::rt::run(async move { a2.current_user().await }).await?;
         if persist {
-            crate::rt::run(secret::save(settings::config_dir(), token.clone())).await;
+            match crate::rt::run(secret::save(settings::config_dir(), token.clone())).await {
+                secret::Saved::Keyring => {}
+                secret::Saved::File => toast_with("Keyring unavailable. Token saved to a private file in the config folder.", "OK", || {}),
+                secret::Saved::Failed => toast_with("Could not save the token. You will need to sign in again next time.", "OK", || {}),
+            }
         }
         {
             let mut s = self.state.borrow_mut();

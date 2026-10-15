@@ -19,9 +19,9 @@ pub struct CommitLine {
 
 pub fn run(args: &[&str], dir: &str) -> (String, bool) {
     let git = host::git_binary();
-    let mut full: Vec<String> = vec!["-C".into(), dir.into(), "-c".into(), "core.quotepath=off".into(), "--no-pager".into()];
+    let mut full: Vec<String> = vec!["-C".into(), dir.into(), "-c".into(), "core.quotepath=off".into(), "-c".into(), "core.fsmonitor=false".into(), "--no-pager".into()];
     full.extend(args.iter().map(|s| s.to_string()));
-    let (out, _, ok) = HostCmd::new(&git).args(full).env("GIT_OPTIONAL_LOCKS", "0").env("LC_ALL", "C").output();
+    let (out, _, ok) = HostCmd::new(&git).args(full).env("GIT_OPTIONAL_LOCKS", "0").env("GIT_TERMINAL_PROMPT", "0").env("GIT_PAGER", "cat").env("LC_ALL", "C").unset("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS").output();
     (out, ok)
 }
 
@@ -52,17 +52,18 @@ pub fn snapshot(dir: String) -> Snapshot {
     }
     let branch = run(&["rev-parse", "--abbrev-ref", "HEAD"], &dir).0.trim().to_string();
     let repo = remote_repo(&dir);
-    let mut files: Vec<PrFile> = diff::parse_unified(&run(&["diff", "HEAD", "--no-color", "-M"], &dir).0);
+    let mut files: Vec<PrFile> = diff::parse_unified(&run(&["diff", "HEAD", "--no-ext-diff", "--no-textconv", "--no-color", "-M"], &dir).0);
     if files.is_empty() {
-        files = diff::parse_unified(&run(&["diff", "--no-color", "-M"], &dir).0);
+        files = diff::parse_unified(&run(&["diff", "--no-ext-diff", "--no-textconv", "--no-color", "-M"], &dir).0);
     }
     let untracked = run(&["ls-files", "--others", "--exclude-standard"], &dir).0;
     for name in untracked.lines().take(200) {
         let full = format!("{dir}/{name}");
-        let size = std::fs::metadata(&full).map(|m| m.len()).unwrap_or(0);
+        let meta = std::fs::symlink_metadata(&full).ok().filter(|m| m.is_file());
+        let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
         let mut patch = None;
         let mut adds = 0;
-        if size < 300_000 {
+        if meta.is_some() && size < 300_000 {
             if let Ok(text) = std::fs::read_to_string(&full) {
                 let lines: Vec<&str> = text.split('\n').collect();
                 adds = lines.len() as i64;

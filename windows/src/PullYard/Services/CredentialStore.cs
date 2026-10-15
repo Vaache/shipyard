@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using PullYard.Core;
+using PullYard.Core.Util;
 
 namespace PullYard.Services;
 
@@ -57,7 +58,8 @@ public static class CredentialStore
                 UserName = "github-token",
                 Comment = $"{AppInfo.DisplayName} GitHub token"
             };
-            CredWrite(ref cred, 0);
+            if (!CredWrite(ref cred, 0))
+                throw new IOException($"Couldn't save the token to Windows Credential Manager (error {Marshal.GetLastWin32Error()}). You would be signed out on next launch.");
         }
         finally
         {
@@ -83,5 +85,14 @@ public static class CredentialStore
         }
     }
 
-    public static void Delete() => CredDelete(Target, CredTypeGeneric, 0);
+    private const int ErrorNotFound = 1168;
+
+    public static bool Delete()
+    {
+        if (CredDelete(Target, CredTypeGeneric, 0)) return true;
+        var error = Marshal.GetLastWin32Error();
+        if (error == ErrorNotFound) return true;
+        ErrorLog.Write($"CredDelete failed with error {error}");
+        return false;
+    }
 }

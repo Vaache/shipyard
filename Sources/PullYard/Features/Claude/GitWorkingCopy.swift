@@ -11,9 +11,15 @@ enum Git {
     static func run(_ args: [String], in dir: String, env extra: [String: String] = [:], timeout: TimeInterval? = nil) -> (out: String, ok: Bool, status: Int32) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", dir, "-c", "core.quotepath=off", "--no-pager"] + args
-        var env = ProcessInfo.processInfo.environment
+        var safeArgs = args
+        if let sub = args.first, sub == "diff" || sub == "show" {
+            safeArgs.insert(contentsOf: ["--no-ext-diff", "--no-textconv"], at: 1)
+        }
+        p.arguments = ["-C", dir, "-c", "core.quotepath=off", "-c", "core.fsmonitor=false", "--no-pager"] + safeArgs
+        var env = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("GIT_") }
         env["GIT_OPTIONAL_LOCKS"] = "0"
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        env["GIT_PAGER"] = "cat"
         env["LC_ALL"] = "C"
         env.merge(extra) { _, new in new }
         p.environment = env
@@ -21,10 +27,8 @@ enum Git {
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice
         do { try p.run() } catch { return ("", false, -1) }
-        if let timeout {
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { [weak p] in
-                if p?.isRunning == true { p?.terminate() }
-            }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + (timeout ?? 30)) { [weak p] in
+            if p?.isRunning == true { p?.terminate() }
         }
         let data = out.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()

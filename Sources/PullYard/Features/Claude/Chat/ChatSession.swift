@@ -232,14 +232,15 @@ final class ChatSession {
         p.standardInput = inPipe
         p.standardOutput = outPipe
         p.standardError = errPipe
+        buffer = Data()
         outPipe.fileHandleForReading.readabilityHandler = { [weak self] h in
             let data = h.availableData
-            guard !data.isEmpty else { return }
+            guard !data.isEmpty else { h.readabilityHandler = nil; return }
             DispatchQueue.main.async { self?.consume(data) }
         }
         errPipe.fileHandleForReading.readabilityHandler = { [weak self] h in
             let data = h.availableData
-            guard !data.isEmpty else { return }
+            guard !data.isEmpty else { h.readabilityHandler = nil; return }
             let s = String(decoding: data, as: UTF8.self)
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -276,6 +277,7 @@ final class ChatSession {
         intentionalStop = false
         running = false
         busy = false
+        process?.terminationHandler = nil
         process = nil
         stdin = nil
         memoryBytes = 0

@@ -119,7 +119,7 @@ final class ClaudeAccountStore {
         p.standardError = outPipe
         outPipe.fileHandleForReading.readabilityHandler = { [weak self] h in
             let data = h.availableData
-            guard !data.isEmpty else { return }
+            guard !data.isEmpty else { h.readabilityHandler = nil; return }
             let s = String(decoding: data, as: UTF8.self)
             DispatchQueue.main.async { self?.consume(s) }
         }

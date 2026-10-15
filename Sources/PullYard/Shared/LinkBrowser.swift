@@ -35,7 +35,8 @@ enum LinkBrowser {
     }
 
     static func open(_ url: URL) {
-        guard url.scheme == "http" || url.scheme == "https", let id = bundleID, let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else {
+        guard let scheme = url.scheme?.lowercased(), ["http", "https", "mailto"].contains(scheme) else { return }
+        guard scheme != "mailto", let id = bundleID, let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else {
             NSWorkspace.shared.open(url)
             return
         }

@@ -43,7 +43,8 @@ public sealed partial class GitHubApi
     private HttpRequestMessage Request(HttpMethod method, string url, string accept = "application/vnd.github+json")
     {
         var req = new HttpRequestMessage(method, url);
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        if (Uri.TryCreate(url, UriKind.Absolute, out var target) && target.Scheme == Uri.UriSchemeHttps && target.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase))
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
         req.Headers.Accept.ParseAdd(accept);
         req.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
         req.Headers.UserAgent.ParseAdd(AppInfo.UserAgent);

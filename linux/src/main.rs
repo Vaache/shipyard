@@ -27,6 +27,11 @@ fn webkit_sandbox_guard() {
     if std::env::var_os("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS").is_some() || util::is_flatpak() {
         return;
     }
+    let opt_out = brand::env_key("DISABLE_WEBKIT_SANDBOX");
+    if std::env::var(&opt_out).map(|v| v == "1").unwrap_or(false) {
+        std::env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
+        return;
+    }
     let restricted = std::fs::read_to_string("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").map(|s| s.trim() == "1").unwrap_or(false);
     if !restricted {
         return;
@@ -39,7 +44,7 @@ fn webkit_sandbox_guard() {
         .map(|s| s.success())
         .unwrap_or(false);
     if !works {
-        std::env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
+        eprintln!("The WebKit sandbox cannot start because AppArmor restricts unprivileged user namespaces. If rendered content stays blank, allow bwrap in AppArmor or set {opt_out}=1 to run the web view without its sandbox (unsafe).");
     }
 }
 

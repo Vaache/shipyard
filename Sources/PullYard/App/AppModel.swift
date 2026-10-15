@@ -137,7 +137,7 @@ final class AppModel {
     func login(token: String, persist: Bool = true) async throws {
         let api = GitHubAPI(token: token)
         let (user, scopes) = try await api.currentUser()
-        if persist { Keychain.save(token) }
+        if persist { try Keychain.save(token) }
         self.api = api
         self.user = Demo.isOn ? Demo.user : user
         self.scopes = scopes
@@ -214,7 +214,16 @@ final class AppModel {
             let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
             if url.path == "/new", let folder = value("folder"), FileManager.default.fileExists(atPath: folder) {
-                claude.newSession(folder: folder, prompt: value("prompt"), name: value("name"), mode: value("mode").flatMap(ClaudeMode.init(rawValue:)))
+                let prompt = value("prompt")
+                NSApp.activate(ignoringOtherApps: true)
+                let alert = NSAlert()
+                alert.messageText = "Start a Claude session from a link?"
+                alert.informativeText = "Folder: \(folder)" + (prompt.map { "\n\nPrompt:\n\($0.prefix(600))" } ?? "")
+                alert.addButton(withTitle: "Start Session")
+                alert.addButton(withTitle: "Cancel")
+                if alert.runModal() == .alertFirstButtonReturn {
+                    claude.newSession(folder: folder, prompt: prompt, name: value("name"))
+                }
             }
             if url.path == "/resume", let id = value("id") {
                 let kind = value("kind").flatMap(ClaudeTabKind.init(rawValue:))

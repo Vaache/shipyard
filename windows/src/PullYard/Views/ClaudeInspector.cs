@@ -97,7 +97,7 @@ public sealed class ChangesPanel : Grid
             switch (type)
             {
                 case "open":
-                    Proc.OpenUrl(Path.Combine(tab.Folder, id.Replace('/', Path.DirectorySeparatorChar)));
+                    PathGuard.OpenWithinWorkspace(tab.Folder, id.Replace('/', Path.DirectorySeparatorChar));
                     break;
                 case "copy":
                     WindowInterop.Copy(id);
