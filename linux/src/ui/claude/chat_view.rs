@@ -1032,7 +1032,7 @@ impl ChatComposer {
         view.connect_paste_clipboard(move |v| {
             let Some(me) = w.upgrade() else { return };
             let clip = v.clipboard();
-            if clip.formats().contain_mime_type("image/png") || clip.formats().contain_gtype(gdk::Texture::static_type()) {
+            if clip.formats().contain_mime_type("image/png") || clip.formats().contains_type(gdk::Texture::static_type()) {
                 v.stop_signal_emission_by_name("paste-clipboard");
                 let me2 = me.clone();
                 clip.read_texture_async(None::<&gtk::gio::Cancellable>, move |res| {

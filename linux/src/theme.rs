@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
 
-use adw::prelude::*;
 
 use crate::settings;
 use crate::signal::Signal;
