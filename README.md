@@ -6,11 +6,16 @@
 
 <p align="center">
   <b>Pull requests, without the browser.</b><br>
-  A tiny native macOS client for GitHub, with a built-in Claude Code workspace.
+  A tiny native GitHub client for macOS, Windows and Linux, with a built-in Claude Code workspace.
 </p>
 
 <p align="center">
-  <a href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg"><b>Download for macOS</b></a>
+  <b>Download for</b>
+  <a href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg"><b>macOS</b></a>
+  ·
+  <a href="#windows"><b>Windows</b></a>
+  ·
+  <a href="#linux"><b>Linux</b></a>
   ·
   <a href="https://pullyard.github.io/pullyard/">Website</a>
   ·
@@ -25,7 +30,7 @@
 
 ---
 
-GitHub in a browser tab can take up a gigabyte of memory to show a single diff. PullYard is a small SwiftUI app for everyday review. It starts fast, scrolls big diffs without stutter, and can pass review comments to Claude Code.
+GitHub in a browser tab can take up a gigabyte of memory to show a single diff. PullYard is a small native app for everyday review: SwiftUI on macOS, WinUI 3 on Windows, GTK 4 and libadwaita on Linux. It starts fast, scrolls big diffs without stutter, and can pass review comments to Claude Code.
 
 ## Features
 
@@ -61,7 +66,18 @@ GitHub in a browser tab can take up a gigabyte of memory to show a single diff. 
 
 ## Install
 
-1. Download [`PullYard.dmg`](https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg) (universal: Apple Silicon and Intel).
+| Platform | Download | Requirements |
+| --- | --- | --- |
+| macOS | [`PullYard.dmg`](https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg) (universal: Apple Silicon and Intel) | macOS 14 Sonoma or later |
+| Windows x64 | [`PullYard-windows-x64-setup.exe`](https://github.com/pullyard/pullyard/releases/latest/download/PullYard-windows-x64-setup.exe) or [portable `.zip`](https://github.com/pullyard/pullyard/releases/latest/download/PullYard-windows-x64-portable.zip) | Windows 10 1809 or later, or Windows 11; WebView2 Runtime |
+| Windows ARM64 | [`PullYard-windows-arm64-setup.exe`](https://github.com/pullyard/pullyard/releases/latest/download/PullYard-windows-arm64-setup.exe) or [portable `.zip`](https://github.com/pullyard/pullyard/releases/latest/download/PullYard-windows-arm64-portable.zip) | Windows 10 1809 or later, or Windows 11; WebView2 Runtime |
+| Linux x86_64 | [`pullyard_<version>_amd64.deb`](https://github.com/pullyard/pullyard/releases/latest), [`PullYard-linux-x86_64.flatpak`](https://github.com/pullyard/pullyard/releases/latest/download/PullYard-linux-x86_64.flatpak) or [`PullYard-linux-x86_64.tar.gz`](https://github.com/pullyard/pullyard/releases/latest/download/PullYard-linux-x86_64.tar.gz) | GTK 4.14 and libadwaita (Ubuntu 24.04 or later), or any distribution with Flatpak |
+
+Optional on every platform: [GitHub CLI](https://cli.github.com) for one-click sign-in, [Claude Code](https://docs.claude.com/en/docs/claude-code) for the Claude workspace.
+
+### macOS
+
+1. Download [`PullYard.dmg`](https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg).
 2. Open it and drag **PullYard** to Applications.
 3. The app is not notarized yet, so macOS blocks the first launch. Open **System Settings → Privacy & Security → Open Anyway** (the DMG includes a *How to Install* guide), or run:
 
@@ -71,7 +87,24 @@ GitHub in a browser tab can take up a gigabyte of memory to show a single diff. 
 
 You only do this once. PullYard removes the quarantine flag from itself on launch, and later updates install from inside the app (**PullYard → Check for Updates…**), so there's no disk image to open again.
 
-**Requirements:** macOS 14 Sonoma or later. Optional: [GitHub CLI](https://cli.github.com) for one-click sign-in, [Claude Code](https://docs.claude.com/en/docs/claude-code) for the Claude workspace.
+### Windows
+
+1. Download the setup for your PC: `PullYard-windows-x64-setup.exe` or `PullYard-windows-arm64-setup.exe`. It installs for your user only, with no admin rights, adds a Start menu entry and registers `pullyard://` links.
+2. The builds are not code-signed yet, so SmartScreen may warn on the first launch: click **More info → Run anyway**.
+
+Installed copies update themselves: PullYard checks for a new release every 6 hours, downloads the installer and restarts. If you'd rather not install, unzip `PullYard-windows-<arch>-portable.zip` anywhere and run `PullYard.exe`; the portable build opens the release page when there's an update.
+
+### Linux
+
+Pick one:
+
+```bash
+sudo apt install ./pullyard_*.deb                     # Ubuntu 24.04+, Debian and derivatives
+flatpak install --user PullYard-linux-x86_64.flatpak  # any distribution, uses the GNOME runtime from Flathub
+tar xzf PullYard-linux-x86_64.tar.gz && ./PullYard-linux-x86_64/install.sh  # portable, installs to ~/.local
+```
+
+The tarball install updates itself the same way the Windows installer does. The `.deb` and Flatpak builds tell you about a new release and open the release page.
 
 ## Sign in to GitHub
 
@@ -81,7 +114,7 @@ Pick one on the welcome screen:
 - **Personal access token**: classic token with `repo`, `read:org`, `notifications`, `workflow`, and `read:project` / `project` for Projects.
 - **Device Flow**: enter the Client ID of your own [GitHub OAuth App](https://github.com/settings/developers) with Device Flow enabled.
 
-The token is stored in the macOS Keychain.
+The token is stored in the macOS Keychain, Windows Credential Manager or the Secret Service keyring on Linux.
 
 ## Privacy
 
@@ -89,7 +122,7 @@ PullYard has no backend and no analytics. It talks to `api.github.com` directly 
 
 ## Build from source
 
-Requires Xcode 15.3+ (Swift 5.10).
+The Windows and Linux apps have their own build instructions in [`windows/README.md`](windows/README.md) and [`linux/README.md`](linux/README.md). The macOS app requires Xcode 15.3+ (Swift 5.10).
 
 ```bash
 git clone https://github.com/pullyard/pullyard.git
@@ -124,6 +157,8 @@ Sources/PullYard/
   Auth/       sign-in flows, Keychain
   Features/   PR, Lists, Issue, Repos, Projects, Notifications, MenuBar, Claude, ClaudeFix
   Shared/     diff table, HTML view, tab strip, localization, utilities
+linux/        Linux app (Rust, GTK 4, libadwaita)
+windows/      Windows app (C#, WinUI 3)
 docs/         website (GitHub Pages)
 ```
 

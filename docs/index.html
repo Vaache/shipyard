@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PullYard: pull requests without the browser</title>
-<meta name="description" content="PullYard is a tiny native macOS client for GitHub pull requests, with a built-in Claude Code workspace.">
+<meta name="description" content="PullYard is a tiny native client for GitHub pull requests on macOS, Windows and Linux, with a built-in Claude Code workspace.">
 <meta property="og:title" content="PullYard: pull requests without the browser">
-<meta property="og:description" content="A tiny native macOS client for GitHub pull requests, with a built-in Claude Code workspace.">
+<meta property="og:description" content="A tiny native client for GitHub pull requests on macOS, Windows and Linux, with a built-in Claude Code workspace.">
 <meta property="og:image" content="icon-512.png">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="icon-512.png">
@@ -94,6 +94,32 @@ h2{font-size:clamp(30px,4vw,46px);line-height:1.08;letter-spacing:-.028em;margin
 .code button:hover{background:rgba(255,255,255,.1)}
 .req{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
 .req span{font-size:13.5px;color:var(--muted);padding:6px 12px;border-radius:999px;background:var(--bg2)}
+.dl-ic{display:contents}
+
+details.platforms{max-width:640px;margin:14px auto 0;padding:0;background:none;border-radius:0;overflow:hidden}
+details.platforms.is-open{background:none}
+.platforms summary{display:inline-flex;gap:8px;align-items:center;color:var(--muted);font-weight:500;font-size:14px}
+.platforms summary:hover{color:var(--text)}
+.platforms summary:after{font-size:18px}
+.assets{list-style:none;margin:12px 0 4px;padding:6px;border-radius:12px;background:var(--bg2);text-align:left}
+.assets a{display:grid;grid-template-columns:76px 1fr auto;gap:2px 14px;align-items:center;padding:10px 12px;border-radius:8px;transition:background .15s ease}
+.assets a:hover{background:var(--panel)}
+.assets .os{color:var(--text);font-weight:600;font-size:14px}
+.assets .what{min-width:0;color:var(--muted);font-size:14px;line-height:1.4}
+.assets .what code{display:block;margin-top:2px;font:12.5px var(--mono);color:var(--dim);overflow-wrap:anywhere}
+.assets .size{color:var(--dim);font-size:13px;font-variant-numeric:tabular-nums}
+.assets li.is-current .os{color:var(--coral)}
+
+.os-tabs{display:inline-flex;gap:4px;padding:4px;margin-top:34px;border-radius:11px;background:var(--bg2)}
+.os-tabs button{border:0;background:none;color:var(--muted);font:600 14px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:10px 16px;border-radius:8px;cursor:pointer;transition:background .15s ease,color .15s ease}
+.os-tabs button:hover{color:var(--text)}
+.os-tabs button[aria-selected="true"]{background:var(--panel2);color:var(--text)}
+.os-tabs button:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+.os-title{display:none;margin:56px 0 0;font-size:22px;letter-spacing:-.01em}
+.os-intro{color:var(--muted);font-size:16px;max-width:680px;margin:22px 0 0}
+.os-panel .steps{margin-top:28px}
+.code .label{flex:none;min-width:62px;color:var(--dim);font:600 12.5px -apple-system,BlinkMacSystemFont,sans-serif}
+.code + .code{margin-top:10px}
 
 .faq{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:44px;align-items:start}
 .faq-col{display:flex;flex-direction:column;gap:18px;min-width:0}
@@ -129,8 +155,15 @@ footer a:hover{color:var(--text)}
   section{padding:76px 0}
   .shot{margin-top:44px}
   .cta .btn{width:100%;justify-content:center}
+  .assets a{grid-template-columns:64px 1fr auto;gap:2px 10px;padding:10px 8px}
+  .os-tabs{display:flex}
+  .os-tabs button{flex:1;padding:10px 8px}
+  .code{align-items:flex-start;flex-wrap:wrap;gap:6px 12px}
+  .code code{flex:1 1 200px;min-width:0;white-space:normal;overflow-wrap:anywhere}
+  .code .label{min-width:0;flex-basis:100%}
 }
 </style>
+<noscript><style>.os-only,.os-tabs{display:none!important}.os-title{display:block}.cta noscript{display:contents}</style></noscript>
 </head>
 <body>
 
@@ -145,7 +178,7 @@ footer a:hover{color:var(--text)}
       <a href="https://github.com/pullyard/pullyard" data-repo>GitHub</a>
       <a href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1">Buy me a pizza 🍕</a>
     </div>
-    <a class="btn btn-primary btn-sm" href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg" data-download>Download</a>
+    <a class="btn btn-primary btn-sm" href="https://github.com/pullyard/pullyard/releases/latest" data-download>Download</a>
   </div>
 </nav>
 
@@ -153,20 +186,38 @@ footer a:hover{color:var(--text)}
   <div class="glow"></div>
   <div class="wrap" style="position:relative">
     <img class="hero-icon" src="icon.svg" alt="PullYard app icon">
-    <div class="pill"><span class="dot"></span><b>Free &amp; open source</b> · native macOS app</div>
+    <div class="pill"><span class="dot"></span><b>Free &amp; open source</b> · native on macOS, Windows &amp; Linux</div>
     <h1>Pull requests,<br><span class="grad">without the browser.</span></h1>
-    <p class="lead">PullYard is a small native GitHub client for the Mac. You can review PRs, read big diffs and pass review comments to Claude Code, all in an app that opens right away.</p>
+    <p class="lead">PullYard is a small native GitHub client for macOS, Windows and Linux. You can review PRs, read big diffs and pass review comments to Claude Code, all in an app that opens right away.</p>
     <div class="cta">
-      <a class="btn btn-primary" href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg" data-download>
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.97-3.46-1.07-1.57-2.74-1.78-3.33-1.8-1.42-.14-2.77.83-3.49.83-.72 0-1.83-.81-3.01-.79-1.55.02-2.98.9-3.78 2.29-1.61 2.8-.41 6.94 1.16 9.21.77 1.11 1.68 2.36 2.88 2.31 1.16-.05 1.6-.75 3-.75s1.79.75 3.01.72c1.25-.02 2.04-1.13 2.8-2.25.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.42-.93-2.47-3.71zM14.08 5.85c.64-.78 1.07-1.85.95-2.93-.92.04-2.04.61-2.7 1.39-.59.69-1.11 1.79-.97 2.85 1.03.08 2.07-.52 2.72-1.31z"/></svg>
-        Download for macOS
+      <a class="btn btn-primary os-only" href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg" data-download>
+        <span class="dl-ic" data-download-icon><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.97-3.46-1.07-1.57-2.74-1.78-3.33-1.8-1.42-.14-2.77.83-3.49.83-.72 0-1.83-.81-3.01-.79-1.55.02-2.98.9-3.78 2.29-1.61 2.8-.41 6.94 1.16 9.21.77 1.11 1.68 2.36 2.88 2.31 1.16-.05 1.6-.75 3-.75s1.79.75 3.01.72c1.25-.02 2.04-1.13 2.8-2.25.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.42-.93-2.47-3.71zM14.08 5.85c.64-.78 1.07-1.85.95-2.93-.92.04-2.04.61-2.7 1.39-.59.69-1.11 1.79-.97 2.85 1.03.08 2.07-.52 2.72-1.31z"/></svg></span>
+        <span data-download-label>Download for macOS</span>
       </a>
+      <noscript>
+        <a class="btn btn-primary" href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.97-3.46-1.07-1.57-2.74-1.78-3.33-1.8-1.42-.14-2.77.83-3.49.83-.72 0-1.83-.81-3.01-.79-1.55.02-2.98.9-3.78 2.29-1.61 2.8-.41 6.94 1.16 9.21.77 1.11 1.68 2.36 2.88 2.31 1.16-.05 1.6-.75 3-.75s1.79.75 3.01.72c1.25-.02 2.04-1.13 2.8-2.25.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.42-.93-2.47-3.71zM14.08 5.85c.64-.78 1.07-1.85.95-2.93-.92.04-2.04.61-2.7 1.39-.59.69-1.11 1.79-.97 2.85 1.03.08 2.07-.52 2.72-1.31z"/></svg> macOS</a>
+        <a class="btn btn-primary" href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard-windows-x64-setup.exe"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.6 10.4 4.6v7H3zM11.4 4.4 21 3v8.6h-9.6zM3 12.4h7.4v7.1L3 18.4zM11.4 12.4H21V21l-9.6-1.4z"/></svg> Windows</a>
+        <a class="btn btn-primary" href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard-linux-x86_64.flatpak"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg> Linux</a>
+      </noscript>
       <a class="btn btn-ghost" href="https://github.com/pullyard/pullyard" data-repo>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         View source
       </a>
     </div>
-    <div class="meta"><a href="https://github.com/pullyard/pullyard/releases/latest" data-version>Version 2.5.0</a> · Universal · Apple Silicon &amp; Intel · macOS 14 Sonoma or later · ~9 MB</div>
+    <div class="meta"><a href="https://github.com/pullyard/pullyard/releases/latest" data-version>Version 2.5.0</a> · <span data-os-meta>macOS, Windows and Linux</span></div>
+    <details class="platforms">
+      <summary>Other platforms</summary>
+      <ul class="assets">
+        <li data-asset="PullYard.dmg" data-os="mac"><a href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg"><span class="os">macOS</span><span class="what">Universal, Apple Silicon &amp; Intel<code>PullYard.dmg</code></span><span class="size" data-size></span></a></li>
+        <li data-asset="PullYard-windows-x64-setup.exe" data-os="windows" data-arch="x64"><a href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard-windows-x64-setup.exe"><span class="os">Windows</span><span class="what">Installer, x64<code>PullYard-windows-x64-setup.exe</code></span><span class="size" data-size></span></a></li>
+        <li data-asset="PullYard-windows-arm64-setup.exe" data-os="windows" data-arch="arm64"><a href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard-windows-arm64-setup.exe"><span class="os">Windows</span><span class="what">Installer, ARM64<code>PullYard-windows-arm64-setup.exe</code></span><span class="size" data-size></span></a></li>
+        <li data-asset="PullYard-windows-x64-portable.zip" data-os="windows" data-arch="x64"><a href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard-windows-x64-portable.zip"><span class="os">Windows</span><span class="what">Portable, x64<code>PullYard-windows-x64-portable.zip</code></span><span class="size" data-size></span></a></li>
+        <li data-asset="PullYard-windows-arm64-portable.zip" data-os="windows" data-arch="arm64"><a href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard-windows-arm64-portable.zip"><span class="os">Windows</span><span class="what">Portable, ARM64<code>PullYard-windows-arm64-portable.zip</code></span><span class="size" data-size></span></a></li>
+        <li data-asset="deb" data-os="linux"><a href="https://github.com/pullyard/pullyard/releases/latest"><span class="os">Linux</span><span class="what">Debian &amp; Ubuntu package, x86_64<code data-deb-name>pullyard_&lt;version&gt;_amd64.deb</code></span><span class="size" data-size></span></a></li>
+        <li data-asset="PullYard-linux-x86_64.flatpak" data-os="linux"><a href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard-linux-x86_64.flatpak"><span class="os">Linux</span><span class="what">Flatpak for any distro, x86_64<code>PullYard-linux-x86_64.flatpak</code></span><span class="size" data-size></span></a></li>
+        <li data-asset="PullYard-linux-x86_64.tar.gz" data-os="linux"><a href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard-linux-x86_64.tar.gz"><span class="os">Linux</span><span class="what">Portable tarball, x86_64<code>PullYard-linux-x86_64.tar.gz</code></span><span class="size" data-size></span></a></li>
+      </ul>
+    </details>
 
     <figure class="tour-video reveal">
       <video muted loop playsinline preload="none" poster="img/pullyard-web-poster.jpg" width="1920" height="1080" aria-label="PullYard product tour">
@@ -191,13 +242,13 @@ footer a:hover{color:var(--text)}
     <div class="reveal">
       <div class="eyebrow">Why PullYard</div>
       <h2>The parts of GitHub<br>you use every day.</h2>
-      <p class="sub">GitHub in a browser tab can take up a gigabyte of memory to show a single diff. PullYard is a small SwiftUI app for everyday review work.</p>
+      <p class="sub">GitHub in a browser tab can take up a gigabyte of memory to show a single diff. PullYard is a small native app for everyday review work.</p>
     </div>
     <div class="grid">
       <div class="card reveal">
         <div class="ic" style="background:rgba(91,184,236,.14);color:var(--sky)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
         <h4>Native and fast</h4>
-        <p>Built with SwiftUI and AppKit. Diffs with thousands of lines scroll without stutter, and file headers stay pinned.</p>
+        <p>SwiftUI on macOS, WinUI 3 on Windows, GTK 4 on Linux. Diffs with thousands of lines scroll without stutter, and file headers stay pinned.</p>
       </div>
       <div class="card reveal">
         <div class="ic" style="background:rgba(157,140,240,.14);color:var(--violet)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V10a3 3 0 0 0-3-3h-4"/><path d="m13 5-2 2 2 2"/></svg></div>
@@ -212,7 +263,7 @@ footer a:hover{color:var(--text)}
       <div class="card reveal">
         <div class="ic" style="background:rgba(232,180,76,.14);color:var(--amber)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
         <h4>Fresh without reloading</h4>
-        <p>Pull requests refresh every 30 seconds and new ones appear at the top. Pull down on a list with the trackpad to refresh right away. A menu bar badge counts the reviews waiting on you.</p>
+        <p>Pull requests refresh every 30 seconds and new ones appear at the top. Pull down on a list or press ⌘R / Ctrl+R to refresh right away. A menu bar badge on the Mac, or a tray icon on Windows, counts the reviews waiting on you.</p>
       </div>
       <div class="card reveal">
         <div class="ic" style="background:rgba(45,212,191,.14);color:#2dd4bf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
@@ -222,7 +273,7 @@ footer a:hover{color:var(--text)}
       <div class="card reveal">
         <div class="ic" style="background:rgba(93,190,138,.14);color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
         <h4>Private by default</h4>
-        <p>Sign in with the GitHub CLI, a personal token or Device Flow. Your token is kept in the macOS Keychain, and PullYard talks to GitHub directly with no server of its own.</p>
+        <p>Sign in with the GitHub CLI, a personal token or Device Flow. Your token is kept in the system keychain, and PullYard talks to GitHub directly with no server of its own.</p>
       </div>
     </div>
   </div>
@@ -253,7 +304,7 @@ footer a:hover{color:var(--text)}
     <div class="reveal">
       <div class="eyebrow" style="color:var(--violet)">A closer look</div>
       <h2>What it looks like.</h2>
-      <p class="sub">These are real screenshots of PullYard open on a public repository.</p>
+      <p class="sub">These are real screenshots of PullYard on macOS, open on a public repository.</p>
     </div>
     <div class="gallery">
       <figure class="reveal wide"><img src="img/pr-files.webp" width="1600" height="958" loading="lazy" alt="Changed files of a pull request with a fast diff viewer"><figcaption><b>Changed files.</b> A native diff viewer that handles thousands of lines, with a file list and checkmarks for files you've viewed.</figcaption></figure>
@@ -269,16 +320,56 @@ footer a:hover{color:var(--text)}
     <div class="reveal">
       <div class="eyebrow">Install</div>
       <h2>Install</h2>
-      <p class="sub">PullYard isn't notarized yet, so macOS asks once before the first launch. After that, updates install from inside the app.</p>
+      <p class="sub">Pick your system. Each one gets its own native build of the same app.</p>
+      <div class="os-tabs" role="tablist" aria-label="Operating system">
+        <button type="button" role="tab" id="tab-mac" aria-controls="install-mac" aria-selected="true" data-os-tab="mac">macOS</button>
+        <button type="button" role="tab" id="tab-windows" aria-controls="install-windows" aria-selected="false" tabindex="-1" data-os-tab="windows">Windows</button>
+        <button type="button" role="tab" id="tab-linux" aria-controls="install-linux" aria-selected="false" tabindex="-1" data-os-tab="linux">Linux</button>
+      </div>
     </div>
-    <div class="steps">
-      <div class="step reveal"><h4>Download</h4><p>Get the latest DMG from GitHub Releases. It runs on Apple Silicon and Intel.</p></div>
-      <div class="step reveal"><h4>Drag to Applications</h4><p>Open the DMG and drop PullYard into your Applications folder.</p></div>
-      <div class="step reveal"><h4>Allow first launch</h4><p>Go to System Settings → Privacy &amp; Security → Open Anyway, or run the command below. You only do this once.</p></div>
+
+    <div class="os-panel" id="install-mac" role="tabpanel" aria-labelledby="tab-mac" data-os-panel="mac">
+      <h3 class="os-title">macOS</h3>
+      <p class="os-intro reveal">PullYard isn't notarized yet, so macOS asks once before the first launch. After that, updates install from inside the app.</p>
+      <div class="steps">
+        <div class="step reveal"><h4>Download</h4><p>Get the latest DMG from GitHub Releases. It runs on Apple Silicon and Intel.</p></div>
+        <div class="step reveal"><h4>Drag to Applications</h4><p>Open the DMG and drop PullYard into your Applications folder.</p></div>
+        <div class="step reveal"><h4>Allow first launch</h4><p>Go to System Settings → Privacy &amp; Security → Open Anyway, or run the command below. You only do this once.</p></div>
+      </div>
+      <div class="code reveal"><code>xattr -dr com.apple.quarantine /Applications/PullYard.app</code><button type="button">Copy</button></div>
+      <div class="req reveal">
+        <span>macOS 14 or later</span><span>Apple Silicon or Intel</span><span>Optional: GitHub CLI</span><span>Optional: Claude Code CLI</span>
+      </div>
     </div>
-    <div class="code reveal"><code id="cmd">xattr -dr com.apple.quarantine /Applications/PullYard.app</code><button type="button" id="copy">Copy</button></div>
-    <div class="req reveal">
-      <span>macOS 14 or later</span><span>Apple Silicon or Intel</span><span>Optional: GitHub CLI</span><span>Optional: Claude Code CLI</span>
+
+    <div class="os-panel" id="install-windows" role="tabpanel" aria-labelledby="tab-windows" data-os-panel="windows">
+      <h3 class="os-title">Windows</h3>
+      <p class="os-intro reveal">PullYard isn't code-signed yet, so SmartScreen asks once before the first launch. After that, the installed app updates itself.</p>
+      <div class="steps">
+        <div class="step reveal"><h4>Download</h4><p>Get the setup for your PC, x64 or ARM64. It installs just for you, no admin rights needed.</p></div>
+        <div class="step reveal"><h4>Run the setup</h4><p>If SmartScreen says it protected your PC, click <b>More info → Run anyway</b>. You only do this once.</p></div>
+        <div class="step reveal"><h4>Or go portable</h4><p>Prefer no installer? Unzip the portable build anywhere and run PullYard.exe. It opens the release page when there's an update.</p></div>
+      </div>
+      <div class="code reveal"><span class="label">Portable</span><code>Expand-Archive .\PullYard-windows-<span data-win-arch>x64</span>-portable.zip -DestinationPath .\PullYard</code><button type="button">Copy</button></div>
+      <div class="req reveal">
+        <span>Windows 10 1809 or later, or Windows 11</span><span>x64 or ARM64</span><span>WebView2 Runtime (built into Windows 11)</span><span>Optional: GitHub CLI</span><span>Optional: Claude Code CLI</span>
+      </div>
+    </div>
+
+    <div class="os-panel" id="install-linux" role="tabpanel" aria-labelledby="tab-linux" data-os-panel="linux">
+      <h3 class="os-title">Linux</h3>
+      <p class="os-intro reveal">Three ways to install, all for x86_64. Pick the one that fits your distribution.</p>
+      <div class="steps">
+        <div class="step reveal"><h4>.deb package</h4><p>For Ubuntu 24.04 or later, Debian and their derivatives. apt pulls in GTK 4, libadwaita and the other libraries.</p></div>
+        <div class="step reveal"><h4>Flatpak</h4><p>Works on any distribution. It uses the GNOME runtime from Flathub and runs git, gh and claude from your system.</p></div>
+        <div class="step reveal"><h4>Tarball</h4><p>A portable build for systems with GTK 4.14 or later. The install script puts it in ~/.local, and it updates itself.</p></div>
+      </div>
+      <div class="code reveal"><span class="label">.deb</span><code>sudo apt install ./pullyard_*.deb</code><button type="button">Copy</button></div>
+      <div class="code reveal"><span class="label">Flatpak</span><code>flatpak install --user PullYard-linux-x86_64.flatpak</code><button type="button">Copy</button></div>
+      <div class="code reveal"><span class="label">Tarball</span><code>tar xzf PullYard-linux-x86_64.tar.gz &amp;&amp; ./PullYard-linux-x86_64/install.sh</code><button type="button">Copy</button></div>
+      <div class="req reveal">
+        <span>GTK 4 and libadwaita</span><span>Ubuntu 24.04 or later, or any distro via Flatpak</span><span>x86_64</span><span>Optional: GitHub CLI</span><span>Optional: Claude Code CLI</span>
+      </div>
     </div>
   </div>
 </section>
@@ -293,10 +384,10 @@ footer a:hover{color:var(--text)}
         <details class="reveal"><summary>How does sign-in to Claude work?</summary><p>PullYard never sees your Claude credentials. It runs <code>claude auth login</code>, which opens the official sign-in page in your browser.</p></details>
       </div>
       <div class="faq-col">
-        <details class="reveal"><summary>Where does my data go?</summary><p>From your Mac straight to api.github.com. Your token is stored in the macOS Keychain. PullYard has no backend and no analytics.</p></details>
-        <details class="reveal"><summary>How do I update?</summary><p>Choose <b>PullYard → Check for Updates…</b>. PullYard downloads the new release from GitHub, replaces itself and restarts, so there's no disk image to open. If your Applications folder needs admin rights, macOS asks for your password. PullYard also checks on its own every 6 hours; you can turn that off in Settings.</p></details>
+        <details class="reveal"><summary>Where does my data go?</summary><p>From your computer straight to api.github.com. Your token is stored in the macOS Keychain, Windows Credential Manager or the Secret Service keyring on Linux. PullYard has no backend and no analytics.</p></details>
+        <details class="reveal"><summary>How do I update?</summary><p>PullYard checks GitHub for a new release every 6 hours; you can turn that off in Settings. On macOS, choose <b>PullYard → Check for Updates…</b> any time: it downloads the release, replaces itself and restarts, so there's no disk image to open. The Windows installer build and the Linux tarball update themselves the same way. The Windows portable build, the .deb and the Flatpak open the release page so you can grab the new file.</p></details>
         <details class="reveal"><summary>What do I get for a pizza?</summary><p>A PullYard Supporter license, sent to your email right after checkout. Paste the key into <b>PullYard → Settings</b> to unlock supporter extras: alternate app icons and a supporter badge. You choose the price, from $3. PullYard itself stays free and open source, and nothing else is locked. <a href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1">Buy me a pizza 🍕</a></p></details>
-        <details class="reveal"><summary>How fresh is what I see?</summary><p>Pull request lists, the open pull request and notifications refresh every 30 seconds while PullYard is in front, and again as soon as you switch back to it. The footer shows when the list was last updated. Pull down on the trackpad or press <b>⌘R</b> to refresh now. You can change the interval in Settings.</p></details>
+        <details class="reveal"><summary>How fresh is what I see?</summary><p>Pull request lists, the open pull request and notifications refresh every 30 seconds while PullYard is in front, and again as soon as you switch back to it. The footer shows when the list was last updated. Pull down on a list or press <b>⌘R</b> (<b>Ctrl+R</b> on Windows and Linux) to refresh now. You can change the interval in Settings.</p></details>
       </div>
     </div>
   </div>
@@ -306,9 +397,9 @@ footer a:hover{color:var(--text)}
   <div class="wrap reveal">
     <img src="icon.svg" alt="">
     <h2>Give it a try.</h2>
-    <p class="sub" style="margin:0 auto 30px">Free, open source and about 9 MB.</p>
+    <p class="sub" style="margin:0 auto 30px">Free and open source, for macOS, Windows and Linux.</p>
     <div class="cta">
-      <a class="btn btn-primary" href="https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg" data-download>Download PullYard</a>
+      <a class="btn btn-primary" href="https://github.com/pullyard/pullyard/releases/latest" data-download><span data-download-label>Download PullYard</span></a>
       <a class="btn btn-ghost" href="https://github.com/pullyard/pullyard/releases" data-repo-releases>All releases</a>
       <a class="btn btn-ghost" href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1">Buy me a pizza 🍕</a>
     </div>
@@ -325,18 +416,93 @@ footer a:hover{color:var(--text)}
 
 <script>
 (function(){
-  var copy=document.getElementById("copy");
-  copy.addEventListener("click",function(){
-    var text=document.getElementById("cmd").textContent;
-    (navigator.clipboard?navigator.clipboard.writeText(text):Promise.reject()).then(function(){copy.textContent="Copied";setTimeout(function(){copy.textContent="Copy"},1600)}).catch(function(){
-      var r=document.createRange();r.selectNodeContents(document.getElementById("cmd"));var s=getSelection();s.removeAllRanges();s.addRange(r);
+  var RELEASES="https://github.com/pullyard/pullyard/releases/latest", DL=RELEASES+"/download/";
+  var ICONS={
+    mac:document.querySelector("[data-download-icon]").innerHTML,
+    windows:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.6 10.4 4.6v7H3zM11.4 4.4 21 3v8.6h-9.6zM3 12.4h7.4v7.1L3 18.4zM11.4 12.4H21V21l-9.6-1.4z"/></svg>',
+    other:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>'
+  };
+  var NAMES={mac:"macOS",windows:"Windows",linux:"Linux"};
+  var META={
+    mac:"Universal · Apple Silicon & Intel · macOS 14 Sonoma or later",
+    windows:"Windows 10 1809 or later, or Windows 11 · x64 & ARM64",
+    linux:"x86_64 · GTK 4 & libadwaita, e.g. Ubuntu 24.04+ · any distro via Flatpak",
+    other:"macOS, Windows and Linux"
+  };
+  var uad=navigator.userAgentData, ua=navigator.userAgent||"";
+  var hint=((uad&&uad.platform)||"")+" "+(navigator.platform||"")+" "+ua;
+  var os=/android|cros|chrome ?os/i.test(hint)?"other":/mac|iphone|ipad|ipod/i.test(hint)?"mac":/windows|win32|win64/i.test(hint)?"windows":/linux|x11|bsd/i.test(hint)?"linux":"other";
+  var arch=/arm64|aarch64/i.test(ua)?"arm64":"x64";
+  var release=null, deb=null;
+  function asset(name){
+    if(!release)return null;
+    for(var i=0;i<(release.assets||[]).length;i++)if(release.assets[i].name===name)return release.assets[i];
+    return null;
+  }
+  function size(a){return a&&a.size?(a.size/1e6).toFixed(a.size<1e7?1:0)+" MB":""}
+  function primary(){
+    if(os==="mac")return {url:DL+"PullYard.dmg",asset:asset("PullYard.dmg"),fallback:"~9 MB"};
+    if(os==="windows"){var w="PullYard-windows-"+arch+"-setup.exe";return {url:DL+w,asset:asset(w)}}
+    if(os==="linux")return deb?{url:deb.browser_download_url,asset:deb}:{url:DL+"PullYard-linux-x86_64.flatpak",asset:asset("PullYard-linux-x86_64.flatpak")};
+    return {url:RELEASES};
+  }
+  function apply(){
+    var p=primary(), label=NAMES[os]?"Download for "+NAMES[os]:"Download PullYard";
+    document.querySelectorAll("[data-download]").forEach(function(a){a.href=p.url});
+    document.querySelectorAll("[data-download-label]").forEach(function(el){el.textContent=label});
+    document.querySelectorAll("[data-download-icon]").forEach(function(el){el.innerHTML=ICONS[os]||ICONS.other});
+    var meta=document.querySelector("[data-os-meta]"), s=size(p.asset)||p.fallback;
+    if(meta)meta.textContent=META[os]+(s?" · "+s:"");
+    document.querySelectorAll("[data-win-arch]").forEach(function(el){el.textContent=arch});
+    document.querySelectorAll(".assets li").forEach(function(li){
+      var name=li.getAttribute("data-asset"), a=name==="deb"?deb:asset(name), link=li.querySelector("a");
+      li.classList.toggle("is-current",li.getAttribute("data-os")===os&&(!li.hasAttribute("data-arch")||li.getAttribute("data-arch")===arch));
+      if(name==="deb"&&deb){link.href=deb.browser_download_url;li.querySelector("[data-deb-name]").textContent=deb.name}
+      li.querySelector("[data-size]").textContent=size(a);
+    });
+  }
+  function selectOS(key,focus){
+    document.querySelectorAll("[data-os-tab]").forEach(function(t){
+      var on=t.getAttribute("data-os-tab")===key;
+      t.setAttribute("aria-selected",on?"true":"false");
+      t.tabIndex=on?0:-1;
+      if(on&&focus)t.focus();
+    });
+    document.querySelectorAll("[data-os-panel]").forEach(function(p){p.hidden=p.getAttribute("data-os-panel")!==key});
+  }
+  var tabs=[].slice.call(document.querySelectorAll("[data-os-tab]"));
+  tabs.forEach(function(t,i){
+    t.addEventListener("click",function(){selectOS(t.getAttribute("data-os-tab"))});
+    t.addEventListener("keydown",function(e){
+      var d=e.key==="ArrowRight"?1:e.key==="ArrowLeft"?-1:0;
+      if(!d)return;
+      e.preventDefault();
+      selectOS(tabs[(i+d+tabs.length)%tabs.length].getAttribute("data-os-tab"),true);
+    });
+  });
+  selectOS(NAMES[os]?os:"mac");
+  if(!NAMES[os]){var platforms=document.querySelector(".platforms");if(platforms)platforms.open=true}
+  apply();
+  if(uad&&uad.getHighEntropyValues)uad.getHighEntropyValues(["architecture"]).then(function(v){if(v.architecture==="arm"){arch="arm64";apply()}}).catch(function(){});
+  document.querySelectorAll(".code button").forEach(function(button){
+    var code=button.parentNode.querySelector("code");
+    button.addEventListener("click",function(){
+      (navigator.clipboard?navigator.clipboard.writeText(code.textContent):Promise.reject()).then(function(){button.textContent="Copied";setTimeout(function(){button.textContent="Copy"},1600)}).catch(function(){
+        var r=document.createRange();r.selectNodeContents(code);var s=getSelection();s.removeAllRanges();s.addRange(r);
+      });
     });
   });
   var version=document.querySelector("[data-version]");
-  if(version&&window.fetch)fetch("https://api.github.com/repos/pullyard/pullyard/releases/latest").then(function(r){return r.ok?r.json():null}).then(function(j){if(j&&j.tag_name)version.textContent="Version "+j.tag_name.replace(/^v/i,"")}).catch(function(){});
+  if(window.fetch)fetch("https://api.github.com/repos/pullyard/pullyard/releases/latest").then(function(r){return r.ok?r.json():null}).then(function(j){
+    if(!j)return;
+    if(version&&j.tag_name)version.textContent="Version "+j.tag_name.replace(/^v/i,"");
+    release=j;
+    (j.assets||[]).forEach(function(a){if(/^pullyard_.+_amd64\.deb$/i.test(a.name))deb=a});
+    apply();
+  }).catch(function(){});
   var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  document.querySelectorAll(".faq details").forEach(function(d){
-    var summary=d.querySelector("summary"), body=d.querySelector("p"), running=null;
+  document.querySelectorAll(".faq details, details.platforms").forEach(function(d){
+    var summary=d.querySelector("summary"), body=d.querySelector("p, .assets"), running=null;
     if(d.open)d.classList.add("is-open");
     summary.addEventListener("click",function(e){
       e.preventDefault();
