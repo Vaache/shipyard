@@ -52,6 +52,17 @@ enum SelfTest {
                     }
                     return "state=\(p.state) timeline=\(p.timelineItems.nodes.count) threads=\(p.reviewThreads.nodes.count) unresolved=\(unresolved.count) html=\(html.count) fixPrompt=\(fix.map { "@\($0.author) \($0.text.count)ch \(Fmt.rel($0.date))" } ?? "none") composed=\(composed.count)ch folder=\(folder)"
                 }
+                await step("conflicts") {
+                    let r = try await api.pullRequest(pr)
+                    guard let p = r.repository?.pullRequest else { return "not a PR" }
+                    guard MergeConflicts.applies(p) else { return "none (\(p.mergeable) \(p.mergeStateStatus ?? "-"))" }
+                    guard let folder = await LocalRepoStore.detect(pr.repo) else { return "\(ConflictState.noClone)" }
+                    let state = MergeConflicts.scan(folder: folder, repo: pr.repo, number: p.number, base: p.baseRefName, baseOid: p.baseTipOid, headOid: p.headRefOid)
+                    let html = ConversationHTML.render(pr: p, conflicts: state, repo: pr.repo)
+                    let prompt = ConflictPrompt.build(pr: p, repo: pr.repo, files: state.files, push: true)
+                    if ProcessInfo.processInfo.environment["PULLYARD_SHOWFIX"] != nil { print("----- CONFLICT PROMPT -----\n" + prompt) }
+                    return "\(state) html=\(html.contains("Resolve Conflicts with Claude Code")) prompt=\(prompt.count)ch"
+                }
                 await step("files") {
                     let f = try await api.pullRequestFiles(pr)
                     let lines = f.map(DiffFile.init).reduce(0) { $0 + $1.lines.count }

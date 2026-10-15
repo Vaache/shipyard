@@ -392,6 +392,13 @@ struct HeadRef: Decodable {
     let name: String
 }
 
+struct BaseRef: Decodable {
+    struct Target: Decodable {
+        let oid: String
+    }
+    let target: Target?
+}
+
 struct PullRequestDetail: Decodable {
     let id: String
     let number: Int
@@ -409,6 +416,7 @@ struct PullRequestDetail: Decodable {
     let headRefName: String
     let baseRefName: String
     let headRefOid: String
+    let baseRef: BaseRef?
     let headRepository: RepoName?
     let headRef: HeadRef?
     let additions: Int
@@ -432,6 +440,7 @@ struct PullRequestDetail: Decodable {
     var rollup: StatusRollup? { lastCommit.nodes.first?.commit.statusCheckRollup }
     var checks: [CheckContext] { rollup?.contexts?.nodes ?? [] }
     var isOpen: Bool { state == "OPEN" }
+    var baseTipOid: String? { baseRef?.target?.oid }
 }
 
 struct PRRepository: Decodable {

@@ -8,21 +8,27 @@ struct GitCommitLine: Identifiable, Hashable {
 }
 
 enum Git {
-    static func run(_ args: [String], in dir: String) -> (out: String, ok: Bool) {
+    static func run(_ args: [String], in dir: String, env extra: [String: String] = [:], timeout: TimeInterval? = nil) -> (out: String, ok: Bool, status: Int32) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         p.arguments = ["-C", dir, "-c", "core.quotepath=off", "--no-pager"] + args
         var env = ProcessInfo.processInfo.environment
         env["GIT_OPTIONAL_LOCKS"] = "0"
         env["LC_ALL"] = "C"
+        env.merge(extra) { _, new in new }
         p.environment = env
         let out = Pipe()
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { return ("", false) }
+        do { try p.run() } catch { return ("", false, -1) }
+        if let timeout {
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { [weak p] in
+                if p?.isRunning == true { p?.terminate() }
+            }
+        }
         let data = out.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
-        return (String(decoding: data, as: UTF8.self), p.terminationStatus == 0)
+        return (String(decoding: data, as: UTF8.self), p.terminationStatus == 0, p.terminationStatus)
     }
 
     static func remoteRepo(_ dir: String) -> RepoRef? {

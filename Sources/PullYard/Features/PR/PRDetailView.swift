@@ -87,6 +87,7 @@ struct PRDetailContent: View {
         .sheet(isPresented: $showEdit) { EditPRSheet(model: model, pr: pr) }
         .sheet(isPresented: $showReviewers) { ReviewersSheet(model: model) }
         .sheet(isPresented: $showFix) { FixWithClaudeSheet(model: model, pr: pr) }
+        .sheet(isPresented: $model.showResolveConflicts) { ResolveConflictsSheet(model: model, pr: pr) }
         .sheet(item: $model.replyThread) { ReplySheet(model: model, thread: $0) }
         .alert("Error", isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })) {
             Button("OK") {}
@@ -224,6 +225,9 @@ struct PRDetailContent: View {
                 } else {
                     Button("Convert to draft") { Task { await model.simple(Q.convertToDraft) } }
                 }
+            }
+            if MergeConflicts.applies(pr) {
+                Button("Resolve conflicts with Claude Code…") { model.showResolveConflicts = true }
             }
             if pr.mergeStateStatus == "BEHIND" || pr.mergeStateStatus == "BLOCKED" || pr.mergeStateStatus == "UNSTABLE" {
                 Button("Update branch from \(pr.baseRefName)") { Task { await model.simple(Q.updateBranch) } }
@@ -444,6 +448,14 @@ struct MergeStatusBar: View {
                 }
                 checksBadge
                 Spacer()
+                if MergeConflicts.applies(pr) {
+                    Button(conflictsTitle) {
+                        model.tab = .conversation
+                        model.scrollToBottomToken += 1
+                    }
+                    .controlSize(.small)
+                    .help("Show the conflicting files at the end of the conversation")
+                }
                 if pr.mergeStateStatus == "BEHIND", model.canWrite || pr.viewerCanUpdate {
                     Button("Update branch") { Task { await model.simple(Q.updateBranch) } }.controlSize(.small)
                 }
@@ -480,6 +492,11 @@ struct MergeStatusBar: View {
             .buttonStyle(.plain)
             .help("Checks")
         }
+    }
+
+    private var conflictsTitle: String {
+        let count = model.conflicts?.files.count ?? 0
+        return count > 0 ? "View \(plural(count, "conflict", "conflicts"))" : "View conflicts"
     }
 
     private var failedChecks: Int { pr.checks.filter { $0.outcome == .failure }.count }
@@ -555,6 +572,12 @@ struct ConversationTab: View {
         case "file":
             model.revealFile(id)
             Task { await model.loadFiles() }
+        case "resolveConflicts":
+            model.showResolveConflicts = true
+        case "chooseClone":
+            model.chooseLocalClone()
+        case "rescanConflicts":
+            model.rescanConflicts()
         default:
             break
         }

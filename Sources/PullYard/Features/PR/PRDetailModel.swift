@@ -68,6 +68,10 @@ final class PRDetailModel {
     @ObservationIgnored private var mergeRechecks = 0
     var html = ""
     var scrollToBottomToken = 0
+    var conflicts: ConflictState?
+    var showResolveConflicts = false
+    @ObservationIgnored private var conflictsKey: String?
+    @ObservationIgnored private var conflictScan: Task<Void, Never>?
 
     var files: [DiffFile] = []
     var filesLoaded = false
@@ -164,8 +168,8 @@ final class PRDetailModel {
             commitRows.seed(pr.allCommits.nodes.map(\.commit.oid))
             checkRows.seed(pr.checks.map(\.id))
             self.pr = pr
-            let newHTML = ConversationHTML.render(pr: pr)
-            if newHTML != html { html = newHTML }
+            updateConflicts(pr)
+            renderHTML()
             viewedPaths = Set(pr.files?.nodes.filter { $0.viewerViewedState == "VIEWED" }.map(\.path) ?? [])
             indexThreads(pr.reviewThreads.nodes)
             error = nil
@@ -184,6 +188,55 @@ final class PRDetailModel {
             if isCancellation(error) { return }
             if pr == nil { self.error = error.localizedDescription } else { refreshError = error.localizedDescription }
         }
+    }
+
+    private func renderHTML() {
+        guard let pr else { return }
+        let newHTML = ConversationHTML.render(pr: pr, conflicts: conflicts, repo: ref.repo)
+        if newHTML != html { html = newHTML }
+    }
+
+    private func updateConflicts(_ pr: PullRequestDetail, force: Bool = false) {
+        guard MergeConflicts.applies(pr) else {
+            if pr.isOpen, pr.mergeable == "UNKNOWN", conflicts != nil { return }
+            conflictScan?.cancel()
+            conflictsKey = nil
+            conflicts = nil
+            return
+        }
+        let key = "\(pr.baseTipOid ?? pr.baseRefName)|\(pr.headRefOid)"
+        guard force || key != conflictsKey else { return }
+        conflictsKey = key
+        if conflicts == nil || force { conflicts = .checking }
+        conflictScan?.cancel()
+        let repo = ref.repo
+        conflictScan = Task { [weak self] in
+            guard let folder = await LocalRepoStore.detect(repo) else {
+                self?.finishScan(.noClone, key: key)
+                return
+            }
+            let result = await Task.detached(priority: .utility) {
+                MergeConflicts.scan(folder: folder, repo: repo, number: pr.number, base: pr.baseRefName, baseOid: pr.baseTipOid, headOid: pr.headRefOid)
+            }.value
+            self?.finishScan(result, key: key)
+        }
+    }
+
+    private func finishScan(_ result: ConflictState, key: String) {
+        guard !Task.isCancelled, key == conflictsKey else { return }
+        conflicts = result
+        renderHTML()
+    }
+
+    func rescanConflicts() {
+        guard let pr else { return }
+        updateConflicts(pr, force: true)
+        renderHTML()
+    }
+
+    func chooseLocalClone() {
+        guard LocalRepoStore.choose(ref.repo) != nil else { return }
+        rescanConflicts()
     }
 
     private func scheduleMergeRecheck(_ pr: PullRequestDetail) {
