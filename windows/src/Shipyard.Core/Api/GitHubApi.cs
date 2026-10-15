@@ -120,10 +120,11 @@ public sealed partial class GitHubApi
             }
             throw new ApiException($"Failed to parse response: {e.Message}");
         }
-        if (decoded?.Errors is { Count: > 0 } errors && (strict || decoded.Data is null))
+        if (decoded is null) throw new ApiException("Empty response from GitHub");
+        if (decoded.Errors is { Count: > 0 } errors && (strict || decoded.Data is null))
             throw new ApiException(Describe(errors[0]));
-        if (decoded?.Data is null) throw new ApiException("Empty response from GitHub");
-        return decoded.Data;
+        if (decoded.Data is not { } data) throw new ApiException("Empty response from GitHub");
+        return data;
     }
 
     private static string Describe(GraphQLError e) => e.Type == "INSUFFICIENT_SCOPES" ? $"Insufficient token scopes: {e.Message}" : e.Message;

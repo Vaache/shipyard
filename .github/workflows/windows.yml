@@ -40,7 +40,6 @@ jobs:
   build:
     name: Build ${{ matrix.arch }}
     runs-on: windows-latest
-    needs: test
     permissions:
       contents: write
     strategy:
