@@ -389,12 +389,16 @@
   <data name="State_Closed" xml:space="preserve"><value>Closed</value></data>
   <data name="State_Merged" xml:space="preserve"><value>Merged</value></data>
   <data name="State_Open" xml:space="preserve"><value>Open</value></data>
+  <data name="Support_Pizza" xml:space="preserve"><value>Buy me a pizza 🍕</value></data>
+  <data name="Support_PizzaDescription" xml:space="preserve"><value>Pay what you want, from $3. PullYard stays free and open source.</value></data>
+  <data name="Support_Title" xml:space="preserve"><value>Support {0}</value></data>
   <data name="Terminal_CloseTab" xml:space="preserve"><value>Close tab</value></data>
   <data name="Terminal_Ended" xml:space="preserve"><value>Session ended</value></data>
   <data name="Terminal_Resume" xml:space="preserve"><value>Resume session</value></data>
   <data name="Terminal_Sleeping" xml:space="preserve"><value>Session is sleeping — memory freed</value></data>
   <data name="Tray_MyOpenPRs" xml:space="preserve"><value>My open PRs</value></data>
   <data name="Tray_Open" xml:space="preserve"><value>Open {0}</value></data>
+  <data name="Tray_Pizza" xml:space="preserve"><value>Buy Me a Pizza…</value></data>
   <data name="Tray_Quit" xml:space="preserve"><value>Quit</value></data>
   <data name="Tray_ReviewCount" xml:space="preserve"><value>{0} review requests</value></data>
   <data name="Tray_ReviewRequests" xml:space="preserve"><value>Review requests</value></data>

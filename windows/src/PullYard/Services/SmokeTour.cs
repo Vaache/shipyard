@@ -67,7 +67,9 @@ public static class SmokeTour
             await Step("claude", 5000);
             app.Section = Section.Prs(PRFilter.ReviewRequested);
             app.RequestSettings();
-            await Step("settings", 4000);
+            await Step("settings", 3000);
+            SettingsDialog.ScrollToEnd();
+            await Step("settings support", 3000);
             Finish(App.ExitCode);
         }
         catch (Exception e)
