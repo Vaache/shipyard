@@ -73,6 +73,7 @@ enum Q {
           id number title url state isDraft merged mergeable mergeStateStatus body bodyHTML createdAt
           author \(actor)
           headRefName baseRefName headRefOid
+          baseRef { target { oid } }
           headRepository { nameWithOwner }
           headRef { name }
           additions deletions changedFiles
