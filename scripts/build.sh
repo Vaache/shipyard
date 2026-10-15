@@ -2,22 +2,22 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="build/Shipyard.app"
+APP="build/PullYard.app"
 SIGN_ID="${SIGN_ID:-$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/{print $2; exit}')}"
 
 if [ "${UNIVERSAL:-0}" = "1" ]; then
     swift build -c release --arch arm64
     swift build -c release --arch x86_64
     mkdir -p build
-    lipo -create .build/arm64-apple-macosx/release/Shipyard .build/x86_64-apple-macosx/release/Shipyard -output build/Shipyard-universal
-    BIN=build/Shipyard-universal
+    lipo -create .build/arm64-apple-macosx/release/PullYard .build/x86_64-apple-macosx/release/PullYard -output build/PullYard-universal
+    BIN=build/PullYard-universal
 else
     swift build -c release
-    BIN=.build/release/Shipyard
+    BIN=.build/release/PullYard
 fi
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/Shipyard"
+cp "$BIN" "$APP/Contents/MacOS/PullYard"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 
 if [ ! -f Resources/AppIcon.icns ]; then
@@ -35,8 +35,9 @@ if [ "${1:-}" = "--install" ]; then
     DEST="/Applications"
     [ -w "$DEST" ] || DEST="$HOME/Applications"
     mkdir -p "$DEST"
+    pkill -x PullYard 2>/dev/null || true
     pkill -x Shipyard 2>/dev/null || true
-    rm -rf "$DEST/Shipyard.app"
+    rm -rf "$DEST/PullYard.app" "$DEST/Shipyard.app"
     cp -R "$APP" "$DEST/"
-    echo "Installed: $DEST/Shipyard.app"
+    echo "Installed: $DEST/PullYard.app"
 fi

@@ -1,6 +1,6 @@
 import os
 
-app = defines.get("app", "build/Shipyard.app")
+app = defines.get("app", "build/PullYard.app")
 readme = defines.get("readme", "Resources/DMG/How to Install.rtf")
 app_name = os.path.basename(app)
 readme_name = os.path.basename(readme)
