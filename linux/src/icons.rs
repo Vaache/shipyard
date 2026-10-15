@@ -5,7 +5,11 @@ const RING_SMALL_BOTTOM: &str = "M2,12.5a2,2 0 1,0 4,0a2,2 0 1,0 -4,0ZM3,12.5a1,
 const RING_SMALL_RB: &str = "M10,12.5a2,2 0 1,0 4,0a2,2 0 1,0 -4,0ZM11,12.5a1,1 0 1,1 2,0a1,1 0 1,1 -2,0Z";
 const RING_BIG: &str = "M1,8a7,7 0 1,0 14,0a7,7 0 1,0 -14,0ZM2.5,8a5.5,5.5 0 1,1 11,0a5.5,5.5 0 1,1 -11,0Z";
 
-fn svg(paths: &[&str]) -> String {
+fn svg(paths: &[&str]) -> Vec<String> {
+    paths.iter().map(|p| p.to_string()).collect()
+}
+
+fn svg_document(paths: &[String]) -> String {
     let mut body = String::new();
     for p in paths {
         body.push_str(&format!("<path fill=\"#2e3436\" fill-rule=\"evenodd\" d=\"{p}\"/>"));
@@ -13,7 +17,120 @@ fn svg(paths: &[&str]) -> String {
     format!("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 16 16\">{body}</svg>")
 }
 
-fn icons() -> Vec<(&'static str, String)> {
+mod imp {
+    use std::cell::RefCell;
+
+    use gtk::prelude::*;
+    use gtk::subclass::prelude::*;
+    use gtk::{gdk, glib, gsk};
+
+    #[derive(Default)]
+    pub struct GlyphPaintable {
+        pub paths: RefCell<Vec<gsk::Path>>,
+    }
+
+    #[glib::object_subclass]
+    impl ObjectSubclass for GlyphPaintable {
+        const NAME: &'static str = "PyGlyphPaintable";
+        type Type = super::GlyphPaintable;
+        type Interfaces = (gdk::Paintable, gtk::SymbolicPaintable);
+    }
+
+    impl ObjectImpl for GlyphPaintable {}
+
+    impl GlyphPaintable {
+        fn draw(&self, snapshot: &gdk::Snapshot, width: f64, height: f64, color: &gdk::RGBA) {
+            let Some(snapshot) = snapshot.downcast_ref::<gtk::Snapshot>() else { return };
+            snapshot.save();
+            snapshot.scale(width as f32 / 16.0, height as f32 / 16.0);
+            for path in self.paths.borrow().iter() {
+                snapshot.append_fill(path, gsk::FillRule::EvenOdd, color);
+            }
+            snapshot.restore();
+        }
+    }
+
+    impl PaintableImpl for GlyphPaintable {
+        fn intrinsic_width(&self) -> i32 {
+            16
+        }
+
+        fn intrinsic_height(&self) -> i32 {
+            16
+        }
+
+        fn flags(&self) -> gdk::PaintableFlags {
+            gdk::PaintableFlags::STATIC_SIZE | gdk::PaintableFlags::STATIC_CONTENTS
+        }
+
+        fn snapshot(&self, snapshot: &gdk::Snapshot, width: f64, height: f64) {
+            self.draw(snapshot, width, height, &gdk::RGBA::new(0.5, 0.5, 0.5, 1.0));
+        }
+    }
+
+    impl SymbolicPaintableImpl for GlyphPaintable {
+        fn snapshot_symbolic(&self, snapshot: &gdk::Snapshot, width: f64, height: f64, colors: &[gdk::RGBA]) {
+            let color = colors.first().copied().unwrap_or(gdk::RGBA::new(0.5, 0.5, 0.5, 1.0));
+            self.draw(snapshot, width, height, &color);
+        }
+    }
+}
+
+gtk::glib::wrapper! {
+    pub struct GlyphPaintable(ObjectSubclass<imp::GlyphPaintable>) @implements gtk::gdk::Paintable, gtk::SymbolicPaintable;
+}
+
+thread_local! {
+    static GLYPHS: std::cell::RefCell<Option<std::collections::HashMap<&'static str, Vec<gtk::gsk::Path>>>> = const { std::cell::RefCell::new(None) };
+}
+
+fn glyph_paths(name: &str) -> Option<Vec<gtk::gsk::Path>> {
+    let key = name.strip_suffix("-symbolic").unwrap_or(name);
+    GLYPHS.with(|g| {
+        let mut g = g.borrow_mut();
+        let map = g.get_or_insert_with(|| {
+            icons()
+                .into_iter()
+                .filter_map(|(n, paths)| {
+                    let parsed: Option<Vec<gtk::gsk::Path>> = paths.iter().map(|p| gtk::gsk::Path::parse(p).ok()).collect();
+                    parsed.map(|p| (n, p))
+                })
+                .collect()
+        });
+        map.get(key).cloned()
+    })
+}
+
+pub fn glyph(name: &str) -> Option<GlyphPaintable> {
+    use gtk::subclass::prelude::ObjectSubclassIsExt;
+    let paths = glyph_paths(name)?;
+    let p: GlyphPaintable = gtk::glib::Object::new();
+    *p.imp().paths.borrow_mut() = paths;
+    Some(p)
+}
+
+pub fn image(name: &str, size: i32) -> gtk::Image {
+    use gtk::prelude::*;
+    let i = match glyph(name) {
+        Some(p) => gtk::Image::from_paintable(Some(&p)),
+        None => gtk::Image::from_icon_name(name),
+    };
+    i.set_pixel_size(size);
+    i
+}
+
+pub fn set_button_icon(button: &impl gtk::prelude::IsA<gtk::Button>, name: &str) {
+    use gtk::prelude::*;
+    let button = button.as_ref();
+    if glyph(name).is_some() {
+        button.set_child(Some(&image(name, 16)));
+        button.add_css_class("image-button");
+    } else {
+        button.set_icon_name(name);
+    }
+}
+
+fn icons() -> Vec<(&'static str, Vec<String>)> {
     let left_trunk = "M3.25,5.5h1.5v5h-1.5Z";
     vec![
         ("sy-pr", svg(&[RING_SMALL_TOP, left_trunk, RING_SMALL_BOTTOM, RING_SMALL_RB, "M11.25,2.75h1.5v7.75h-1.5Z", "M8.5,2.75h3v1.5h-3Z", "M8.5,1L5.75,3.5L8.5,6Z"])),
@@ -39,6 +156,8 @@ fn icons() -> Vec<(&'static str, String)> {
         ("sy-stack", svg(&["M8,1L15,4.5L8,8L1,4.5Z", "M1,8L2.5,7.25L8,10L13.5,7.25L15,8L8,11.5Z", "M1,11.5L2.5,10.75L8,13.5L13.5,10.75L15,11.5L8,15Z"])),
         ("sy-external", svg(&["M2,3h5v1.5h-3.5v8h8v-3.5h1.5v5h-11Z", "M9,1.5h5.5v5.5l-2,-2l-3.75,3.75l-1.25,-1.25l3.75,-3.75Z"])),
         ("sy-check", svg(&["M2.2,8.4L3.6,7L6.3,9.7L12.4,3.6L13.8,5L6.3,12.5Z"])),
+        ("sy-check-circle", svg(&["M1,8a7,7 0 1,0 14,0a7,7 0 1,0 -14,0ZM4.4,8.2L5.5,7.1L7,8.6L10.5,5.1L11.6,6.2L7,10.8Z"])),
+        ("sy-x-circle", svg(&["M1,8a7,7 0 1,0 14,0a7,7 0 1,0 -14,0ZM5.2,6.3L6.3,5.2L8,6.9L9.7,5.2L10.8,6.3L9.1,8L10.8,9.7L9.7,10.8L8,9.1L6.3,10.8L5.2,9.7L6.9,8Z"])),
         ("sy-x", svg(&["M3.4,2.3L8,6.9L12.6,2.3L13.7,3.4L9.1,8L13.7,12.6L12.6,13.7L8,9.1L3.4,13.7L2.3,12.6L6.9,8L2.3,3.4Z"])),
         ("sy-dot", svg(&["M4,8a4,4 0 1,0 8,0a4,4 0 1,0 -8,0Z"])),
         ("sy-clock", svg(&[RING_BIG, "M7.25,4h1.5v4.25h3v1.5h-4.5Z"])),
@@ -83,7 +202,8 @@ fn icons() -> Vec<(&'static str, String)> {
 pub fn install() {
     let dir: PathBuf = crate::settings::cache_dir().join("icons").join(crate::brand::VERSION);
     if std::fs::create_dir_all(&dir).is_ok() {
-        for (name, svg) in icons() {
+        for (name, paths) in icons() {
+            let svg = svg_document(&paths);
             let path = dir.join(format!("{name}-symbolic.svg"));
             let current = std::fs::read_to_string(&path).ok();
             if current.as_deref() != Some(svg.as_str()) {

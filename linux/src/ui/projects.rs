@@ -193,7 +193,7 @@ pub fn list() -> gtk::Widget {
         }
     });
     let closed = gtk::ToggleButton::new();
-    closed.set_icon_name("sy-archive-symbolic");
+    crate::icons::set_button_icon(&closed, "sy-archive-symbolic");
     closed.set_tooltip_text(Some("Show closed"));
     let w = Rc::downgrade(&me);
     closed.connect_toggled(move |t| {

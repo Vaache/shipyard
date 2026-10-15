@@ -538,7 +538,7 @@ impl PrPage {
         meta.append(&avatar(pr.author.as_ref().and_then(|a| a.avatar_url.as_deref()), 18, None));
         meta.append(&label_with(pr.author.as_ref().map(|a| a.login.as_str()).unwrap_or("ghost"), &["sy-bold", "sy-text"]));
         meta.append(&branch_chip(&pr.base_ref_name, "sky"));
-        meta.append(&icon("go-previous-symbolic", 12));
+        meta.append(&label_with("←", &["sy-dim"]));
         meta.append(&branch_chip(&pr.head_ref_name, "violet"));
         meta.append(&diff_stat(pr.additions, pr.deletions));
         meta.append(&spacer());
@@ -608,10 +608,7 @@ impl PrPage {
         let nav = |s: &StackPr, icon_name: &str, help: &str| {
             let btn = gtk::Button::new();
             btn.add_css_class("flat");
-            let c = adw::ButtonContent::new();
-            c.set_icon_name(icon_name);
-            c.set_label(&format!("#{}", s.number));
-            btn.set_child(Some(&c));
+            btn.set_child(Some(&icon_label_content(icon_name, &format!("#{}", s.number))));
             btn.set_tooltip_text(Some(&format!("{help}: #{} {}", s.number, s.title)));
             let r = ItemRef { repo: repo.clone(), number: s.number };
             btn.connect_clicked(move |_| app::open(Route::Pr(r.clone()), false));
@@ -881,7 +878,7 @@ pub fn merge_status(pr: &PullRequestDetail) -> MergeStatus {
             Some("REVIEW_REQUIRED") => s("sy-eye-symbolic", "amber", "Review required".into(), false),
             _ => {
                 if failed > 0 {
-                    s("sy-x-symbolic", "red", failed_text, false)
+                    s("sy-x-circle-symbolic", "red", failed_text, false)
                 } else if pending > 0 {
                     s("sy-clock-symbolic", "amber", pending_text, false)
                 } else {
@@ -895,10 +892,10 @@ pub fn merge_status(pr: &PullRequestDetail) -> MergeStatus {
             } else if pending > 0 {
                 s("sy-clock-symbolic", "amber", pending_text, true)
             } else {
-                s("sy-check-symbolic", "green", "Ready to merge".into(), true)
+                s("sy-check-circle-symbolic", "green", "Ready to merge".into(), true)
             }
         }
-        Some("CLEAN") | Some("HAS_HOOKS") => s("sy-check-symbolic", "green", "Ready to merge".into(), true),
+        Some("CLEAN") | Some("HAS_HOOKS") => s("sy-check-circle-symbolic", "green", "Ready to merge".into(), true),
         _ => s("sy-clock-symbolic", "slate", "Checking mergeability…".into(), false),
     }
 }
@@ -911,7 +908,7 @@ pub fn merge_status_bar(model: &Rc<PrModel>, pr: &PullRequestDetail, on_merge: R
     let b = hbox(8);
     b.add_css_class("banner-box");
     b.add_css_class(st.color);
-    b.append(&colored_icon(st.icon, 14, st.color));
+    b.append(&colored_icon(st.icon, 16, st.color));
     b.append(&wrap_label(&st.text, &["sy-text"]));
     if let Some(auto) = &pr.auto_merge_request {
         let method = auto.merge_method.as_deref().map(|m| format!(" ({})", sheets::MergeMethod::from_key(m).map(|x| x.title()).unwrap_or(m))).unwrap_or_default();

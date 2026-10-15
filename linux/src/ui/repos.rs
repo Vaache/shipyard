@@ -283,7 +283,7 @@ pub fn list() -> gtk::Widget {
     search_btn.set_tooltip_text(Some("Filter"));
     search_btn.bind_property("active", &search_bar, "search-mode-enabled").bidirectional().build();
     let archived = gtk::ToggleButton::new();
-    archived.set_icon_name("sy-archive-symbolic");
+    crate::icons::set_button_icon(&archived, "sy-archive-symbolic");
     archived.set_tooltip_text(Some("Hide archived"));
     archived.set_active(true);
     let w = Rc::downgrade(&me);

@@ -17,6 +17,7 @@ mod selftest;
 mod settings;
 mod signal;
 mod smoke;
+mod tour;
 mod theme;
 mod ui;
 mod updater;
@@ -57,12 +58,16 @@ fn main() {
         println!("  --version      print the version and exit");
         println!("  --selftest     run a read-only API self test ({} required)", brand::env_key("TOKEN"));
         println!("  --smoke        build every screen offline and exit (used by CI)");
+        println!("  --tour=DIR     walk the main screens and save screenshots to DIR (used by CI)");
         return;
     }
     if args.iter().any(|a| a == "--selftest") {
         std::process::exit(selftest::run());
     }
     webkit_sandbox_guard();
+    if let Some(dir) = args.iter().find_map(|a| a.strip_prefix("--tour=")) {
+        tour::set_dir(std::path::PathBuf::from(dir));
+    }
     let smoke = args.iter().any(|a| a == "--smoke");
     let code = app::run(smoke);
     std::process::exit(code.get() as i32);

@@ -28,6 +28,8 @@ pub fn banner(pr: &PullRequestDetail, action: impl Fn() + 'static) -> Option<gtk
     let b = hbox(8);
     b.add_css_class("banner-box");
     b.add_css_class("coral");
+    b.set_vexpand(false);
+    b.set_valign(gtk::Align::Start);
     margins(&b, 6, 16, 0, 16);
     b.append(&icon_tile("sy-sparkles-symbolic", "coral", 18));
     if unresolved > 0 {
@@ -46,6 +48,9 @@ pub fn banner(pr: &PullRequestDetail, action: impl Fn() + 'static) -> Option<gtk
     }
     b.append(&spacer());
     let btn = tinted("Fix with Claude Code", "coral");
+    btn.add_css_class("banner-button");
+    btn.set_valign(gtk::Align::Center);
+    btn.set_vexpand(false);
     btn.connect_clicked(move |_| action());
     b.append(&btn);
     Some(b)

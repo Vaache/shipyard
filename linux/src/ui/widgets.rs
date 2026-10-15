@@ -61,9 +61,47 @@ pub fn line() -> gtk::Separator {
 }
 
 pub fn icon(name: &str, size: i32) -> gtk::Image {
-    let i = gtk::Image::from_icon_name(name);
-    i.set_pixel_size(size);
-    i
+    crate::icons::image(name, size)
+}
+
+pub fn icon_label_content(icon_name: &str, text: &str) -> gtk::Widget {
+    if crate::icons::glyph(icon_name).is_some() {
+        let b = hbox(6);
+        b.append(&icon(icon_name, 16));
+        b.append(&gtk::Label::new(Some(text)));
+        b.set_halign(gtk::Align::Center);
+        b.upcast()
+    } else {
+        let content = adw::ButtonContent::new();
+        content.set_icon_name(icon_name);
+        content.set_label(text);
+        content.upcast()
+    }
+}
+
+pub fn fixed_box(css: &[&str], width: i32, height: i32) -> gtk::Box {
+    let b = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    for c in css {
+        b.add_css_class(c);
+    }
+    b.set_size_request(width, height);
+    b.set_hexpand(false);
+    b.set_vexpand(false);
+    b.set_halign(gtk::Align::Start);
+    b.set_valign(gtk::Align::Center);
+    b
+}
+
+pub fn centered_in<W: IsA<gtk::Widget>>(b: &gtk::Box, child: &W, width: i32, height: i32) {
+    let c = child.as_ref();
+    c.set_halign(gtk::Align::Center);
+    c.set_valign(gtk::Align::Center);
+    c.set_hexpand(true);
+    c.set_vexpand(true);
+    b.set_hexpand(false);
+    b.set_vexpand(false);
+    b.set_size_request(width, height);
+    b.append(c);
 }
 
 pub fn colored_icon(name: &str, size: i32, color: &str) -> gtk::Image {
@@ -119,7 +157,8 @@ pub fn link_button(label: &str) -> gtk::Button {
 }
 
 pub fn icon_button(icon_name: &str, tooltip: &str) -> gtk::Button {
-    let b = gtk::Button::from_icon_name(icon_name);
+    let b = gtk::Button::new();
+    crate::icons::set_button_icon(&b, icon_name);
     b.set_tooltip_text(Some(tooltip));
     b.add_css_class("flat");
     b
@@ -133,10 +172,7 @@ pub fn tinted(label: &str, color: &str) -> gtk::Button {
 
 pub fn icon_label_button(icon_name: &str, text: &str) -> gtk::Button {
     let b = gtk::Button::new();
-    let content = adw::ButtonContent::new();
-    content.set_icon_name(icon_name);
-    content.set_label(text);
-    b.set_child(Some(&content));
+    b.set_child(Some(&icon_label_content(icon_name, text)));
     b
 }
 
@@ -168,32 +204,17 @@ pub fn label_chip(l: &LabelInfo) -> gtk::Label {
 }
 
 pub fn icon_tile(icon_name: &str, color: &str, size: i32) -> gtk::Box {
-    let b = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-    b.add_css_class("icon-tile");
-    b.add_css_class(&format!("tile-{color}"));
-    b.set_size_request(size, size);
-    b.set_valign(gtk::Align::Center);
-    b.set_halign(gtk::Align::Center);
-    let i = icon(icon_name, ((size as f64) * 0.55).round() as i32);
-    i.set_hexpand(true);
-    i.set_vexpand(true);
-    i.set_halign(gtk::Align::Center);
-    i.set_valign(gtk::Align::Center);
-    b.append(&i);
+    let tile_class = format!("tile-{color}");
+    let b = fixed_box(&["icon-tile", tile_class.as_str()], size, size);
+    centered_in(&b, &icon(icon_name, ((size as f64) * 0.55).round() as i32), size, size);
     b
 }
 
 pub fn state_badge(state: VisualState, compact: bool) -> gtk::Widget {
     if compact {
-        let b = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        b.add_css_class("state-dot");
-        b.add_css_class(state.css());
-        b.set_size_request(22, 22);
+        let b = fixed_box(&["state-dot", state.css()], 22, 22);
         b.set_valign(gtk::Align::Start);
-        let i = icon(state.icon(), 12);
-        i.set_hexpand(true);
-        i.set_halign(gtk::Align::Center);
-        b.append(&i);
+        centered_in(&b, &icon(state.icon(), 12), 22, 22);
         b.set_tooltip_text(Some(state.title()));
         b.upcast()
     } else {
@@ -209,8 +230,8 @@ pub fn state_badge(state: VisualState, compact: bool) -> gtk::Widget {
 
 pub fn diff_stat(additions: i64, deletions: i64) -> gtk::Box {
     let b = hbox(4);
-    let a = label_with(&format!("+{additions}"), &["fg-green", "sy-small", "sy-mono"]);
-    let d = label_with(&format!("−{deletions}"), &["fg-red", "sy-small", "sy-mono"]);
+    let a = label_with(&format!("+{}", util::thousands(additions)), &["fg-green", "sy-small", "sy-mono"]);
+    let d = label_with(&format!("−{}", util::thousands(deletions)), &["fg-red", "sy-small", "sy-mono"]);
     b.append(&a);
     b.append(&d);
     b.set_valign(gtk::Align::Center);
@@ -491,7 +512,7 @@ pub fn on_click_widget<W: IsA<gtk::Widget>>(w: &W, f: impl Fn() + 'static) {
 }
 
 pub fn branch_chip(name: &str, color: &str) -> gtk::Box {
-    let c = chip(name, color, Some("sy-branch-symbolic"), true);
+    let c = chip(name, color, None, true);
     c.set_tooltip_text(Some("Click to copy"));
     let n = name.to_string();
     on_click_widget(&c, move || {
