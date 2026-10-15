@@ -71,7 +71,7 @@ iscc /DArch=x64 /DAppVersion=2.5.0 /DSourceDir=$PWD\windows\dist\x64\app /DOutpu
 
 ### CI
 
-`.github/workflows/windows.yml` runs the unit tests, publishes x64 and arm64, runs the smoke tests (version, self test, opening the window, silent install and uninstall) and uploads `Shipyard-windows-<arch>-setup.exe` and `Shipyard-windows-<arch>-portable.zip` as artifacts. On a `v*` tag it also attaches them to the existing GitHub release for that tag (it does not create releases).
+`.github/workflows/windows.yml` runs the unit tests, publishes x64 and arm64, runs the smoke tests (version, self test including a ConPTY round trip, opening the window, silent install and uninstall), drives a short UI tour against the repository's own pull requests (`--smoke-tour`, screenshots uploaded as the `ui-tour-screenshots` artifact) and uploads `Shipyard-windows-<arch>-setup.exe` and `Shipyard-windows-<arch>-portable.zip` as artifacts. On a `v*` tag it also attaches them to the existing GitHub release for that tag (it does not create releases).
 
 ## Renaming
 

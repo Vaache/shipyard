@@ -391,7 +391,7 @@ public sealed class RepoCodeView : Grid
         {
             Detach(html);
             var wrapper = new Border { Margin = new Thickness(10), CornerRadius = new CornerRadius(10), Background = Palette.Brush("panel"), Child = html };
-            html.Render(Wrap(readme), "conversation", "top", "readme");
+            html.Render(Wrap(Resolve(readme, model.Dir)), "conversation", "top", "readme");
             content.Content = wrapper;
             return;
         }
@@ -417,6 +417,21 @@ public sealed class RepoCodeView : Grid
                 c.Content = null;
                 break;
         }
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex RelativeAttr = new(@"\b(src|href)=""(?![a-zA-Z][a-zA-Z0-9+.-]*:|//|/|#)([^""]+)""", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private string Resolve(string html, string dir)
+    {
+        var prefix = dir.Length == 0 ? "" : dir.TrimEnd('/') + "/";
+        return RelativeAttr.Replace(html, m =>
+        {
+            var target = prefix + m.Groups[2].Value.TrimStart('.', '/');
+            var url = m.Groups[1].Value == "src"
+                ? $"https://raw.githubusercontent.com/{model.Repo.Full}/{model.CurrentRef}/{target}"
+                : $"https://github.com/{model.Repo.Full}/blob/{model.CurrentRef}/{target}";
+            return $"{m.Groups[1].Value}=\"{url}\"";
+        });
     }
 
     private static string Wrap(string inner) => $"<div class=\"tl\"><div class=\"md\">{inner}</div></div>";
@@ -477,7 +492,7 @@ public sealed class RepoCodeView : Grid
             {
                 var border = new Border { Margin = new Thickness(10, 0, 10, 10), CornerRadius = new CornerRadius(10), Background = Palette.Brush(markdownSource ? "sunken" : "panel"), Child = html };
                 if (markdownSource) html.Render(CodeHtml.Render(file.Text, ext, true), "code", "top", "flush code-body");
-                else html.Render(Wrap(file.Html), "conversation", "top", "readme");
+                else html.Render(Wrap(Resolve(file.Html, path.Contains('/') ? path[..path.LastIndexOf('/')] : "")), "conversation", "top", "readme");
                 return border;
             }
             case FileContentKind.Image:
