@@ -23,38 +23,38 @@
 
 ---
 
-A browser tab with GitHub can use a gigabyte of memory just to show one diff. Shipyard is a SwiftUI app that handles the daily review work: it opens instantly, scrolls huge diffs smoothly and sends review feedback straight to Claude Code.
+GitHub in a browser tab can take up a gigabyte of memory to show a single diff. Shipyard is a small SwiftUI app for everyday review. It starts fast, scrolls big diffs without stutter, and can pass review comments to Claude Code.
 
 ## Features
 
 **Pull requests**
-- Review requests, your PRs and everything you're involved in, with filters by state
+- Review requests, your own PRs and anything you're involved in, filtered by state
 - Conversation, review threads, commits, checks and changed files
 - Comment, approve, request changes and merge
-- Fast diff viewer with sticky file headers, built on `NSTableView`
-- Stacked pull requests: the whole stack in the PR header, jump up and down the chain, "stacked on" markers in lists
-- Live refresh: lists and the open PR update every 30 seconds (15 s to 15 min in Settings) and right after you switch back to the app; new pull requests slide in at the top and stay highlighted for a moment
-- Pull to refresh on every list, board and PR tab: drag down with two fingers on the trackpad, the ring fills and the list updates. `⌘R` works everywhere; the footer shows "Updated 12s ago" and a Retry link if a refresh fails
-- Re-request review in one click after you push: Shipyard compares the reviewed commit with the branch head, so rebases and force pushes count too ("You pushed 3 commits after @sofia reviewed"). Outdated review threads aren't counted as unresolved
+- A diff viewer built on `NSTableView`, with file headers that stay pinned as you scroll
+- Stacked pull requests: the PR header shows the whole stack, you can jump between PRs in it, and lists mark what each PR is stacked on
+- Lists and the open PR refresh every 30 seconds (you can set 15 s to 15 min in Settings) and again when you switch back to the app. New pull requests show up at the top, briefly highlighted
+- Pull to refresh on lists, boards and PR tabs: drag down with two fingers on the trackpad. `⌘R` does the same. The footer says when the list was last updated, and shows a Retry link if a refresh fails
+- Re-request review in one click after you push. Shipyard compares the reviewed commit with the branch head, so it notices rebases and force pushes too ("You pushed 3 commits after @sofia reviewed"). Outdated review threads don't count as unresolved
 
-**Everything else you open GitHub for**
+**Beyond pull requests**
 - Notifications and issues
 - Repositories with a file browser and syntax highlighting
 - GitHub Projects boards
-- Menu bar badge with the number of pending review requests
-- Shipyard theme in light and dark, or the native macOS look
+- A menu bar badge with the number of reviews waiting on you
+- The Shipyard theme in light and dark, or the standard macOS look
 - Open any GitHub link inside the app (`⌘L`)
-- Built-in updates: Shipyard checks for a new release every 6 hours, tells you with a notification and an "Update to …" item in the sidebar and menu bar, then downloads it, replaces the app in place and restarts (also **Shipyard → Check for Updates…**)
+- Updates from inside the app. Shipyard looks for a new release every 6 hours and lets you know with a notification and an "Update to …" item in the sidebar and menu bar. Installing it replaces the app and restarts it. You can also check by hand with **Shipyard → Check for Updates…**
 
 **Claude Code workspace**
-- Native chat for the official Claude Code CLI, next to the PR, changed files and branch
-- **Fix with Claude Code**: one click sends review feedback to a new session. Uses the reviewer's "Fix prompt" if there is one, or composes it
-- Session history grouped by project, with the branch and the PR each session opened
-- Switch model, effort and permission mode, approve tool calls inline, see a diff of every edit
-- Idle sessions sleep and free their memory, then resume on the next message
-- Context and plan usage overlay
-- Multiple Claude accounts (for example personal and work) with separate sign-ins and history
-- Classic terminal mode if you prefer the CLI UI
+- A native chat for the official Claude Code CLI, right next to the PR, its changed files and its branch
+- **Fix with Claude Code**: one click starts a new session with the review feedback. If the reviewer left a "Fix prompt", Shipyard uses it; otherwise it writes one from the comments
+- Session history grouped by project, showing the branch and the PR for each session
+- Change the model, effort and permission mode, approve tool calls in the chat, and see a diff for every edit
+- Idle sessions go to sleep to free memory and pick up again on your next message
+- An overlay with context and plan usage
+- Several Claude accounts (say, personal and work), each with its own sign-in and history
+- A plain terminal mode if you'd rather use the CLI as is
 
 ## Install
 
@@ -66,7 +66,7 @@ A browser tab with GitHub can use a gigabyte of memory just to show one diff. Sh
    xattr -dr com.apple.quarantine /Applications/Shipyard.app
    ```
 
-This is needed only once: Shipyard clears the quarantine flag from itself on launch, and updates install from inside the app (**Shipyard → Check for Updates…**) with no disk image or drag to Applications.
+You only do this once. Shipyard removes the quarantine flag from itself on launch, and later updates install from inside the app (**Shipyard → Check for Updates…**), so there's no disk image to open again.
 
 **Requirements:** macOS 14 Sonoma or later. Optional: [GitHub CLI](https://cli.github.com) for one-click sign-in, [Claude Code](https://docs.claude.com/en/docs/claude-code) for the Claude workspace.
 
@@ -82,7 +82,7 @@ The token is stored in the macOS Keychain.
 
 ## Privacy
 
-Shipyard has no backend and no analytics. It talks directly to `api.github.com` and runs your locally installed `claude` CLI. It never reads your Claude credentials: sign-in goes through `claude auth login` in your browser.
+Shipyard has no backend and no analytics. It talks to `api.github.com` directly and runs the `claude` CLI you installed. It never reads your Claude credentials; you sign in through `claude auth login` in your browser.
 
 ## Build from source
 
@@ -110,7 +110,7 @@ swift build -c release
 SHIPYARD_TOKEN=$(gh auth token) .build/release/Shipyard --selftest
 ```
 
-Screenshots without personal data: `SHIPYARD_DEMO_REPO=owner/name` lists a public repository in every pull request and issue section and shows a placeholder user; `SHIPYARD_DEMO_FOLDER=/path` limits the Claude Code history to that folder.
+For screenshots without personal data, set `SHIPYARD_DEMO_REPO=owner/name` to fill every pull request and issue section from a public repository with a placeholder user, and `SHIPYARD_DEMO_FOLDER=/path` to limit the Claude Code history to one folder.
 
 ### Project layout
 
@@ -126,7 +126,7 @@ docs/         website (GitHub Pages)
 
 ## Acknowledgements
 
-- [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) by Miguel de Icaza, MIT License, powers the terminal mode.
+- The terminal mode uses [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) by Miguel de Icaza (MIT License).
 
 ## License
 
