@@ -36,6 +36,7 @@ const BRAND_LIGHT: Palette = Palette {
         ("indigo", "#4E5BC4"),
         ("slate", "#6B7486"),
         ("orange", "#C8691C"),
+        ("selection", "#2F6FE0"),
         ("add_bg", "alpha(#2E8A57, 0.11)"),
         ("del_bg", "alpha(#C2412F, 0.10)"),
         ("hunk_bg", "alpha(#1F7FB8, 0.08)"),
@@ -71,6 +72,7 @@ const BRAND_DARK: Palette = Palette {
         ("indigo", "#8C97E8"),
         ("slate", "#939CB0"),
         ("orange", "#F0904A"),
+        ("selection", "#2457CF"),
         ("add_bg", "alpha(#5DBE8A, 0.10)"),
         ("del_bg", "alpha(#E8746A, 0.11)"),
         ("hunk_bg", "alpha(#5BB8EC, 0.08)"),
@@ -106,6 +108,7 @@ const SYSTEM_LIGHT: Palette = Palette {
         ("indigo", "#3d50c4"),
         ("slate", "#77767b"),
         ("orange", "#e66100"),
+        ("selection", "@accent_bg_color"),
         ("add_bg", "alpha(#26a269, 0.14)"),
         ("del_bg", "alpha(#c01c28, 0.14)"),
         ("hunk_bg", "alpha(@accent_color, 0.08)"),
@@ -141,6 +144,7 @@ const SYSTEM_DARK: Palette = Palette {
         ("indigo", "#8f9ff8"),
         ("slate", "#9a9996"),
         ("orange", "#ffa348"),
+        ("selection", "@accent_bg_color"),
         ("add_bg", "alpha(#57e389, 0.14)"),
         ("del_bg", "alpha(#ff7b7b, 0.14)"),
         ("hunk_bg", "alpha(@accent_color, 0.08)"),
@@ -248,21 +252,25 @@ const APP_CSS: &str = r#"
 .sy-card { background-color: @sy_raised; border-radius: 12px; padding: 14px; }
 .sy-card-flat { background-color: @sy_raised; border-radius: 10px; }
 list.sy-list, listview.sy-list { background-color: transparent; }
-list.sy-list > row { padding: 6px 10px; border-bottom: 1px solid @sy_line; }
-list.sy-list > row:selected { background-color: alpha(@sy_accent, 0.14); }
+list.sy-list > row { padding: 8px 12px; margin: 0 8px; border-bottom: 1px solid @sy_line; }
+list.sy-list > row:selected { background-color: alpha(@sy_text, 0.10); border-radius: 10px; border-bottom-color: transparent; }
+list.sy-list:focus-within > row:selected { background-color: @sy_selection; color: white; }
+list.sy-list:focus-within > row:selected .sy-muted, list.sy-list:focus-within > row:selected .sy-dim { color: alpha(white, 0.75); }
+list.sy-list:focus-within > row:selected .sy-text { color: white; }
 list.sy-plain > row { padding: 4px 10px; }
 list.sy-sidebar-list { background-color: transparent; }
 list.sy-sidebar-list > row { padding: 5px 8px; margin: 1px 6px; border-radius: 7px; }
-list.sy-sidebar-list > row:selected { background-color: alpha(@sy_text, 0.07); }
-.sy-section-title { font-size: 0.8em; font-weight: 700; color: @sy_dim; margin: 10px 14px 2px 14px; }
-.sy-sidebar-icon { min-width: 21px; min-height: 21px; border-radius: 6px; background-color: alpha(@sy_text, 0.05); }
+list.sy-sidebar-list > row:selected { background-color: alpha(@sy_text, 0.07); box-shadow: inset 3px 0 @sy_accent; }
+.sy-section-title { font-size: 0.86em; font-weight: 600; color: @sy_dim; margin: 12px 14px 4px 16px; }
+.sy-sidebar-icon { min-width: 22px; min-height: 22px; border-radius: 6px; background-color: alpha(@sy_text, 0.06); box-shadow: inset 0 0 0 1px alpha(@sy_text, 0.07); }
 .sy-count { color: @sy_muted; font-feature-settings: "tnum"; }
 .chip { padding: 1px 7px; border-radius: 999px; font-size: 0.82em; font-weight: 500; }
 .chip.mono { font-family: monospace; font-weight: 400; }
 .state-dot { min-width: 22px; min-height: 22px; border-radius: 999px; }
 .state-pill { padding: 3px 10px; border-radius: 999px; font-weight: 600; color: white; }
 .icon-tile { border-radius: 6px; }
-.banner-box { border-radius: 10px; padding: 6px 10px; }
+.banner-box { border-radius: 10px; padding: 6px 10px; min-height: 28px; }
+.banner-button { min-height: 24px; padding: 2px 12px; border-radius: 6px; font-size: 0.92em; font-weight: 600; }
 .diff-view { background-color: @sy_panel; }
 .diff-line { font-family: monospace; font-size: 12px; padding: 0; }
 .diff-line.add { background-color: @sy_add_bg; }

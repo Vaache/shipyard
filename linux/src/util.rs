@@ -372,6 +372,22 @@ pub fn fuzzy_match(query: &str, paths: &[String], limit: usize) -> Vec<String> {
     scored.into_iter().take(limit).map(|(p, _)| p.clone()).collect()
 }
 
+pub fn thousands(n: i64) -> String {
+    let digits = n.unsigned_abs().to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    if n < 0 {
+        format!("-{out}")
+    } else {
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

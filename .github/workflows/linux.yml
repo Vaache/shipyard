@@ -2,7 +2,7 @@ name: Linux
 
 on:
   push:
-    branches: [linux-port]
+    branches: [linux-port, 'linux-*']
     tags: ['v*']
   pull_request:
     paths:
@@ -126,6 +126,52 @@ jobs:
             linux/dist/share
             linux/dist/flatpak
             linux/dist/brand.out
+          if-no-files-found: error
+
+  screenshots:
+    name: UI screenshots
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: tarball-x86_64
+          path: dist
+
+      - name: Runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-1 libadwaita-1-0 libvte-2.91-gtk4-0 libwebkitgtk-6.0-4 libgtksourceview-5-0 \
+            xvfb xauth dbus-x11 imagemagick fonts-cantarell adwaita-icon-theme hicolor-icon-theme librsvg2-common
+          mkdir -p ~/.config/gtk-4.0
+          printf '[Settings]\ngtk-font-name=Cantarell 11\n' > ~/.config/gtk-4.0/settings.ini
+
+      - name: Tour (dark and light)
+        env:
+          PULLYARD_TOKEN: ${{ github.token }}
+          PULLYARD_DEMO_REPO: migueldeicaza/SwiftTerm
+          PULLYARD_TOUR_PR: migueldeicaza/SwiftTerm#753
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
+          GTK_A11Y: none
+          GSK_RENDERER: cairo
+          NO_AT_BRIDGE: '1'
+        run: |
+          tar -C dist -xzf dist/*.tar.gz
+          bin=$(find dist -path '*/bin/*' -type f | head -1)
+          for scheme in dark light; do
+            ADW_DEBUG_COLOR_SCHEME="prefer-${scheme}" timeout 300 xvfb-run -a -s "-screen 0 1600x1000x24" \
+              dbus-run-session -- "$bin" --tour="$PWD/shots/${scheme}" || echo "::warning::tour (${scheme}) exited with $?"
+          done
+          ls -la shots/*
+          test -n "$(find shots -name '*.png' | head -1)"
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: shots
           if-no-files-found: error
 
   flatpak:

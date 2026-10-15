@@ -90,7 +90,12 @@ impl Menu {
 
     pub fn button(&self, icon_name: &str, tooltip: &str) -> gtk::MenuButton {
         let b = gtk::MenuButton::new();
-        b.set_icon_name(icon_name);
+        if crate::icons::glyph(icon_name).is_some() {
+            b.set_child(Some(&crate::icons::image(icon_name, 16)));
+            b.add_css_class("image-button");
+        } else {
+            b.set_icon_name(icon_name);
+        }
         b.set_tooltip_text(Some(tooltip));
         b.set_menu_model(Some(&self.model));
         self.attach(&b);
@@ -128,10 +133,7 @@ pub fn context_menu<W: IsA<gtk::Widget>>(widget: &W, build: impl Fn() -> Menu + 
 pub fn dropdown_button(label: &str, icon_name: Option<&str>, menu: &Menu) -> gtk::MenuButton {
     let b = gtk::MenuButton::new();
     if let Some(i) = icon_name {
-        let content = adw::ButtonContent::new();
-        content.set_icon_name(i);
-        content.set_label(label);
-        b.set_child(Some(&content));
+        b.set_child(Some(&super::widgets::icon_label_content(i, label)));
     } else {
         b.set_label(label);
     }

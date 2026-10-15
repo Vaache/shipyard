@@ -214,6 +214,8 @@ pub fn list() -> gtk::Widget {
     empty.set_halign(gtk::Align::Center);
     empty.set_margin_top(30);
     empty.set_wrap(true);
+    empty.set_natural_wrap_mode(gtk::NaturalWrapMode::None);
+    empty.set_justify(gtk::Justification::Center);
     stack.add_named(&empty, Some("empty"));
     let holder: Rc<RefCell<Option<std::rc::Weak<ReposList>>>> = Rc::new(RefCell::new(None));
     let h = holder.clone();
@@ -283,7 +285,7 @@ pub fn list() -> gtk::Widget {
     search_btn.set_tooltip_text(Some("Filter"));
     search_btn.bind_property("active", &search_bar, "search-mode-enabled").bidirectional().build();
     let archived = gtk::ToggleButton::new();
-    archived.set_icon_name("sy-archive-symbolic");
+    crate::icons::set_button_icon(&archived, "sy-archive-symbolic");
     archived.set_tooltip_text(Some("Hide archived"));
     archived.set_active(true);
     let w = Rc::downgrade(&me);

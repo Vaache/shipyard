@@ -978,10 +978,12 @@ impl ChatComposer {
         let left = hbox(6);
         bottom.append(&left);
         bottom.append(&spacer());
-        let stop = gtk::Button::from_icon_name("sy-stop-symbolic");
+        let stop = gtk::Button::new();
+        crate::icons::set_button_icon(&stop, "sy-stop-symbolic");
         stop.add_css_class("tint-red");
         stop.set_tooltip_text(Some("Stop (Esc)"));
-        let send = gtk::Button::from_icon_name("sy-send-symbolic");
+        let send = gtk::Button::new();
+        crate::icons::set_button_icon(&send, "sy-send-symbolic");
         send.add_css_class("tint-coral");
         send.set_tooltip_text(Some("Send (Enter)"));
         let usage = gtk::MenuButton::new();

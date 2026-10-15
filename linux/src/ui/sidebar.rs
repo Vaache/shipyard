@@ -24,14 +24,8 @@ pub struct Sidebar {
 }
 
 fn sidebar_icon(icon_name: &str, color: &str) -> gtk::Box {
-    let b = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-    b.add_css_class("sy-sidebar-icon");
-    b.set_size_request(21, 21);
-    b.set_valign(gtk::Align::Center);
-    let i = colored_icon(icon_name, 12, color);
-    i.set_hexpand(true);
-    i.set_halign(gtk::Align::Center);
-    b.append(&i);
+    let b = fixed_box(&["sy-sidebar-icon"], 22, 22);
+    centered_in(&b, &colored_icon(icon_name, 13, color), 22, 22);
     b
 }
 
@@ -57,7 +51,7 @@ impl Sidebar {
         let column = vbox(0);
         let mut rows = vec![];
         for (title, items) in groups {
-            column.append(&label_with(&title.to_uppercase(), &["sy-section-title"]));
+            column.append(&label_with(title, &["sy-section-title"]));
             let list = gtk::ListBox::new();
             list.add_css_class("sy-sidebar-list");
             list.set_selection_mode(gtk::SelectionMode::Single);
@@ -165,9 +159,18 @@ impl Sidebar {
             }
             None => false,
         });
+        let weak = Rc::downgrade(&me);
+        app::get().phase_changed.connect(move |_| match weak.upgrade() {
+            Some(me) => {
+                me.build_footer();
+                true
+            }
+            None => false,
+        });
         me.update_counts();
         me.update_update_row();
         me.build_footer();
+        keep_alive(&me.widget, me.clone());
         me
     }
 

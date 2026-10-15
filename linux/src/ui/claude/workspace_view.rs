@@ -273,10 +273,10 @@ impl View {
         let kind = hbox(0);
         kind.add_css_class("linked");
         let chat_btn = gtk::ToggleButton::new();
-        chat_btn.set_icon_name("sy-comment-symbolic");
+        crate::icons::set_button_icon(&chat_btn, "sy-comment-symbolic");
         chat_btn.set_tooltip_text(Some("Chat"));
         let term_btn = gtk::ToggleButton::new();
-        term_btn.set_icon_name("sy-terminal-symbolic");
+        crate::icons::set_button_icon(&term_btn, "sy-terminal-symbolic");
         term_btn.set_tooltip_text(Some("Terminal"));
         term_btn.set_group(Some(&chat_btn));
         if tab.kind == TabKind::Chat {
@@ -489,7 +489,7 @@ pub fn build() -> gtk::Widget {
 
     let title = adw::WindowTitle::new("Claude Code", "");
     let inspector_btn = gtk::ToggleButton::new();
-    inspector_btn.set_icon_name("sy-panel-right-symbolic");
+    crate::icons::set_button_icon(&inspector_btn, "sy-panel-right-symbolic");
     inspector_btn.set_tooltip_text(Some("Toggle changes panel"));
     inspector_btn.set_active(true);
     let tv = adw::ToolbarView::new();

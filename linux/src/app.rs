@@ -446,7 +446,13 @@ impl App {
                 self.set_phase(Phase::LoggedOut);
             }
             Err(_) => {
-                self.state.borrow_mut().api = Some(GitHubApi::new(&token));
+                {
+                    let mut s = self.state.borrow_mut();
+                    s.api = Some(GitHubApi::new(&token));
+                    if demo::is_on() {
+                        s.user = Some(demo::user());
+                    }
+                }
                 self.set_phase(Phase::LoggedIn);
                 self.start_polling();
             }
@@ -764,7 +770,9 @@ impl App {
         window.set_icon_name(Some(brand::APP_ID));
         window.set_default_size(w.max(960), h.max(600));
         window.set_size_request(900, 560);
-        if maximized {
+        if crate::tour::active() {
+            window.set_default_size(1600, 1000);
+        } else if maximized {
             window.maximize();
         }
         let root = gtk::Stack::new();
@@ -876,6 +884,10 @@ pub fn run(smoke: bool) -> glib::ExitCode {
             me.render_phase();
         });
         crate::rt::spawn_local(a.clone().restore());
+        if crate::tour::active() {
+            crate::tour::run(a.clone());
+            return;
+        }
         crate::rt::spawn_local(crate::updater::check_on_launch());
         crate::updater::on_present(|_| {
             ui::update::show(false);

@@ -162,6 +162,8 @@ pub fn list() -> gtk::Widget {
     empty.set_halign(gtk::Align::Center);
     empty.set_margin_top(30);
     empty.set_wrap(true);
+    empty.set_natural_wrap_mode(gtk::NaturalWrapMode::None);
+    empty.set_justify(gtk::Justification::Center);
     stack.add_named(&empty, Some("empty"));
     stack.set_vexpand(true);
     let holder: Rc<RefCell<Option<std::rc::Weak<ProjectsList>>>> = Rc::new(RefCell::new(None));
@@ -193,7 +195,7 @@ pub fn list() -> gtk::Widget {
         }
     });
     let closed = gtk::ToggleButton::new();
-    closed.set_icon_name("sy-archive-symbolic");
+    crate::icons::set_button_icon(&closed, "sy-archive-symbolic");
     closed.set_tooltip_text(Some("Show closed"));
     let w = Rc::downgrade(&me);
     closed.connect_toggled(move |t| {
