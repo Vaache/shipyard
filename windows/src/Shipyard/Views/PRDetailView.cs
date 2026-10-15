@@ -93,6 +93,7 @@ public sealed class PRContent : Grid
     private readonly AppViewModel app = AppViewModel.Shared;
     private readonly PRDetailViewModel model;
     private readonly StackPanel header = Ui.V(8);
+    private readonly ContentControl titleHost = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, IsTabStop = false };
     private readonly StackPanel banners = Ui.V(6);
     private readonly TabStrip tabs = new(nameof(PRTab.Conversation));
     private readonly Grid tabArea = new();
@@ -119,9 +120,19 @@ public sealed class PRContent : Grid
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-        var top = Ui.Columns((header, Ui.Star), (Ui.H(4, busy, status, toolbar), Ui.Auto));
-        top.Padding = new Thickness(16, 12, 12, 0);
-        ((FrameworkElement)top.Children[1]).VerticalAlignment = VerticalAlignment.Top;
+        var top = new Grid { Padding = new Thickness(16, 12, 12, 0), ColumnSpacing = 8, RowSpacing = 8 };
+        top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        top.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        top.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        top.Children.Add(titleHost);
+        var tools = Ui.H(4, busy, status, toolbar);
+        tools.VerticalAlignment = VerticalAlignment.Top;
+        SetColumn(tools, 1);
+        top.Children.Add(tools);
+        SetRow(header, 1);
+        SetColumnSpan(header, 2);
+        top.Children.Add(header);
         Children.Add(top);
         banners.Padding = new Thickness(16, 6, 16, 0);
         SetRow(banners, 1);
@@ -245,19 +256,20 @@ public sealed class PRContent : Grid
         if (model.Pr is null) return;
         var pr = Pr;
         header.Children.Clear();
-        var title = Ui.H(8, Ui.Text(pr.Title, 20, "text", FontWeights.Bold, wrap: true, select: true), Ui.Text($"#{pr.Number}", 20, "dim"));
-        ((TextBlock)title.Children[0]).MaxWidth = 900;
-        header.Children.Add(title);
+        var titleText = Ui.Text("", 20, "text", FontWeights.Bold, wrap: true, select: true);
+        titleText.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = pr.Title + "  " });
+        titleText.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = $"#{pr.Number}", Foreground = Palette.Brush("dim"), FontWeight = FontWeights.Normal });
+        titleHost.Content = titleText;
         var branchBase = BranchChip(pr.BaseRefName, "sky");
         var branchHead = BranchChip(pr.HeadRefName, "violet");
         var time = Ui.Caption(Fmt.Rel(pr.CreatedAt));
         Ui.Tip(time, Fmt.Full(pr.CreatedAt));
-        header.Children.Add(Ui.H(8, Ui.StateBadge(pr.VisualState), Ui.Avatar(pr.Author?.AvatarUrl, 18), Ui.Text(pr.Author?.Login ?? "ghost", 13, "text", FontWeights.SemiBold),
+        header.Children.Add(new WrapPanel(8, Ui.StateBadge(pr.VisualState), Ui.Avatar(pr.Author?.AvatarUrl, 18), Ui.Text(pr.Author?.Login ?? "ghost", 13, "text", FontWeights.SemiBold),
             branchBase, Ui.Glyph("", 11, "dim"), branchHead, Ui.DiffStat(pr.Additions, pr.Deletions), time));
         var reviewers = model.Reviewers;
         if (pr.Labels.Items.Count > 0 || reviewers.Count > 0 || pr.Assignees.Items.Count > 0)
         {
-            var row = Ui.H(6);
+            var row = new WrapPanel(6);
             foreach (var l in pr.Labels.Items) row.Children.Add(Ui.LabelChip(l));
             if (reviewers.Count > 0)
             {
@@ -274,7 +286,7 @@ public sealed class PRContent : Grid
                     row.Children.Add(av);
                 }
             }
-            header.Children.Add(new ScrollViewer { Content = row, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, HorizontalScrollMode = ScrollMode.Enabled, VerticalScrollMode = ScrollMode.Disabled });
+            header.Children.Add(row);
         }
         if (model.Stack.Count > 1) header.Children.Add(StackStrip());
         if (MergeStatusBar(model, app, () => Dialogs.Merge(XamlRoot, model).Forget()) is { } bar) header.Children.Add(bar);
@@ -397,7 +409,7 @@ public sealed class PRContent : Grid
                 _ => ("", "slate", L.T("Merge_Checking", "Checking mergeability…"), false)
             };
         }
-        var row = Ui.H(8, Ui.Glyph(s.glyph, 14, s.color), Ui.Text(s.text, 13));
+        var row = new WrapPanel(8, Ui.Glyph(s.glyph, 14, s.color), Ui.Text(s.text, 13));
         if (pr.AutoMergeRequest is { } auto)
         {
             var method = auto.MergeMethod is { } m ? $" ({MergeMethods.Title(m)})" : "";
@@ -738,9 +750,9 @@ public sealed class PRContent : Grid
     private FrameworkElement BuildFiles()
     {
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(270) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.3, GridUnitType.Star), MinWidth = 180, MaxWidth = 300 });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.7, GridUnitType.Star) });
 
         var side = new Grid { Background = ThemeService.IsBrand ? Palette.Brush("list") : null };
         side.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

@@ -18,6 +18,7 @@ public sealed class RepoDetailView : LiveDetail
 {
     private readonly RepoRef repo;
     private RepoInfo? info;
+    private bool infoLoaded;
     private string tab = "code";
     private StateFilter stateFilter = StateFilter.Open;
     private readonly SearchListViewModel listModel = new();
@@ -118,6 +119,7 @@ public sealed class RepoDetailView : LiveDetail
         }
         RenderHeader();
         RenderTabs();
+        infoLoaded = true;
         if (code is not null && codeView is not null) await code.Start(info?.DefaultBranchRef?.Name ?? "HEAD");
     }
 
@@ -161,7 +163,7 @@ public sealed class RepoDetailView : LiveDetail
             if (codeView is null)
             {
                 codeView = new RepoCodeView(code);
-                if (info is not null || code.CurrentRef.Length == 0) code.Start(info?.DefaultBranchRef?.Name ?? "HEAD").Forget();
+                if (infoLoaded) code.Start(info?.DefaultBranchRef?.Name ?? "HEAD").Forget();
             }
             body.Content = codeView;
             return;
@@ -222,9 +224,9 @@ public sealed class RepoCodeView : Grid
     public RepoCodeView(RepoCodeViewModel model)
     {
         this.model = model;
-        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(300) });
+        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.32, GridUnitType.Star), MinWidth = 190, MaxWidth = 320 });
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1) });
-        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.68, GridUnitType.Star) });
 
         var side = new Grid { Background = ThemeService.IsBrand ? Palette.Brush("list") : null };
         side.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

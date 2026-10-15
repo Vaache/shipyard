@@ -28,7 +28,7 @@ public static class SmokeTour
         {
             if (window.AppWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
             Log("start");
-            await Step("launch", 6000);
+            await Step("launch", 9000);
             if (app.Phase != Phase.LoggedIn)
             {
                 Log($"phase {app.Phase}");
@@ -42,7 +42,7 @@ public static class SmokeTour
             if (pr is { Kind: RouteKind.PullRequest, Item: { } item } && app.PrModel(item) is { } model)
             {
                 model.Tab = PRTab.Files;
-                await Step("pr files", 8000);
+                await Step("pr files", 12000);
                 model.Tab = PRTab.Commits;
                 await Step("pr commits", 3000);
                 model.Tab = PRTab.Checks;

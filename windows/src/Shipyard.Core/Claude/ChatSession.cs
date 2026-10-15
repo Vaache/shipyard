@@ -385,7 +385,7 @@ public sealed partial class ChatSession : ObservableObject
         }
     }
 
-    private void Consume(string line)
+    internal void Consume(string line)
     {
         if (string.IsNullOrWhiteSpace(line)) return;
         JsonObject? obj;

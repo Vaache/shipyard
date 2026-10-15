@@ -375,7 +375,7 @@ public sealed class ClaudeAuthView : Grid
                 content.Children.Add(Card(
                     Ui.Text(L.T("Claude_NotInstalledTitle", "Claude Code isn't installed"), 15, "text", FontWeights.SemiBold),
                     Ui.Text(L.T("Claude_InstallHelp", "Install the CLI from PowerShell, then press “Check again”."), 13, "muted", wrap: true),
-                    Ui.Card(Ui.Text(InstallCommand, 13, "text", mono: true, select: true), 8, "sunken", 8),
+                    Ui.Card(Ui.Text(InstallCommand, 13, "text", wrap: true, mono: true, select: true), 8, "sunken", 8),
                     Ui.Columns((Ui.H(8, Ui.Button(L.T("Claude_CopyCommand", "Copy command"), () => WindowInterop.Copy(InstallCommand)), Ui.Button(L.T("Claude_Docs", "Docs"), () => LinkBrowser.Open("https://code.claude.com/docs/en/setup"))), Ui.Star),
                         (Ui.Button(L.T("Claude_CheckAgain", "Check again"), () => store.Refresh().Forget(), accent: true), Ui.Auto))));
                 break;

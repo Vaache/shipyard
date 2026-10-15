@@ -88,6 +88,27 @@ public static class SelfTest
             File.Delete(path);
             return Task.FromResult("ok");
         });
+        await Step("conpty", async () =>
+        {
+            using var session = new TerminalSession();
+            var output = new System.Text.StringBuilder();
+            var exited = new TaskCompletionSource<int>();
+            session.Exited += code => exited.TrySetResult(code);
+            var cmd = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
+            session.Start($"\"{cmd}\" /c echo conpty-ok", Environment.CurrentDirectory, new Dictionary<string, string?>(), 80, 24);
+            var history = session.Attach(chunk =>
+            {
+                lock (output) output.Append(System.Text.Encoding.UTF8.GetString(chunk));
+            });
+            lock (output) output.Insert(0, System.Text.Encoding.UTF8.GetString(history));
+            var finished = await Task.WhenAny(exited.Task, Task.Delay(15000));
+            await Task.Delay(300);
+            string text;
+            lock (output) text = output.ToString();
+            Require(finished == exited.Task, "process did not exit");
+            Require(text.Contains("conpty-ok"), "no output: " + text.Replace("\u001b", "ESC"));
+            return $"exit {exited.Task.Result}";
+        });
         await Step("webview2 runtime", () => Task.FromResult(WebViewEnvironment.AvailableVersion() ?? "not installed (HTML views need the Edge WebView2 Runtime)"));
         await Step("claude cli", () => Task.FromResult(ClaudeLauncher.Command?.File ?? "not installed"));
 

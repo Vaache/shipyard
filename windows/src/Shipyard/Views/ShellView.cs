@@ -87,7 +87,9 @@ public sealed class ShellView : Grid
 
     private void BuildNav()
     {
-        nav.PaneDisplayMode = NavigationViewPaneDisplayMode.Left;
+        nav.PaneDisplayMode = NavigationViewPaneDisplayMode.Auto;
+        nav.CompactModeThresholdWidth = 0;
+        nav.ExpandedModeThresholdWidth = 1180;
         nav.IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed;
         nav.IsSettingsVisible = false;
         nav.OpenPaneLength = 236;

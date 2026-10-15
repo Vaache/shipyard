@@ -150,14 +150,17 @@ public sealed class IssueDetailView : LiveDetail
             host.Content = grid;
         }
         header.Children.Clear();
-        header.Children.Add(Ui.H(8, Ui.Text(issue.Title, 20, "text", FontWeights.Bold, wrap: true, select: true), Ui.Text($"#{issue.Number}", 20, "dim")));
+        var titleText = Ui.Text("", 20, "text", FontWeights.Bold, wrap: true, select: true);
+        titleText.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = issue.Title + "  " });
+        titleText.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = $"#{issue.Number}", Foreground = Palette.Brush("dim"), FontWeight = FontWeights.Normal });
+        header.Children.Add(titleText);
         var time = Ui.Caption(Fmt.Rel(issue.CreatedAt));
         Ui.Tip(time, Fmt.Full(issue.CreatedAt));
-        header.Children.Add(Ui.H(8, Ui.StateBadge(issue.VisualState), Ui.Avatar(issue.Author?.AvatarUrl, 18), Ui.Text(issue.Author?.Login ?? "ghost", 13, "text", FontWeights.SemiBold),
+        header.Children.Add(new WrapPanel(8, Ui.StateBadge(issue.VisualState), Ui.Avatar(issue.Author?.AvatarUrl, 18), Ui.Text(issue.Author?.Login ?? "ghost", 13, "text", FontWeights.SemiBold),
             Ui.Chip(itemRef.Repo.Full, "teal", ""), Ui.Chip(Fmt.Plural(issue.Comments.TotalCount, "comment", "comments"), "sky", ""), time));
         if (issue.Labels.Items.Count > 0 || issue.Assignees.Items.Count > 0)
         {
-            var row = Ui.H(6);
+            var row = new WrapPanel(6);
             foreach (var l in issue.Labels.Items) row.Children.Add(Ui.LabelChip(l));
             if (issue.Assignees.Items.Count > 0)
             {

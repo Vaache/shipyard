@@ -214,6 +214,7 @@ public static class SettingsDialog
     {
         var l = Ui.Text(label, 13, "text", wrap: true);
         l.MaxWidth = 260;
+        l.HorizontalAlignment = HorizontalAlignment.Left;
         var g = Ui.Columns((l, Ui.Star), (control, Ui.Auto));
         g.ColumnSpacing = 16;
         return g;
