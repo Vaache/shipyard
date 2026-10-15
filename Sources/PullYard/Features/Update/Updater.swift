@@ -67,6 +67,7 @@ final class Updater {
     static let announcedVersionKey = "update.announcedVersion"
     static let checkInterval: TimeInterval = 6 * 3600
     static let releasesPage = "https://github.com/pullyard/pullyard/releases/latest"
+    static func changelogURL(_ version: String) -> String { "https://pullyard.github.io/pullyard/changelog.html#v\(version)" }
     nonisolated static let latestAPI = URL(string: "https://api.github.com/repos/pullyard/pullyard/releases/latest")!
     nonisolated static let userAgent = "PullYard-macOS"
     nonisolated static let appName = "PullYard.app"

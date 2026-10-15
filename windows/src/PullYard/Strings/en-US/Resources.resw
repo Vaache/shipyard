@@ -423,6 +423,7 @@
   <data name="Update_TryAgain" xml:space="preserve"><value>Try Again</value></data>
   <data name="Update_UpToDate" xml:space="preserve"><value>You're up to date</value></data>
   <data name="Update_ViewOnGitHub" xml:space="preserve"><value>View on GitHub</value></data>
+  <data name="Update_WhatsNew" xml:space="preserve"><value>What's new in all versions</value></data>
   <data name="Update_YouHave" xml:space="preserve"><value>You have {0}</value></data>
   <data name="Usage_AfterFirstReply" xml:space="preserve"><value>Shows up after Claude's first reply</value></data>
   <data name="Usage_Breakdown" xml:space="preserve"><value>Detailed breakdown</value></data>

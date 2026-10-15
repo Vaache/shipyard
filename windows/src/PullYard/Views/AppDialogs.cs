@@ -270,7 +270,8 @@ public static class UpdateDialog
         var date = Ui.Text("", 12, "dim");
         var spinner = Ui.Spinner(16);
         var icon = new Image { Source = new BitmapImage(new Uri("ms-appx:///Assets/AppIcon-256.png")), Width = 64, Height = 64 };
-        var header = Ui.Columns((icon, Ui.Auto), (Ui.V(4, title, current, date), Ui.Star), (spinner, Ui.Auto));
+        var changelog = Ui.Link(L.T("Update_WhatsNew", "What's new in all versions"), () => LinkBrowser.Open(AppInfo.ChangelogUrl(updater.ShowsRelease && updater.Release is { } rel ? rel.Version : updater.CurrentVersion)), 12);
+        var header = Ui.Columns((icon, Ui.Auto), (Ui.V(4, title, current, date, changelog), Ui.Star), (spinner, Ui.Auto));
         header.ColumnSpacing = 14;
         var notes = new HtmlView { Height = 220 };
         var notesHost = new Border { CornerRadius = new CornerRadius(10), Background = Palette.Brush("sunken"), Child = notes };
