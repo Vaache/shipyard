@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <ShipyardDisplayName>Shipyard</ShipyardDisplayName>
+    <ShipyardTagline>Pull requests, without the browser</ShipyardTagline>
+    <ShipyardAppId>Shipyard.Shipyard</ShipyardAppId>
+    <ShipyardExeName>Shipyard</ShipyardExeName>
+    <ShipyardUrlScheme>shipyard</ShipyardUrlScheme>
+    <ShipyardEnvPrefix>SHIPYARD</ShipyardEnvPrefix>
+    <ShipyardPublisher>Vaache</ShipyardPublisher>
+    <ShipyardGitHubOwner>Vaache</ShipyardGitHubOwner>
+    <ShipyardGitHubRepo>shipyard</ShipyardGitHubRepo>
+    <ShipyardVersion>2.5.0</ShipyardVersion>
+  </PropertyGroup>
+</Project>

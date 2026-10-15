@@ -1,0 +1,12 @@
+html,body{margin:0;background:transparent}
+body.flush{padding:0}
+body.readme .md{padding:8px 4px}
+body.readme .tl{max-width:900px}
+.md a.anchor,.md .anchor,.md .octicon-link{display:none}
+pre.log{margin:0;padding:10px 14px;font:12px/1.5 "Cascadia Mono",Consolas,monospace;white-space:pre-wrap;word-break:break-all;color:var(--fg)}
+pre.log .err{color:var(--red)}
+pre.log .warn{color:var(--amber)}
+pre.log .grp{color:var(--link)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:rgba(128,128,128,.35);border-radius:6px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-track{background:transparent}

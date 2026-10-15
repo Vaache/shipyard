@@ -1,0 +1,60 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="SyWindowBrush" Color="#FFF7F5F0" />
+            <SolidColorBrush x:Key="SySidebarBrush" Color="#FFEFECE5" />
+            <SolidColorBrush x:Key="SyListBrush" Color="#FFF3F1EC" />
+            <SolidColorBrush x:Key="SyPanelBrush" Color="#FFFDFCFA" />
+            <SolidColorBrush x:Key="SyRaisedBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="SySunkenBrush" Color="#FFF1EEE8" />
+            <SolidColorBrush x:Key="SyBarBrush" Color="#FFF5F3EE" />
+            <SolidColorBrush x:Key="SyLineBrush" Color="#141A2333" />
+            <SolidColorBrush x:Key="SyLineStrongBrush" Color="#261A2333" />
+            <SolidColorBrush x:Key="SyTextBrush" Color="#FF1A2333" />
+            <SolidColorBrush x:Key="SyMutedBrush" Color="#FF5F6B7E" />
+            <SolidColorBrush x:Key="SyDimBrush" Color="#FF939AA8" />
+            <SolidColorBrush x:Key="SyAccentBrush" Color="#FF2A8BC8" />
+            <SolidColorBrush x:Key="SySkyBrush" Color="#FF1F7FB8" />
+            <SolidColorBrush x:Key="SyVioletBrush" Color="#FF6B55D6" />
+            <SolidColorBrush x:Key="SyCoralBrush" Color="#FFD8513F" />
+            <SolidColorBrush x:Key="SyGreenBrush" Color="#FF2E8A57" />
+            <SolidColorBrush x:Key="SyRedBrush" Color="#FFC2412F" />
+            <SolidColorBrush x:Key="SyAmberBrush" Color="#FFB7791F" />
+            <SolidColorBrush x:Key="SyTealBrush" Color="#FF23877A" />
+            <SolidColorBrush x:Key="SyIndigoBrush" Color="#FF4E5BC4" />
+            <SolidColorBrush x:Key="SySlateBrush" Color="#FF6B7486" />
+            <SolidColorBrush x:Key="SyHoverBrush" Color="#0A1A2333" />
+            <SolidColorBrush x:Key="SySelectedBrush" Color="#1A2A8BC8" />
+            <Color x:Key="SyAccentColor">#FF2A8BC8</Color>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="SyWindowBrush" Color="#FF0C1220" />
+            <SolidColorBrush x:Key="SySidebarBrush" Color="#FF0A0F1B" />
+            <SolidColorBrush x:Key="SyListBrush" Color="#FF0E1526" />
+            <SolidColorBrush x:Key="SyPanelBrush" Color="#FF101828" />
+            <SolidColorBrush x:Key="SyRaisedBrush" Color="#FF152036" />
+            <SolidColorBrush x:Key="SySunkenBrush" Color="#FF0A101C" />
+            <SolidColorBrush x:Key="SyBarBrush" Color="#FF111A2C" />
+            <SolidColorBrush x:Key="SyLineBrush" Color="#1AA0AEC4" />
+            <SolidColorBrush x:Key="SyLineStrongBrush" Color="#2EA0AEC4" />
+            <SolidColorBrush x:Key="SyTextBrush" Color="#FFE6EBF2" />
+            <SolidColorBrush x:Key="SyMutedBrush" Color="#FF8693A8" />
+            <SolidColorBrush x:Key="SyDimBrush" Color="#FF5F6B80" />
+            <SolidColorBrush x:Key="SyAccentBrush" Color="#FF5BB8EC" />
+            <SolidColorBrush x:Key="SySkyBrush" Color="#FF5BB8EC" />
+            <SolidColorBrush x:Key="SyVioletBrush" Color="#FF9D8CF0" />
+            <SolidColorBrush x:Key="SyCoralBrush" Color="#FFEE6F5F" />
+            <SolidColorBrush x:Key="SyGreenBrush" Color="#FF5DBE8A" />
+            <SolidColorBrush x:Key="SyRedBrush" Color="#FFE8746A" />
+            <SolidColorBrush x:Key="SyAmberBrush" Color="#FFE8B44C" />
+            <SolidColorBrush x:Key="SyTealBrush" Color="#FF56C2B0" />
+            <SolidColorBrush x:Key="SyIndigoBrush" Color="#FF8C97E8" />
+            <SolidColorBrush x:Key="SySlateBrush" Color="#FF939CB0" />
+            <SolidColorBrush x:Key="SyHoverBrush" Color="#0FFFFFFF" />
+            <SolidColorBrush x:Key="SySelectedBrush" Color="#265BB8EC" />
+            <Color x:Key="SyAccentColor">#FF5BB8EC</Color>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

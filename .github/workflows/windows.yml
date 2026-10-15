@@ -1,0 +1,189 @@
+name: Windows
+
+on:
+  push:
+    branches: [windows-port, main]
+    tags: ['v*']
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows.yml'
+  pull_request:
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Core tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Check localized strings
+        run: python windows/tools/strings.py --check
+
+      - name: Run unit tests
+        run: dotnet test windows/tests/Shipyard.Core.Tests/Shipyard.Core.Tests.csproj -c Release --logger "console;verbosity=normal"
+
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: windows-latest
+    needs: test
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            platform: x64
+          - arch: arm64
+            platform: ARM64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Read branding
+        id: brand
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content windows/Branding.props
+          $p = $props.Project.PropertyGroup
+          $version = $p.ShipyardVersion
+          if ($env:GITHUB_REF -like 'refs/tags/v*') { $version = $env:GITHUB_REF_NAME.TrimStart('v', 'V') }
+          "name=$($p.ShipyardDisplayName)" >> $env:GITHUB_OUTPUT
+          "appid=$($p.ShipyardAppId)" >> $env:GITHUB_OUTPUT
+          "exe=$($p.ShipyardExeName)" >> $env:GITHUB_OUTPUT
+          "publisher=$($p.ShipyardPublisher)" >> $env:GITHUB_OUTPUT
+          "scheme=$($p.ShipyardUrlScheme)" >> $env:GITHUB_OUTPUT
+          "repo=https://github.com/$($p.ShipyardGitHubOwner)/$($p.ShipyardGitHubRepo)" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Building $($p.ShipyardDisplayName) $version for ${{ matrix.arch }}"
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          dotnet publish windows/src/Shipyard/Shipyard.csproj `
+            -c Release `
+            -r win-${{ matrix.arch }} `
+            -p:Platform=${{ matrix.platform }} `
+            -p:Version=${{ steps.brand.outputs.version }} `
+            -o windows/dist/${{ matrix.arch }}/app
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem windows/dist/${{ matrix.arch }}/app | Select-Object -First 40 Name, Length | Format-Table | Out-String | Write-Host
+
+      - name: Smoke test (version and self test)
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          $exe = "windows/dist/x64/app/${{ steps.brand.outputs.exe }}.exe"
+          foreach ($arg in @('--version', '--self-test')) {
+            $p = Start-Process -FilePath $exe -ArgumentList $arg -Wait -PassThru -NoNewWindow -RedirectStandardOutput "out$arg.txt" -RedirectStandardError "err$arg.txt"
+            Get-Content "out$arg.txt" | Write-Host
+            Get-Content "err$arg.txt" | Write-Host
+            if ($p.ExitCode -ne 0) { throw "$arg exited with $($p.ExitCode)" }
+          }
+          $version = Get-Content "out--version.txt" -Raw
+          if ($version -notmatch [regex]::Escape("${{ steps.brand.outputs.version }}")) { throw "Unexpected version output: $version" }
+
+      - name: Smoke test (window)
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          $exe = "windows/dist/x64/app/${{ steps.brand.outputs.exe }}.exe"
+          $p = Start-Process -FilePath $exe -ArgumentList '--smoke-ui' -PassThru
+          if (-not $p.WaitForExit(120000)) {
+            Stop-Process -Id $p.Id -Force
+            throw "UI smoke test timed out"
+          }
+          $log = Join-Path $env:LOCALAPPDATA "${{ steps.brand.outputs.name }}\errors.log"
+          if (Test-Path $log) { Get-Content $log | Write-Host }
+          if ($p.ExitCode -ne 0) { throw "UI smoke test exited with $($p.ExitCode)" }
+          Write-Host "Window opened and closed cleanly"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = Get-Command iscc -ErrorAction SilentlyContinue
+          if (-not $iscc -and -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          $source = Resolve-Path "windows/dist/${{ matrix.arch }}/app"
+          $out = New-Item -ItemType Directory -Force -Path "windows/dist/out"
+          & $iscc `
+            "/DAppName=${{ steps.brand.outputs.name }}" `
+            "/DAppId=${{ steps.brand.outputs.appid }}" `
+            "/DExeName=${{ steps.brand.outputs.exe }}" `
+            "/DAppVersion=${{ steps.brand.outputs.version }}" `
+            "/DPublisher=${{ steps.brand.outputs.publisher }}" `
+            "/DUrlScheme=${{ steps.brand.outputs.scheme }}" `
+            "/DRepoUrl=${{ steps.brand.outputs.repo }}" `
+            "/DArch=${{ matrix.arch }}" `
+            "/DSourceDir=$source" `
+            "/DOutputDir=$($out.FullName)" `
+            "/DOutputBase=${{ steps.brand.outputs.exe }}-windows-${{ matrix.arch }}-setup" `
+            windows/installer/Shipyard.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build portable zip
+        shell: pwsh
+        run: |
+          $zip = "windows/dist/out/${{ steps.brand.outputs.exe }}-windows-${{ matrix.arch }}-portable.zip"
+          Compress-Archive -Path "windows/dist/${{ matrix.arch }}/app/*" -DestinationPath $zip -CompressionLevel Optimal
+          Get-ChildItem windows/dist/out | Format-Table Name, Length | Out-String | Write-Host
+
+      - name: Test installer (silent install and uninstall)
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          $setup = "windows/dist/out/${{ steps.brand.outputs.exe }}-windows-x64-setup.exe"
+          $p = Start-Process -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Installer exited with $($p.ExitCode)" }
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\${{ steps.brand.outputs.name }}"
+          $exe = Join-Path $dir "${{ steps.brand.outputs.exe }}.exe"
+          if (-not (Test-Path $exe)) { throw "Installed exe not found at $exe" }
+          $v = Start-Process -FilePath $exe -ArgumentList '--version' -Wait -PassThru -NoNewWindow -RedirectStandardOutput installed.txt
+          Get-Content installed.txt | Write-Host
+          if ($v.ExitCode -ne 0) { throw "Installed app failed" }
+          $u = Start-Process -FilePath (Join-Path $dir 'unins000.exe') -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "Uninstaller exited with $($u.ExitCode)" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.brand.outputs.exe }}-windows-${{ matrix.arch }}
+          path: windows/dist/out/*
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "No release for $env:GITHUB_REF_NAME yet; skipping upload"
+            exit 0
+          }
+          gh release upload $env:GITHUB_REF_NAME (Get-ChildItem windows/dist/out/*).FullName --clobber --repo $env:GITHUB_REPOSITORY

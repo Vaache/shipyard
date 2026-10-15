@@ -1,0 +1,25 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)Branding.props" />
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version Condition="'$(Version)' == ''">$(ShipyardVersion)</Version>
+    <Company>$(ShipyardPublisher)</Company>
+    <Product>$(ShipyardDisplayName)</Product>
+    <Copyright>MIT License</Copyright>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591;CA1416;MVVMTK0042;MVVMTK0045;MVVMTK0049;MVVMTK0050;CS8618</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="DisplayName" Value="$(ShipyardDisplayName)" />
+    <AssemblyMetadata Include="Tagline" Value="$(ShipyardTagline)" />
+    <AssemblyMetadata Include="AppId" Value="$(ShipyardAppId)" />
+    <AssemblyMetadata Include="ExeName" Value="$(ShipyardExeName)" />
+    <AssemblyMetadata Include="UrlScheme" Value="$(ShipyardUrlScheme)" />
+    <AssemblyMetadata Include="EnvPrefix" Value="$(ShipyardEnvPrefix)" />
+    <AssemblyMetadata Include="Publisher" Value="$(ShipyardPublisher)" />
+    <AssemblyMetadata Include="GitHubOwner" Value="$(ShipyardGitHubOwner)" />
+    <AssemblyMetadata Include="GitHubRepo" Value="$(ShipyardGitHubRepo)" />
+  </ItemGroup>
+</Project>
