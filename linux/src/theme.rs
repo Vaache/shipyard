@@ -253,9 +253,10 @@ const APP_CSS: &str = r#"
 .sy-card-flat { background-color: @sy_raised; border-radius: 10px; }
 list.sy-list, listview.sy-list { background-color: transparent; }
 list.sy-list > row { padding: 8px 12px; margin: 0 8px; border-bottom: 1px solid @sy_line; }
-list.sy-list > row:selected { background-color: @sy_selection; color: white; border-radius: 10px; border-bottom-color: transparent; }
-list.sy-list > row:selected .sy-muted, list.sy-list > row:selected .sy-dim { color: alpha(white, 0.75); }
-list.sy-list > row:selected .sy-text { color: white; }
+list.sy-list > row:selected { background-color: alpha(@sy_text, 0.10); border-radius: 10px; border-bottom-color: transparent; }
+list.sy-list:focus-within > row:selected { background-color: @sy_selection; color: white; }
+list.sy-list:focus-within > row:selected .sy-muted, list.sy-list:focus-within > row:selected .sy-dim { color: alpha(white, 0.75); }
+list.sy-list:focus-within > row:selected .sy-text { color: white; }
 list.sy-plain > row { padding: 4px 10px; }
 list.sy-sidebar-list { background-color: transparent; }
 list.sy-sidebar-list > row { padding: 5px 8px; margin: 1px 6px; border-radius: 7px; }

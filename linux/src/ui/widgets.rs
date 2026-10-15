@@ -334,6 +334,8 @@ pub fn empty_state(icon_name: &str, color: &str, title: &str, subtitle: Option<&
     t.set_xalign(0.5);
     t.set_justify(gtk::Justification::Center);
     t.set_wrap(true);
+    t.set_natural_wrap_mode(gtk::NaturalWrapMode::None);
+    t.set_max_width_chars(48);
     b.append(&t);
     if let Some(s) = subtitle {
         let l = label_with(s, &["sy-dim", "sy-small"]);

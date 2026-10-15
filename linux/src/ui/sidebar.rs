@@ -159,9 +159,18 @@ impl Sidebar {
             }
             None => false,
         });
+        let weak = Rc::downgrade(&me);
+        app::get().phase_changed.connect(move |_| match weak.upgrade() {
+            Some(me) => {
+                me.build_footer();
+                true
+            }
+            None => false,
+        });
         me.update_counts();
         me.update_update_row();
         me.build_footer();
+        keep_alive(&me.widget, me.clone());
         me
     }
 

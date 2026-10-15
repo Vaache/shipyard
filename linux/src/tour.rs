@@ -62,8 +62,8 @@ fn close_dialog() {
     }
 }
 
-fn pr_ref() -> ItemRef {
-    let spec = crate::brand::env_var("TOUR_PR").unwrap_or_else(|| format!("{}#753", crate::demo::repo().unwrap_or_else(|| "migueldeicaza/SwiftTerm".into())));
+fn item_ref(var: &str, number: u32) -> ItemRef {
+    let spec = crate::brand::env_var(var).unwrap_or_else(|| format!("{}#{number}", crate::demo::repo().unwrap_or_else(|| "migueldeicaza/SwiftTerm".into())));
     let (repo, number) = spec.split_once('#').unwrap_or((spec.as_str(), "1"));
     let (owner, name) = repo.split_once('/').unwrap_or(("octocat", "Hello-World"));
     ItemRef { repo: RepoRef::new(owner, name), number: number.parse().unwrap_or(1) }
@@ -91,7 +91,8 @@ impl Plan {
 }
 
 pub fn run(_app: Rc<App>) {
-    let r = pr_ref();
+    let r = item_ref("TOUR_PR", 753);
+    let issue = item_ref("TOUR_ISSUE", 757);
     let repo = r.repo.clone();
     let mut p = Plan { at: 0, steps: vec![] };
     p.wait(9000).shot("01-review-requests");
@@ -154,13 +155,14 @@ pub fn run(_app: Rc<App>) {
         .shot("09-fix-with-claude")
         .act(close_dialog);
     p.wait(800).act(|| app::set_section(Section::Issues(IssueFilter::Mine))).wait(5000).shot("10-issues");
-    p.act(|| app::set_section(Section::Notifications)).wait(5000).shot("11-notifications");
-    p.act(|| app::set_section(Section::Repos)).wait(5000).shot("12-repos");
+    p.act(move || app::select(Some(Route::Issue(issue)))).wait(7000).shot("11-issue");
+    p.act(|| app::set_section(Section::Notifications)).wait(5000).shot("12-notifications");
+    p.act(|| app::set_section(Section::Repos)).wait(5000).shot("13-repos");
     let rp = repo.clone();
-    p.act(move || app::select(Some(Route::Repo(rp)))).wait(8000).shot("13-repo");
-    p.act(|| app::set_section(Section::Projects)).wait(5000).shot("14-projects");
-    p.act(|| app::set_section(Section::Claude)).wait(4000).shot("15-claude");
-    p.act(crate::ui::settings::show).wait(2500).shot("16-preferences").act(close_dialog);
+    p.act(move || app::select(Some(Route::Repo(rp)))).wait(8000).shot("14-repo");
+    p.act(|| app::set_section(Section::Projects)).wait(5000).shot("15-projects");
+    p.act(|| app::set_section(Section::Claude)).wait(4000).shot("16-claude");
+    p.act(crate::ui::settings::show).wait(2500).shot("17-preferences").act(close_dialog);
     p.wait(1000).act(|| {
         println!("tour: done");
         app::finish_smoke(0);

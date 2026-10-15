@@ -446,7 +446,13 @@ impl App {
                 self.set_phase(Phase::LoggedOut);
             }
             Err(_) => {
-                self.state.borrow_mut().api = Some(GitHubApi::new(&token));
+                {
+                    let mut s = self.state.borrow_mut();
+                    s.api = Some(GitHubApi::new(&token));
+                    if demo::is_on() {
+                        s.user = Some(demo::user());
+                    }
+                }
                 self.set_phase(Phase::LoggedIn);
                 self.start_polling();
             }

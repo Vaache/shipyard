@@ -152,7 +152,6 @@ jobs:
           PULLYARD_TOKEN: ${{ github.token }}
           PULLYARD_DEMO_REPO: migueldeicaza/SwiftTerm
           PULLYARD_TOUR_PR: migueldeicaza/SwiftTerm#753
-          PULLYARD_TOUR_X11: '1'
           WEBKIT_DISABLE_COMPOSITING_MODE: '1'
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
           GTK_A11Y: none
