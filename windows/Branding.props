@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <BrandDisplayName>PullYard</BrandDisplayName>
+    <BrandTagline>Pull requests, without the browser</BrandTagline>
+    <BrandAppId>PullYard.PullYard</BrandAppId>
+    <BrandExeName>PullYard</BrandExeName>
+    <BrandUrlScheme>pullyard</BrandUrlScheme>
+    <BrandEnvPrefix>PULLYARD</BrandEnvPrefix>
+    <BrandPublisher>PullYard</BrandPublisher>
+    <BrandGitHubOwner>pullyard</BrandGitHubOwner>
+    <BrandGitHubRepo>pullyard</BrandGitHubRepo>
+    <BrandVersion>2.5.0</BrandVersion>
+  </PropertyGroup>
+</Project>

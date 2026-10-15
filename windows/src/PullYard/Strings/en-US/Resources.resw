@@ -1,0 +1,432 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="App_Tagline" xml:space="preserve"><value>Pull requests, without the browser</value></data>
+  <data name="Board_All" xml:space="preserve"><value>All</value></data>
+  <data name="Board_Draft" xml:space="preserve"><value>Draft</value></data>
+  <data name="Board_Filter" xml:space="preserve"><value>Filter cards</value></data>
+  <data name="Board_MoveTo" xml:space="preserve"><value>Move to</value></data>
+  <data name="Board_No" xml:space="preserve"><value>No {0}</value></data>
+  <data name="Board_NoStatus" xml:space="preserve"><value>No Status</value></data>
+  <data name="Changes_Help" xml:space="preserve"><value>Changes Claude makes will show up here automatically</value></data>
+  <data name="Changes_None" xml:space="preserve"><value>No uncommitted changes</value></data>
+  <data name="Changes_Unpushed" xml:space="preserve"><value>Unpushed commits · {0}</value></data>
+  <data name="Chat_Allow" xml:space="preserve"><value>Allow</value></data>
+  <data name="Chat_AskedQuestion" xml:space="preserve"><value>Claude asked a question — answer above</value></data>
+  <data name="Chat_AttachImage" xml:space="preserve"><value>Attach image</value></data>
+  <data name="Chat_ContextHelp" xml:space="preserve"><value>Context {0}% — click for usage and limits</value></data>
+  <data name="Chat_Deny" xml:space="preserve"><value>Deny</value></data>
+  <data name="Chat_ModeHelp" xml:space="preserve"><value>Permission mode (Shift+Tab to cycle)</value></data>
+  <data name="Chat_NeedsPermission" xml:space="preserve"><value>Claude needs permission: {0}</value></data>
+  <data name="Chat_Placeholder" xml:space="preserve"><value>Ask Claude or describe a task…</value></data>
+  <data name="Chat_Queued" xml:space="preserve"><value>Message will be queued…</value></data>
+  <data name="Chat_RemoveImage" xml:space="preserve"><value>Remove</value></data>
+  <data name="Chat_Send" xml:space="preserve"><value>Send (Enter)</value></data>
+  <data name="Chat_Sleeping" xml:space="preserve"><value>Session is sleeping — process stopped, memory freed. A new message resumes it.</value></data>
+  <data name="Chat_Stop" xml:space="preserve"><value>Stop (Esc)</value></data>
+  <data name="Chat_WaitingPlan" xml:space="preserve"><value>Claude is waiting for plan approval above</value></data>
+  <data name="Checks_Log" xml:space="preserve"><value>Log</value></data>
+  <data name="Checks_None" xml:space="preserve"><value>No checks for the latest commit</value></data>
+  <data name="Checks_Rerun" xml:space="preserve"><value>Re-run failed jobs ({0} workflow)</value></data>
+  <data name="Claude_Account" xml:space="preserve"><value>Account</value></data>
+  <data name="Claude_Accounts" xml:space="preserve"><value>Claude accounts</value></data>
+  <data name="Claude_AddAccount" xml:space="preserve"><value>Add…</value></data>
+  <data name="Claude_AddAccountMenu" xml:space="preserve"><value>Add account…</value></data>
+  <data name="Claude_AppliesToNew" xml:space="preserve"><value>applies to new and restarted sessions</value></data>
+  <data name="Claude_ApplyModel" xml:space="preserve"><value>Apply to current session (/model)</value></data>
+  <data name="Claude_BrowserDidntOpen" xml:space="preserve"><value>Browser didn't open, or the page shows a code?</value></data>
+  <data name="Claude_Chat" xml:space="preserve"><value>Chat</value></data>
+  <data name="Claude_ChatIn" xml:space="preserve"><value>Chat in {0}</value></data>
+  <data name="Claude_ChatOrTerminal" xml:space="preserve"><value>Chat or terminal (same session)</value></data>
+  <data name="Claude_CheckAgain" xml:space="preserve"><value>Check again</value></data>
+  <data name="Claude_ConfirmInBrowser" xml:space="preserve"><value>Confirm the sign-in in your browser…</value></data>
+  <data name="Claude_ContinueInTerminal" xml:space="preserve"><value>Continue in Windows Terminal</value></data>
+  <data name="Claude_CopyCommand" xml:space="preserve"><value>Copy command</value></data>
+  <data name="Claude_CopyId" xml:space="preserve"><value>Copy session ID</value></data>
+  <data name="Claude_CopyResume" xml:space="preserve"><value>Copy resume command</value></data>
+  <data name="Claude_CreateAndSignIn" xml:space="preserve"><value>Create and sign in</value></data>
+  <data name="Claude_Default" xml:space="preserve"><value>Default</value></data>
+  <data name="Claude_Docs" xml:space="preserve"><value>Docs</value></data>
+  <data name="Claude_Effort" xml:space="preserve"><value>Effort</value></data>
+  <data name="Claude_EmailOptional" xml:space="preserve"><value>Email (optional)</value></data>
+  <data name="Claude_EmptyHelp" xml:space="preserve"><value>Start a new session in a project or resume one from the history on the left.</value></data>
+  <data name="Claude_Fork" xml:space="preserve"><value>Fork session</value></data>
+  <data name="Claude_FreeMemory" xml:space="preserve"><value>Free memory (sleep)</value></data>
+  <data name="Claude_FreeMemoryNow" xml:space="preserve"><value>Free memory now</value></data>
+  <data name="Claude_HistoryAfterSignIn" xml:space="preserve"><value>Session history and projects appear after you sign in to Claude.</value></data>
+  <data name="Claude_InstallHelp" xml:space="preserve"><value>Install the CLI from PowerShell, then press “Check again”.</value></data>
+  <data name="Claude_Model" xml:space="preserve"><value>Model</value></data>
+  <data name="Claude_Never" xml:space="preserve"><value>Never</value></data>
+  <data name="Claude_NewAccount" xml:space="preserve"><value>New Claude account</value></data>
+  <data name="Claude_NewSession" xml:space="preserve"><value>New session</value></data>
+  <data name="Claude_NoSessions" xml:space="preserve"><value>No Claude Code sessions yet</value></data>
+  <data name="Claude_NotFound" xml:space="preserve"><value>claude CLI not found — see the right side</value></data>
+  <data name="Claude_NotInstalled" xml:space="preserve"><value>claude CLI isn't installed</value></data>
+  <data name="Claude_NotInstalledTitle" xml:space="preserve"><value>Claude Code isn't installed</value></data>
+  <data name="Claude_NotSignedIn" xml:space="preserve"><value>Not signed in to Claude</value></data>
+  <data name="Claude_Open" xml:space="preserve"><value>Open</value></data>
+  <data name="Claude_OpenFolder" xml:space="preserve"><value>New session in folder…</value></data>
+  <data name="Claude_OpenNewAs" xml:space="preserve"><value>Open new sessions as</value></data>
+  <data name="Claude_OpenPR" xml:space="preserve"><value>Open PR</value></data>
+  <data name="Claude_OpenSignInLink" xml:space="preserve"><value>Open sign-in link</value></data>
+  <data name="Claude_PasteCode" xml:space="preserve"><value>Paste the code from the page</value></data>
+  <data name="Claude_PermissionMode" xml:space="preserve"><value>Permission mode</value></data>
+  <data name="Claude_ProfileHelp" xml:space="preserve"><value>The account gets its own sign-in, session history and limits. Sign-in opens right after.</value></data>
+  <data name="Claude_ProfileName" xml:space="preserve"><value>Name, e.g. “Personal” or “Work”</value></data>
+  <data name="Claude_RefreshStatus" xml:space="preserve"><value>Refresh status</value></data>
+  <data name="Claude_RemoveAccount" xml:space="preserve"><value>Remove “{0}”…</value></data>
+  <data name="Claude_RemoveButton" xml:space="preserve"><value>Sign out and remove “{0}”</value></data>
+  <data name="Claude_RemoveHelp" xml:space="preserve"><value>The app signs out of this account and removes it from the list. Its history folder stays on disk: {0}</value></data>
+  <data name="Claude_RemoveQ" xml:space="preserve"><value>Remove account?</value></data>
+  <data name="Claude_RestartNewSettings" xml:space="preserve"><value>Restart with new settings</value></data>
+  <data name="Claude_ResumeChat" xml:space="preserve"><value>Resume as chat</value></data>
+  <data name="Claude_ResumeTerminal" xml:space="preserve"><value>Resume in terminal</value></data>
+  <data name="Claude_Reveal" xml:space="preserve"><value>Show transcript in Explorer</value></data>
+  <data name="Claude_RevealFolder" xml:space="preserve"><value>Show in Explorer</value></data>
+  <data name="Claude_SearchSessions" xml:space="preserve"><value>Search sessions</value></data>
+  <data name="Claude_ShareSettings" xml:space="preserve"><value>Use my settings, CLAUDE.md, skills and plugins from the main account</value></data>
+  <data name="Claude_SignIn" xml:space="preserve"><value>Sign in…</value></data>
+  <data name="Claude_SignInBrowser" xml:space="preserve"><value>Sign in with browser</value></data>
+  <data name="Claude_SignInHelp" xml:space="preserve"><value>Sign-in opens in your browser. The account is shared with Claude Code in the terminal.</value></data>
+  <data name="Claude_SignInRight" xml:space="preserve"><value>Not signed in to Claude — sign in on the right</value></data>
+  <data name="Claude_SignInTitle" xml:space="preserve"><value>Sign in to Claude</value></data>
+  <data name="Claude_SignOut" xml:space="preserve"><value>Sign out of Claude Code</value></data>
+  <data name="Claude_SignOutDefaultHelp" xml:space="preserve"><value>This also signs out Claude Code in the terminal. You can sign in again afterwards, including with another account.</value></data>
+  <data name="Claude_SignOutHelp" xml:space="preserve"><value>This also signs out Claude Code in the terminal. Open sessions will go to sleep. You can sign in again (including with another account) here or in the Claude Code section.</value></data>
+  <data name="Claude_SignOutProfileHelp" xml:space="preserve"><value>Signs out only “{0}”. Other accounts are not affected.</value></data>
+  <data name="Claude_SignOutQ" xml:space="preserve"><value>Sign out of Claude Code?</value></data>
+  <data name="Claude_SignOutThis" xml:space="preserve"><value>Sign out of this account…</value></data>
+  <data name="Claude_SignedIn" xml:space="preserve"><value>Signed in</value></data>
+  <data name="Claude_SleepAfter" xml:space="preserve"><value>Sleep idle sessions after</value></data>
+  <data name="Claude_SleepAfterIdle" xml:space="preserve"><value>Sleep after idle</value></data>
+  <data name="Claude_SleepHelp" xml:space="preserve"><value>A sleeping session uses no memory: the claude process stops, the conversation stays, and the next message resumes it.</value></data>
+  <data name="Claude_Submit" xml:space="preserve"><value>Submit</value></data>
+  <data name="Claude_SwitchAccount" xml:space="preserve"><value>Switch Claude account</value></data>
+  <data name="Claude_Terminal" xml:space="preserve"><value>Terminal</value></data>
+  <data name="Claude_TerminalIn" xml:space="preserve"><value>Terminal in {0}</value></data>
+  <data name="Claude_ToggleInspector" xml:space="preserve"><value>Toggle changes panel</value></data>
+  <data name="Claude_UsagePage" xml:space="preserve"><value>Usage page</value></data>
+  <data name="Claude_WakeUp" xml:space="preserve"><value>Wake up</value></data>
+  <data name="Clipboard_InClipboard" xml:space="preserve"><value>In clipboard: {0}</value></data>
+  <data name="Code_Binary" xml:space="preserve"><value>Binary file</value></data>
+  <data name="Code_CopyContents" xml:space="preserve"><value>Copy contents</value></data>
+  <data name="Code_CopyPath" xml:space="preserve"><value>Copy path</value></data>
+  <data name="Code_GoToFile" xml:space="preserve"><value>Go to file (Ctrl+P)</value></data>
+  <data name="Code_GoToFilePlaceholder" xml:space="preserve"><value>Go to file…</value></data>
+  <data name="Code_GoToFileTitle" xml:space="preserve"><value>Go to file</value></data>
+  <data name="Code_Incomplete" xml:space="preserve"><value>Large repository — file list is incomplete</value></data>
+  <data name="Code_Pick" xml:space="preserve"><value>Pick a file on the left or press Ctrl+P</value></data>
+  <data name="Code_Preview" xml:space="preserve"><value>Preview</value></data>
+  <data name="Code_Source" xml:space="preserve"><value>Source</value></data>
+  <data name="Code_Truncated" xml:space="preserve"><value>File is too large — showing only part of it</value></data>
+  <data name="Code_Wrap" xml:space="preserve"><value>Wrap</value></data>
+  <data name="Commit_CopySha" xml:space="preserve"><value>Copy SHA</value></data>
+  <data name="Common_Back" xml:space="preserve"><value>Back</value></data>
+  <data name="Common_BackHint" xml:space="preserve"><value>Back (Alt+Left)</value></data>
+  <data name="Common_Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Common_ClickToCopy" xml:space="preserve"><value>Click to copy</value></data>
+  <data name="Common_Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Common_Dismiss" xml:space="preserve"><value>Dismiss</value></data>
+  <data name="Common_Done" xml:space="preserve"><value>Done</value></data>
+  <data name="Common_Error" xml:space="preserve"><value>Error</value></data>
+  <data name="Common_Loading" xml:space="preserve"><value>Loading…</value></data>
+  <data name="Common_More" xml:space="preserve"><value>More</value></data>
+  <data name="Common_NothingHere" xml:space="preserve"><value>Nothing here</value></data>
+  <data name="Common_OK" xml:space="preserve"><value>OK</value></data>
+  <data name="Common_Open" xml:space="preserve"><value>Open</value></data>
+  <data name="Common_Refresh" xml:space="preserve"><value>Refresh</value></data>
+  <data name="Common_Retry" xml:space="preserve"><value>Retry</value></data>
+  <data name="Common_Save" xml:space="preserve"><value>Save</value></data>
+  <data name="Common_Settings" xml:space="preserve"><value>Settings</value></data>
+  <data name="Detail_Empty" xml:space="preserve"><value>Select a pull request, issue or project</value></data>
+  <data name="Detail_EmptyHint" xml:space="preserve"><value>Ctrl+L — open by link</value></data>
+  <data name="Edit_Body" xml:space="preserve"><value>Description (Markdown)</value></data>
+  <data name="Edit_Header" xml:space="preserve"><value>Edit #{0}</value></data>
+  <data name="Edit_Title" xml:space="preserve"><value>Title</value></data>
+  <data name="Files_Binary" xml:space="preserve"><value>Binary or large file</value></data>
+  <data name="Files_Filter" xml:space="preserve"><value>Filter files</value></data>
+  <data name="Files_Pick" xml:space="preserve"><value>Pick a file</value></data>
+  <data name="Files_Viewed" xml:space="preserve"><value>Viewed</value></data>
+  <data name="Filter_AssignedToMe" xml:space="preserve"><value>Assigned to me</value></data>
+  <data name="Filter_CreatedByMe" xml:space="preserve"><value>Created by me</value></data>
+  <data name="Filter_Mentioned" xml:space="preserve"><value>Mentioned</value></data>
+  <data name="Filter_ReviewRequests" xml:space="preserve"><value>Review requests</value></data>
+  <data name="Filter_ReviewedByMe" xml:space="preserve"><value>Reviewed by me</value></data>
+  <data name="Fix_All" xml:space="preserve"><value>All</value></data>
+  <data name="Fix_Button" xml:space="preserve"><value>Fix with Claude Code</value></data>
+  <data name="Fix_ChooseFolder" xml:space="preserve"><value>Choose folder…</value></data>
+  <data name="Fix_CloneHint" xml:space="preserve"><value>Clone it with: gh repo clone {0}</value></data>
+  <data name="Fix_Commit" xml:space="preserve"><value>Commit</value></data>
+  <data name="Fix_Copy" xml:space="preserve"><value>Copy</value></data>
+  <data name="Fix_Edited" xml:space="preserve"><value>edited</value></data>
+  <data name="Fix_FromComments" xml:space="preserve"><value>Build from comments ({0})</value></data>
+  <data name="Fix_General" xml:space="preserve"><value>General review feedback ({0})</value></data>
+  <data name="Fix_Launch" xml:space="preserve"><value>Launch</value></data>
+  <data name="Fix_Looking" xml:space="preserve"><value>Looking for a local clone of {0}…</value></data>
+  <data name="Fix_Mode" xml:space="preserve"><value>Mode</value></data>
+  <data name="Fix_NoClone" xml:space="preserve"><value>No local clone found</value></data>
+  <data name="Fix_NoPrompt" xml:space="preserve"><value>No Fix prompt in this PR — built from unresolved comments</value></data>
+  <data name="Fix_NoUnresolved" xml:space="preserve"><value>No unresolved comments</value></data>
+  <data name="Fix_None" xml:space="preserve"><value>None</value></data>
+  <data name="Fix_OpenIn" xml:space="preserve"><value>Open in</value></data>
+  <data name="Fix_Outdated" xml:space="preserve"><value>outdated</value></data>
+  <data name="Fix_OutdatedHelp" xml:space="preserve"><value>Code these comments point to has changed since they were written</value></data>
+  <data name="Fix_Prompt" xml:space="preserve"><value>Prompt</value></data>
+  <data name="Fix_PromptBy" xml:space="preserve"><value>Fix prompt by @{0}</value></data>
+  <data name="Fix_Push" xml:space="preserve"><value>Push</value></data>
+  <data name="Fix_RemoteMismatch" xml:space="preserve"><value>remote doesn't match {0}</value></data>
+  <data name="Fix_ReplyResolve" xml:space="preserve"><value>Reply &amp; resolve threads</value></data>
+  <data name="Fix_Reset" xml:space="preserve"><value>Reset</value></data>
+  <data name="Fix_Unresolved" xml:space="preserve"><value>Unresolved comments</value></data>
+  <data name="Html_WebViewMissing" xml:space="preserve"><value>Couldn't start the HTML view: {0}. Install the Microsoft Edge WebView2 Runtime.</value></data>
+  <data name="Inline_AddToReview" xml:space="preserve"><value>Add to review</value></data>
+  <data name="Inline_Help" xml:space="preserve"><value>“Add to review” saves the comment as pending and submits it with the review</value></data>
+  <data name="Inline_Placeholder" xml:space="preserve"><value>Comment on line {0} (Markdown)</value></data>
+  <data name="Inline_Single" xml:space="preserve"><value>Add single comment</value></data>
+  <data name="Inline_Title" xml:space="preserve"><value>Comment on line</value></data>
+  <data name="Inspector_AskReview" xml:space="preserve"><value>Ask Claude to review this PR</value></data>
+  <data name="Inspector_Changes" xml:space="preserve"><value>Changes</value></data>
+  <data name="Inspector_CreatePR" xml:space="preserve"><value>Create PR in browser</value></data>
+  <data name="Inspector_Files" xml:space="preserve"><value>Files</value></data>
+  <data name="Inspector_FilesChanged" xml:space="preserve"><value>Files changed · {0}</value></data>
+  <data name="Inspector_FromSession" xml:space="preserve"><value>from this session</value></data>
+  <data name="Inspector_Mine" xml:space="preserve"><value>Mine</value></data>
+  <data name="Inspector_NoPR" xml:space="preserve"><value>No PR for branch {0}</value></data>
+  <data name="Inspector_NoRepo" xml:space="preserve"><value>Folder isn't linked to a GitHub repository</value></data>
+  <data name="Inspector_OpenFull" xml:space="preserve"><value>Open full</value></data>
+  <data name="Inspector_OpenInPRs" xml:space="preserve"><value>Open in PR section</value></data>
+  <data name="Inspector_PR" xml:space="preserve"><value>PR</value></data>
+  <data name="Inspector_SendToSession" xml:space="preserve"><value>Send to this session</value></data>
+  <data name="Inspector_ThisBranch" xml:space="preserve"><value>This branch</value></data>
+  <data name="Inspector_Unresolved" xml:space="preserve"><value>Unresolved comments ({0})</value></data>
+  <data name="Issue_Close" xml:space="preserve"><value>Close issue</value></data>
+  <data name="Issue_Reopen" xml:space="preserve"><value>Reopen issue</value></data>
+  <data name="Item_StackedOn" xml:space="preserve"><value>stacked on {0}</value></data>
+  <data name="Log_Copy" xml:space="preserve"><value>Copy</value></data>
+  <data name="Log_ErrorsOnly" xml:space="preserve"><value>Errors only</value></data>
+  <data name="Login_ClientId" xml:space="preserve"><value>Client ID</value></data>
+  <data name="Login_CopyAndOpen" xml:space="preserve"><value>Copy and open</value></data>
+  <data name="Login_CreateToken" xml:space="preserve"><value>Create a token on github.com</value></data>
+  <data name="Login_DeviceBody" xml:space="preserve"><value>Requires the Client ID of your own OAuth App (Settings → Developer settings → OAuth Apps, enable “Enable Device Flow”).</value></data>
+  <data name="Login_DeviceHint" xml:space="preserve"><value>Enter the code at github.com/login/device — you'll be signed in automatically.</value></data>
+  <data name="Login_DeviceTitle" xml:space="preserve"><value>Sign in via browser (OAuth Device Flow)</value></data>
+  <data name="Login_GetCode" xml:space="preserve"><value>Get code</value></data>
+  <data name="Login_GhBody" xml:space="preserve"><value>Use the token you're signed in with in gh.</value></data>
+  <data name="Login_GhTitle" xml:space="preserve"><value>GitHub CLI</value></data>
+  <data name="Login_PatBody" xml:space="preserve"><value>Required scopes: repo, read:org, read:project, project, notifications, workflow.</value></data>
+  <data name="Login_PatTitle" xml:space="preserve"><value>Personal Access Token</value></data>
+  <data name="Login_SignIn" xml:space="preserve"><value>Sign in</value></data>
+  <data name="Login_SignInWithGh" xml:space="preserve"><value>Sign in with gh</value></data>
+  <data name="Login_Subtitle" xml:space="preserve"><value>Fast PR browsing without a browser</value></data>
+  <data name="Menu_CheckForUpdates" xml:space="preserve"><value>Check for Updates…</value></data>
+  <data name="Menu_CopyCheckout" xml:space="preserve"><value>Copy “gh pr checkout”</value></data>
+  <data name="Menu_CopyLink" xml:space="preserve"><value>Copy Link</value></data>
+  <data name="Menu_OpenInBrowser" xml:space="preserve"><value>Open in Browser</value></data>
+  <data name="Merge_AutoEnabled" xml:space="preserve"><value>auto-merge enabled</value></data>
+  <data name="Merge_Behind" xml:space="preserve"><value>Branch is behind {0}</value></data>
+  <data name="Merge_Blocked" xml:space="preserve"><value>Blocked by branch protection</value></data>
+  <data name="Merge_BodyPlaceholder" xml:space="preserve"><value>Commit description (optional)</value></data>
+  <data name="Merge_CanMergeBut" xml:space="preserve"><value>Can be merged, but </value></data>
+  <data name="Merge_Checking" xml:space="preserve"><value>Checking mergeability…</value></data>
+  <data name="Merge_ChecksFailed" xml:space="preserve"><value>{0} checks failed</value></data>
+  <data name="Merge_ChecksRunning" xml:space="preserve"><value>{0} checks are still running</value></data>
+  <data name="Merge_Commit" xml:space="preserve"><value>Merge commit</value></data>
+  <data name="Merge_Conflicts" xml:space="preserve"><value>Has conflicts with {0}</value></data>
+  <data name="Merge_DeleteBranch" xml:space="preserve"><value>Delete branch {0} after merge</value></data>
+  <data name="Merge_Draft" xml:space="preserve"><value>Draft — merging is unavailable</value></data>
+  <data name="Merge_EnableAuto" xml:space="preserve"><value>Enable auto-merge</value></data>
+  <data name="Merge_Merge" xml:space="preserve"><value>Merge…</value></data>
+  <data name="Merge_MergeButton" xml:space="preserve"><value>Merge</value></data>
+  <data name="Merge_Method" xml:space="preserve"><value>Method</value></data>
+  <data name="Merge_OneCheckFailed" xml:space="preserve"><value>1 check failed</value></data>
+  <data name="Merge_OneCheckRunning" xml:space="preserve"><value>1 check is still running</value></data>
+  <data name="Merge_Ready" xml:space="preserve"><value>Ready to merge</value></data>
+  <data name="Merge_Rebase" xml:space="preserve"><value>Rebase and merge</value></data>
+  <data name="Merge_Squash" xml:space="preserve"><value>Squash and merge</value></data>
+  <data name="Merge_Title" xml:space="preserve"><value>Merge #{0} into {1}</value></data>
+  <data name="Merge_TitlePlaceholder" xml:space="preserve"><value>Commit title (GitHub default)</value></data>
+  <data name="Merge_UpdateBranch" xml:space="preserve"><value>Update branch</value></data>
+  <data name="Nav_AI" xml:space="preserve"><value>AI</value></data>
+  <data name="Nav_Code" xml:space="preserve"><value>Code</value></data>
+  <data name="Nav_Inbox" xml:space="preserve"><value>Inbox</value></data>
+  <data name="Nav_Issues" xml:space="preserve"><value>Issues</value></data>
+  <data name="Nav_PullRequests" xml:space="preserve"><value>Pull requests</value></data>
+  <data name="Notifications_CaughtUp" xml:space="preserve"><value>All caught up</value></data>
+  <data name="Notifications_Done" xml:space="preserve"><value>Done (remove from inbox)</value></data>
+  <data name="Notifications_MarkAllRead" xml:space="preserve"><value>Mark all as read</value></data>
+  <data name="Notifications_MarkRead" xml:space="preserve"><value>Mark as read</value></data>
+  <data name="Notifications_None" xml:space="preserve"><value>No notifications</value></data>
+  <data name="Notifications_Unread" xml:space="preserve"><value>Unread</value></data>
+  <data name="OpenLink_Invalid" xml:space="preserve"><value>Couldn't recognize the link</value></data>
+  <data name="OpenLink_Placeholder" xml:space="preserve"><value>https://github.com/org/repo/pull/123 or org/repo#123</value></data>
+  <data name="OpenLink_Title" xml:space="preserve"><value>Open by link</value></data>
+  <data name="PR_AllCommits" xml:space="preserve"><value>Show all {0} commits in browser</value></data>
+  <data name="PR_Approve" xml:space="preserve"><value>Approve</value></data>
+  <data name="PR_ApproveQ" xml:space="preserve"><value>Approve this pull request?</value></data>
+  <data name="PR_Assignees" xml:space="preserve"><value>Assignees:</value></data>
+  <data name="PR_Checks" xml:space="preserve"><value>Checks</value></data>
+  <data name="PR_Close" xml:space="preserve"><value>Close pull request…</value></data>
+  <data name="PR_CloseButton" xml:space="preserve"><value>Close pull request</value></data>
+  <data name="PR_CloseQ" xml:space="preserve"><value>Close pull request without merging?</value></data>
+  <data name="PR_Comment" xml:space="preserve"><value>Comment</value></data>
+  <data name="PR_CommentPlaceholder" xml:space="preserve"><value>Comment (Markdown) — Ctrl+Enter to send</value></data>
+  <data name="PR_ConvertToDraft" xml:space="preserve"><value>Convert to draft</value></data>
+  <data name="PR_CopyBranch" xml:space="preserve"><value>Copy branch name</value></data>
+  <data name="PR_CopyCheckout" xml:space="preserve"><value>Copy “gh pr checkout {0}”</value></data>
+  <data name="PR_DeleteBranch" xml:space="preserve"><value>Delete branch {0}…</value></data>
+  <data name="PR_DeleteBranchButton" xml:space="preserve"><value>Delete branch</value></data>
+  <data name="PR_DeleteBranchQ" xml:space="preserve"><value>Delete branch {0}?</value></data>
+  <data name="PR_Disable" xml:space="preserve"><value>Disable</value></data>
+  <data name="PR_DisableAutoMerge" xml:space="preserve"><value>Disable auto-merge</value></data>
+  <data name="PR_DisableAutoMergeQ" xml:space="preserve"><value>Disable auto-merge?</value></data>
+  <data name="PR_DownStack" xml:space="preserve"><value>Down the stack</value></data>
+  <data name="PR_Edit" xml:space="preserve"><value>Edit title and description…</value></data>
+  <data name="PR_FixWithClaude" xml:space="preserve"><value>Send review comments to a new Claude Code session</value></data>
+  <data name="PR_Merge" xml:space="preserve"><value>Merge pull request</value></data>
+  <data name="PR_ReadyForReview" xml:space="preserve"><value>Ready for review</value></data>
+  <data name="PR_Reopen" xml:space="preserve"><value>Reopen pull request</value></data>
+  <data name="PR_RequestReview" xml:space="preserve"><value>Request or re-request review</value></data>
+  <data name="PR_RequestReviewMenu" xml:space="preserve"><value>Request review…</value></data>
+  <data name="PR_Review" xml:space="preserve"><value>Review</value></data>
+  <data name="PR_ReviewN" xml:space="preserve"><value>Review ({0})</value></data>
+  <data name="PR_Reviewers" xml:space="preserve"><value>Reviewers:</value></data>
+  <data name="PR_ShowStack" xml:space="preserve"><value>Show stack</value></data>
+  <data name="PR_Stack" xml:space="preserve"><value>Stack</value></data>
+  <data name="PR_StackPosition" xml:space="preserve"><value>{0} of {1}</value></data>
+  <data name="PR_SubmitReview" xml:space="preserve"><value>Submit review</value></data>
+  <data name="PR_TabChecks" xml:space="preserve"><value>Checks</value></data>
+  <data name="PR_TabCommits" xml:space="preserve"><value>Commits</value></data>
+  <data name="PR_TabConversation" xml:space="preserve"><value>Conversation</value></data>
+  <data name="PR_TabFiles" xml:space="preserve"><value>Files changed</value></data>
+  <data name="PR_UpStack" xml:space="preserve"><value>Up the stack</value></data>
+  <data name="PR_UpdateBranchFrom" xml:space="preserve"><value>Update branch from {0}</value></data>
+  <data name="PR_WriteReview" xml:space="preserve"><value>Write review…</value></data>
+  <data name="Project_Closed" xml:space="preserve"><value>closed</value></data>
+  <data name="Projects_CopyCommand" xml:space="preserve"><value>Copy Command</value></data>
+  <data name="Projects_MissingScopes" xml:space="preserve"><value>Token is missing Projects scopes</value></data>
+  <data name="Projects_None" xml:space="preserve"><value>No projects</value></data>
+  <data name="Projects_RefreshToken" xml:space="preserve"><value>Refresh Token from gh</value></data>
+  <data name="Projects_ScopeHelp" xml:space="preserve"><value>Run this in a terminal, then click “Refresh Token”:</value></data>
+  <data name="Projects_ShowClosed" xml:space="preserve"><value>Show closed</value></data>
+  <data name="ReReview_Other" xml:space="preserve"><value>Other…</value></data>
+  <data name="ReReview_Request" xml:space="preserve"><value>Re-request review</value></data>
+  <data name="ReReview_RequestN" xml:space="preserve"><value>Re-request review ({0})</value></data>
+  <data name="ReReview_Requested" xml:space="preserve"><value>Requested</value></data>
+  <data name="Refresh_Failed" xml:space="preserve"><value>Couldn't refresh</value></data>
+  <data name="Refresh_Hint" xml:space="preserve"><value>Pull down to refresh (Ctrl+R)</value></data>
+  <data name="Refresh_LastFailed" xml:space="preserve"><value>Last refresh failed: {0}</value></data>
+  <data name="Refresh_NotYet" xml:space="preserve"><value>Not updated yet</value></data>
+  <data name="Refresh_Offline" xml:space="preserve"><value>Offline</value></data>
+  <data name="Refresh_Updated" xml:space="preserve"><value>Updated {0}</value></data>
+  <data name="Refresh_Updating" xml:space="preserve"><value>Updating…</value></data>
+  <data name="Reply_AndResolve" xml:space="preserve"><value>Reply and resolve</value></data>
+  <data name="Reply_Placeholder" xml:space="preserve"><value>Reply (Markdown)</value></data>
+  <data name="Reply_Reply" xml:space="preserve"><value>Reply</value></data>
+  <data name="Reply_Title" xml:space="preserve"><value>Reply to thread</value></data>
+  <data name="Repo_Archived" xml:space="preserve"><value>archived</value></data>
+  <data name="Repo_Code" xml:space="preserve"><value>Code</value></data>
+  <data name="Repo_Private" xml:space="preserve"><value>private</value></data>
+  <data name="Repos_CopyClone" xml:space="preserve"><value>Copy “gh repo clone”</value></data>
+  <data name="Repos_Filter" xml:space="preserve"><value>Filter repositories</value></data>
+  <data name="Repos_HideArchived" xml:space="preserve"><value>Hide archived</value></data>
+  <data name="Review_Approved" xml:space="preserve"><value>Approved</value></data>
+  <data name="Review_ChangesRequested" xml:space="preserve"><value>Changes requested</value></data>
+  <data name="Review_CommentOnly" xml:space="preserve"><value>Comment — without approval</value></data>
+  <data name="Review_Discard" xml:space="preserve"><value>Discard pending comments</value></data>
+  <data name="Review_PendingInline" xml:space="preserve"><value>Inline comments to be submitted: {0}</value></data>
+  <data name="Review_RequestChanges" xml:space="preserve"><value>Request changes</value></data>
+  <data name="Review_Required" xml:space="preserve"><value>Review required</value></data>
+  <data name="Review_Submit" xml:space="preserve"><value>Submit review</value></data>
+  <data name="Review_Summary" xml:space="preserve"><value>Review summary (optional when approving)</value></data>
+  <data name="Review_Title" xml:space="preserve"><value>Review #{0}</value></data>
+  <data name="Reviewers_Already" xml:space="preserve"><value>already requested</value></data>
+  <data name="Reviewers_OnPR" xml:space="preserve"><value>Reviewers on this pull request</value></data>
+  <data name="Reviewers_Other" xml:space="preserve"><value>Other logins, comma-separated, e.g. alice, bob</value></data>
+  <data name="Reviewers_Request" xml:space="preserve"><value>Request</value></data>
+  <data name="Reviewers_RequestN" xml:space="preserve"><value>Request ({0})</value></data>
+  <data name="Reviewers_Stale" xml:space="preserve"><value>reviewed before latest push</value></data>
+  <data name="Reviewers_Title" xml:space="preserve"><value>Request review</value></data>
+  <data name="Search_Placeholder" xml:space="preserve"><value>Filter: text, repo:org/name, label:bug</value></data>
+  <data name="Section_Claude" xml:space="preserve"><value>Claude Code</value></data>
+  <data name="Section_IssuesTitle" xml:space="preserve"><value>Issues: {0}</value></data>
+  <data name="Section_MyPrsByProject" xml:space="preserve"><value>My PRs by project</value></data>
+  <data name="Section_Notifications" xml:space="preserve"><value>Notifications</value></data>
+  <data name="Section_Projects" xml:space="preserve"><value>Projects</value></data>
+  <data name="Section_Repositories" xml:space="preserve"><value>Repositories</value></data>
+  <data name="Settings_Account" xml:space="preserve"><value>Account</value></data>
+  <data name="Settings_Appearance" xml:space="preserve"><value>Appearance</value></data>
+  <data name="Settings_AutoRefresh" xml:space="preserve"><value>Auto-refresh pull requests</value></data>
+  <data name="Settings_AutoUpdates" xml:space="preserve"><value>Check for updates automatically</value></data>
+  <data name="Settings_CheckNow" xml:space="preserve"><value>Check Now</value></data>
+  <data name="Settings_CloseToTray" xml:space="preserve"><value>Keep running in the notification area when the window is closed</value></data>
+  <data name="Settings_CurrentVersion" xml:space="preserve"><value>Current version {0}</value></data>
+  <data name="Settings_Dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="Settings_DeviceFlow" xml:space="preserve"><value>OAuth Device Flow</value></data>
+  <data name="Settings_Every15m" xml:space="preserve"><value>Every 15 minutes</value></data>
+  <data name="Settings_Every15s" xml:space="preserve"><value>Every 15 seconds</value></data>
+  <data name="Settings_Every2m" xml:space="preserve"><value>Every 2 minutes</value></data>
+  <data name="Settings_Every30s" xml:space="preserve"><value>Every 30 seconds</value></data>
+  <data name="Settings_Every5m" xml:space="preserve"><value>Every 5 minutes</value></data>
+  <data name="Settings_EveryMinute" xml:space="preserve"><value>Every minute</value></data>
+  <data name="Settings_Light" xml:space="preserve"><value>Light</value></data>
+  <data name="Settings_Links" xml:space="preserve"><value>Links</value></data>
+  <data name="Settings_MatchSystem" xml:space="preserve"><value>Match system</value></data>
+  <data name="Settings_Mode" xml:space="preserve"><value>Mode</value></data>
+  <data name="Settings_NotSignedIn" xml:space="preserve"><value>Not signed in</value></data>
+  <data name="Settings_OpenLinksIn" xml:space="preserve"><value>Open links in</value></data>
+  <data name="Settings_Refresh" xml:space="preserve"><value>Refresh</value></data>
+  <data name="Settings_RefreshFromGh" xml:space="preserve"><value>Refresh token from gh</value></data>
+  <data name="Settings_Scopes" xml:space="preserve"><value>Token scopes</value></data>
+  <data name="Settings_SignOut" xml:space="preserve"><value>Sign out</value></data>
+  <data name="Settings_System" xml:space="preserve"><value>System</value></data>
+  <data name="Settings_SystemDefault" xml:space="preserve"><value>System default</value></data>
+  <data name="Settings_Theme" xml:space="preserve"><value>Theme</value></data>
+  <data name="Settings_Updates" xml:space="preserve"><value>Updates</value></data>
+  <data name="State_All" xml:space="preserve"><value>All</value></data>
+  <data name="State_Closed" xml:space="preserve"><value>Closed</value></data>
+  <data name="State_Merged" xml:space="preserve"><value>Merged</value></data>
+  <data name="State_Open" xml:space="preserve"><value>Open</value></data>
+  <data name="Terminal_CloseTab" xml:space="preserve"><value>Close tab</value></data>
+  <data name="Terminal_Ended" xml:space="preserve"><value>Session ended</value></data>
+  <data name="Terminal_Resume" xml:space="preserve"><value>Resume session</value></data>
+  <data name="Terminal_Sleeping" xml:space="preserve"><value>Session is sleeping — memory freed</value></data>
+  <data name="Tray_MyOpenPRs" xml:space="preserve"><value>My open PRs</value></data>
+  <data name="Tray_Open" xml:space="preserve"><value>Open {0}</value></data>
+  <data name="Tray_Quit" xml:space="preserve"><value>Quit</value></data>
+  <data name="Tray_ReviewCount" xml:space="preserve"><value>{0} review requests</value></data>
+  <data name="Tray_ReviewRequests" xml:space="preserve"><value>Review requests</value></data>
+  <data name="Tray_SignIn" xml:space="preserve"><value>Sign in…</value></data>
+  <data name="Update_Available" xml:space="preserve"><value>A new version of {0} is available</value></data>
+  <data name="Update_CheckFailed" xml:space="preserve"><value>Couldn't check for updates</value></data>
+  <data name="Update_Checking" xml:space="preserve"><value>Checking for updates…</value></data>
+  <data name="Update_DownloadInstall" xml:space="preserve"><value>Download &amp; Install</value></data>
+  <data name="Update_Downloading" xml:space="preserve"><value>Downloading…</value></data>
+  <data name="Update_IsAvailable" xml:space="preserve"><value>{0} {1} is available</value></data>
+  <data name="Update_Later" xml:space="preserve"><value>Later</value></data>
+  <data name="Update_Newest" xml:space="preserve"><value>{0} {1} is the newest version available.</value></data>
+  <data name="Update_NoNotes" xml:space="preserve"><value>No release notes.</value></data>
+  <data name="Update_NotificationBody" xml:space="preserve"><value>Click to see what's new and update.</value></data>
+  <data name="Update_NotificationTitle" xml:space="preserve"><value>{0} {1} is available</value></data>
+  <data name="Update_OpenDownload" xml:space="preserve"><value>Open download page</value></data>
+  <data name="Update_Preparing" xml:space="preserve"><value>Preparing update…</value></data>
+  <data name="Update_Ready" xml:space="preserve"><value>{0} {1} is ready to install</value></data>
+  <data name="Update_Restart" xml:space="preserve"><value>Restart to Update</value></data>
+  <data name="Update_Skip" xml:space="preserve"><value>Skip This Version</value></data>
+  <data name="Update_To" xml:space="preserve"><value>Update to {0}</value></data>
+  <data name="Update_TryAgain" xml:space="preserve"><value>Try Again</value></data>
+  <data name="Update_UpToDate" xml:space="preserve"><value>You're up to date</value></data>
+  <data name="Update_ViewOnGitHub" xml:space="preserve"><value>View on GitHub</value></data>
+  <data name="Update_YouHave" xml:space="preserve"><value>You have {0}</value></data>
+  <data name="Usage_AfterFirstReply" xml:space="preserve"><value>Shows up after Claude's first reply</value></data>
+  <data name="Usage_Breakdown" xml:space="preserve"><value>Detailed breakdown</value></data>
+  <data name="Usage_Compact" xml:space="preserve"><value>Compact session</value></data>
+  <data name="Usage_CompactOff" xml:space="preserve"><value>Auto-compact is off</value></data>
+  <data name="Usage_Context" xml:space="preserve"><value>Context window</value></data>
+  <data name="Usage_Limits" xml:space="preserve"><value>Your usage limits</value></data>
+  <data name="Usage_SessionCost" xml:space="preserve"><value>Session: ${0:0.00}</value></data>
+  <data name="Usage_Sleeping" xml:space="preserve"><value>session is sleeping</value></data>
+  <data name="Usage_UntilCompact" xml:space="preserve"><value>{0} until auto-compact</value></data>
+</root>
