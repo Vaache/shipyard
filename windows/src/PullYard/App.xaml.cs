@@ -159,6 +159,7 @@ public partial class App : Application
         items.Add(new() { Separator = true });
         items.Add(new() { Text = L.F("Tray_Open", "Open {0}", AppInfo.DisplayName), Action = ShowMainWindow });
         items.Add(new() { Text = L.T("Menu_CheckForUpdates", "Check for Updates…"), Action = () => { ShowMainWindow(); m.Updater.Check(true).Forget(); } });
+        items.Add(new() { Text = L.T("Tray_Pizza", "Buy Me a Pizza…"), Action = LinkBrowser.OpenDonation });
         items.Add(new() { Text = L.T("Tray_Quit", "Quit"), Action = Quit });
         return items;
     }

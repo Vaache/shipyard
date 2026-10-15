@@ -74,6 +74,20 @@ public static class LinkBrowser
         Proc.OpenUrl(uri.AbsoluteUri);
     }
 
+    public static async Task OpenInDefaultBrowser(string url)
+    {
+        try
+        {
+            if (await Windows.System.Launcher.LaunchUriAsync(new Uri(url))) return;
+        }
+        catch
+        {
+        }
+        Proc.OpenUrl(url);
+    }
+
+    public static void OpenDonation() => OpenInDefaultBrowser(Core.AppInfo.DonateUrl).Forget();
+
     private static string? ExtractExe(string command)
     {
         var c = command.Trim();

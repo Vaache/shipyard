@@ -133,13 +133,32 @@ public static class SettingsDialog
         clientId.TextChanged += (_, _) => Settings.Shared.Set(Keys.OAuthClientId, clientId.Text);
         panel.Children.Add(Group(L.T("Settings_DeviceFlow", "OAuth Device Flow"), "", "amber", Row(L.T("Login_ClientId", "Client ID"), clientId)));
 
-        var d = Dialogs.Create(root, L.T("Common_Settings", "Settings"), new ScrollViewer { Content = panel, MaxHeight = 620, Padding = new Thickness(0, 0, 12, 0) }, close: L.T("Common_Done", "Done"), maxWidth: 640);
+        var pizzaContent = Ui.Columns(
+            (Ui.V(2, Ui.Text(L.T("Support_Pizza", "Buy me a pizza 🍕"), 14, "text", FontWeights.SemiBold), Ui.Text(L.T("Support_PizzaDescription", "Pay what you want, from $3. PullYard stays free and open source."), 12.5, "muted", wrap: true)), Ui.Star),
+            (Ui.Glyph("\uE8A7", 13, "muted"), Ui.Auto));
+        var pizza = new Button
+        {
+            Content = pizzaContent,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(12, 10, 12, 10)
+        };
+        Ui.Tip(pizza, AppInfo.DonateUrl);
+        pizza.Click += (_, _) => LinkBrowser.OpenDonation();
+        panel.Children.Add(Group(L.F("Support_Title", "Support {0}", AppInfo.DisplayName), "\uEB51", "coral", pizza));
+
+        var scroll = new ScrollViewer { Content = panel, MaxHeight = 620, Padding = new Thickness(0, 0, 12, 0) };
+        openScroll = scroll;
+        var d = Dialogs.Create(root, L.T("Common_Settings", "Settings"), scroll, close: L.T("Common_Done", "Done"), maxWidth: 640);
         openDialog = d;
         await Dialogs.ShowAsync(d);
         openDialog = null;
     }
 
     private static ContentDialog? openDialog;
+    private static ScrollViewer? openScroll;
+
+    public static void ScrollToEnd() => openScroll?.ChangeView(null, openScroll.ScrollableHeight, null);
 
     private static void CloseOpenDialog() => openDialog?.Hide();
 
