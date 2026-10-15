@@ -34,8 +34,10 @@ for size in 16 32 48 64 128 256 512; do
   rsvg-convert -w "$size" -h "$size" "$svg" -o "$dir/${APP_ID}.png"
 done
 subst "$here/packaging/flatpak.yml.in" > "$out/flatpak/${APP_ID}.yml"
-echo "APP_NAME=${APP_NAME}" > "$out/brand.out"
-echo "APP_ID=${APP_ID}" >> "$out/brand.out"
-echo "BIN_NAME=${BIN_NAME}" >> "$out/brand.out"
-echo "VERSION=${VERSION}" >> "$out/brand.out"
+{
+  printf 'APP_NAME="%s"\n' "$APP_NAME"
+  printf 'APP_ID="%s"\n' "$APP_ID"
+  printf 'BIN_NAME="%s"\n' "$BIN_NAME"
+  printf 'VERSION="%s"\n' "$VERSION"
+} > "$out/brand.out"
 echo "rendered packaging for ${APP_NAME} ${VERSION} into $out"

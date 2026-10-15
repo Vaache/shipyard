@@ -65,12 +65,13 @@ jobs:
 
       - name: Launch checks
         run: |
-          ./target/release/shipyard --version
-          ./target/release/shipyard --help
+          set -a; . ./brand.env; set +a
+          "./target/release/${BIN_NAME}" --version
+          "./target/release/${BIN_NAME}" --help
           export WEBKIT_DISABLE_COMPOSITING_MODE=1
           export GSK_RENDERER=cairo
           export NO_AT_BRIDGE=1
-          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" dbus-run-session -- ./target/release/shipyard --smoke
+          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" dbus-run-session -- "./target/release/${BIN_NAME}" --smoke
 
       - name: Packaging metadata
         run: |
