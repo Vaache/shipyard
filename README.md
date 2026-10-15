@@ -15,6 +15,8 @@
   <a href="https://pullyard.github.io/pullyard/">Website</a>
   ·
   <a href="https://github.com/pullyard/pullyard/releases">Releases</a>
+  ·
+  <a href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1">Buy me a pizza 🍕</a>
 </p>
 
 <p align="center">
@@ -124,6 +126,12 @@ Sources/PullYard/
   Shared/     diff table, HTML view, tab strip, localization, utilities
 docs/         website (GitHub Pages)
 ```
+
+## Buy me a pizza 🍕
+
+PullYard is free and open source. If it saves you time, you can buy a **PullYard Supporter** license: you pay what you want (from $3) and get a license key by email that unlocks supporter extras in the app, such as alternate app icons and a supporter badge. Nothing else is locked.
+
+<a href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1"><b>Buy me a pizza 🍕</b></a>
 
 ## Acknowledgements
 
