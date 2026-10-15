@@ -1,0 +1,193 @@
+name: Linux
+
+on:
+  push:
+    branches: [linux-port]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'linux/**'
+      - 'Resources/Brand/**'
+      - '.github/workflows/linux.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: linux
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "PULLYARD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
+
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev libadwaita-1-dev libvte-2.91-gtk4-dev libwebkitgtk-6.0-dev \
+            libgtksourceview-5-dev libssl-dev pkg-config librsvg2-bin xvfb xauth dbus-x11 \
+            appstream desktop-file-utils dpkg-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: linux
+          key: ${{ matrix.arch }}
+
+      - name: Unit tests
+        run: cargo test --release
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Launch checks
+        run: |
+          set -a; . ./brand.env; set +a
+          "./target/release/${BIN_NAME}" --version
+          "./target/release/${BIN_NAME}" --help
+          export WEBKIT_DISABLE_COMPOSITING_MODE=1
+          export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
+          export GTK_A11Y=none
+          export GSK_RENDERER=cairo
+          export NO_AT_BRIDGE=1
+          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" dbus-run-session -- "./target/release/${BIN_NAME}" --smoke
+
+      - name: Packaging metadata
+        run: |
+          ./packaging/render.sh
+          . dist/brand.out
+          desktop-file-validate "dist/share/applications/${APP_ID}.desktop"
+          appstreamcli validate --no-net --explain "dist/share/metainfo/${APP_ID}.metainfo.xml" || echo "::warning::appstream validation reported issues"
+
+      - name: Debian package
+        run: |
+          cargo install cargo-deb --locked --quiet || true
+          . dist/brand.out
+          cargo deb --no-build --no-strip --deb-version "${VERSION}" --output "dist/${BIN_NAME}_${VERSION}_$(dpkg --print-architecture).deb"
+          dpkg-deb --info dist/*.deb
+          dpkg-deb --contents dist/*.deb
+
+      - name: Tarball
+        run: |
+          . dist/brand.out
+          name="${APP_NAME}-linux-${{ matrix.arch }}"
+          stage="dist/stage/${name}"
+          rm -rf dist/stage && mkdir -p "${stage}/bin"
+          cp "target/release/${BIN_NAME}" "${stage}/bin/"
+          cp -r dist/share "${stage}/share"
+          cp dist/brand.out packaging/install.sh packaging/uninstall.sh "${stage}/"
+          cp ../LICENSE "${stage}/"
+          tar -C dist/stage -czf "dist/${name}.tar.gz" "${name}"
+          ls -la dist
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarball-${{ matrix.arch }}
+          path: linux/dist/*.tar.gz
+          if-no-files-found: error
+
+      - name: Upload deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.arch }}
+          path: linux/dist/*.deb
+          if-no-files-found: error
+
+      - name: Upload packaging metadata
+        if: matrix.arch == 'x86_64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaging
+          path: |
+            linux/dist/share
+            linux/dist/flatpak
+            linux/dist/brand.out
+          if-no-files-found: error
+
+  flatpak:
+    name: Flatpak (x86_64)
+    needs: build
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-47
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: packaging
+          path: linux/dist
+
+      - name: Bundle name
+        id: names
+        run: |
+          . linux/dist/brand.out
+          echo "bundle=${APP_NAME}-linux-x86_64.flatpak" >> "$GITHUB_OUTPUT"
+          echo "manifest=linux/dist/flatpak/${APP_ID}.yml" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "PULLYARD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
+
+      - uses: flathub-infra/flatpak-github-actions/flatpak-builder@master
+        with:
+          bundle: ${{ steps.names.outputs.bundle }}
+          manifest-path: ${{ steps.names.outputs.manifest }}
+          cache-key: flatpak-builder-${{ hashFiles('linux/Cargo.toml') }}
+          upload-artifact: true
+
+      - name: Launch check
+        run: |
+          . linux/dist/brand.out
+          flatpak install -y --user --noninteractive "${{ steps.names.outputs.bundle }}"
+          flatpak run "${APP_ID}" --version
+
+  release:
+    name: Attach to release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, flatpak]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ls -laR artifacts
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::Release $TAG does not exist yet; nothing attached. Re-run this workflow after the release is created."
+            exit 0
+          fi
+          files=$(find artifacts -maxdepth 2 -type f \( -name '*.tar.gz' -o -name '*.deb' -o -name '*.flatpak' \))
+          gh release upload "$TAG" $files --clobber --repo "$GITHUB_REPOSITORY"

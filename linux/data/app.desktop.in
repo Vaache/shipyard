@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=@APP_NAME@
+GenericName=GitHub Client
+Comment=@APP_SUMMARY@
+Exec=@BIN_NAME@ %U
+Icon=@APP_ID@
+Terminal=false
+StartupNotify=true
+StartupWMClass=@APP_ID@
+Categories=Development;RevisionControl;
+Keywords=GitHub;Pull Request;Review;Git;Diff;Claude;
+MimeType=x-scheme-handler/@URL_SCHEME@;

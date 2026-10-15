@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>@APP_ID@</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>@APP_NAME@</name>
+  <summary>@APP_SUMMARY@</summary>
+  <developer id="io.github.@OWNER_ID@">
+    <name>@DEVELOPER_NAME@</name>
+  </developer>
+  <description>
+    <p>@APP_DESCRIPTION@</p>
+    <ul>
+      <li>Review requests, your own pull requests and everything you are involved in</li>
+      <li>Conversation, review threads, commits, checks and a fast diff viewer</li>
+      <li>Comment, approve, request changes and merge</li>
+      <li>Repositories with a file browser, projects boards and notifications</li>
+      <li>A Claude Code workspace with native chat and an embedded terminal</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">@APP_ID@.desktop</launchable>
+  <url type="homepage">@REPO_URL@</url>
+  <url type="bugtracker">@REPO_URL@/issues</url>
+  <url type="vcs-browser">@REPO_URL@</url>
+  <provides>
+    <binary>@BIN_NAME@</binary>
+  </provides>
+  <requires>
+    <display_length compare="ge">900</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <branding>
+    <color type="primary" scheme_preference="light">#f7f5f0</color>
+    <color type="primary" scheme_preference="dark">#0c1220</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

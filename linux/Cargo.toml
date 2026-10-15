@@ -1,0 +1,65 @@
+[package]
+name = "pullyard"
+version = "2.5.0"
+edition = "2021"
+rust-version = "1.92"
+license = "MIT"
+description = "Pull requests, without the browser. A native GitHub client with a Claude Code workspace."
+homepage = "https://github.com/pullyard/pullyard"
+repository = "https://github.com/pullyard/pullyard"
+build = "build.rs"
+publish = false
+
+[[bin]]
+name = "pullyard"
+path = "src/main.rs"
+
+[dependencies]
+gtk = { package = "gtk4", version = "0.11", features = ["gnome_46"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_5"] }
+vte4 = { version = "0.10", features = ["v0_76"] }
+webkit6 = { version = "0.6" }
+sourceview5 = { version = "0.11" }
+reqwest = { version = "0.13", default-features = false, features = ["json", "form", "native-tls", "http2", "gzip", "charset", "system-proxy"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs", "io-util"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+regex = "1"
+url = "2"
+percent-encoding = "2"
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+async-channel = "2"
+oo7 = { version = "0.6", default-features = false, features = ["tokio", "native_crypto"] }
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true
+
+[package.metadata.deb]
+name = "pullyard"
+maintainer = "PullYard <pullyard@users.noreply.github.com>"
+copyright = "PullYard"
+license-file = ["../LICENSE", "0"]
+section = "devel"
+priority = "optional"
+depends = "$auto"
+recommends = "git, gh"
+extended-description = "A small native GitHub client for everyday pull request review: review requests, conversations, checks, a fast diff viewer, merges, repositories, projects and notifications, plus a built-in workspace for the Claude Code CLI."
+assets = [
+    ["target/release/pullyard", "usr/bin/pullyard", "755"],
+    ["dist/share/applications/*", "usr/share/applications/", "644"],
+    ["dist/share/metainfo/*", "usr/share/metainfo/", "644"],
+    ["dist/share/icons/hicolor/scalable/apps/*", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["dist/share/icons/hicolor/16x16/apps/*", "usr/share/icons/hicolor/16x16/apps/", "644"],
+    ["dist/share/icons/hicolor/32x32/apps/*", "usr/share/icons/hicolor/32x32/apps/", "644"],
+    ["dist/share/icons/hicolor/48x48/apps/*", "usr/share/icons/hicolor/48x48/apps/", "644"],
+    ["dist/share/icons/hicolor/64x64/apps/*", "usr/share/icons/hicolor/64x64/apps/", "644"],
+    ["dist/share/icons/hicolor/128x128/apps/*", "usr/share/icons/hicolor/128x128/apps/", "644"],
+    ["dist/share/icons/hicolor/256x256/apps/*", "usr/share/icons/hicolor/256x256/apps/", "644"],
+    ["dist/share/icons/hicolor/512x512/apps/*", "usr/share/icons/hicolor/512x512/apps/", "644"],
+]
