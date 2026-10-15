@@ -5,15 +5,15 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Shipyard</string>
+	<string>PullYard</string>
 	<key>CFBundleExecutable</key>
-	<string>Shipyard</string>
+	<string>PullYard</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>dev.vaache.shipyard</string>
 	<key>CFBundleName</key>
-	<string>Shipyard</string>
+	<string>PullYard</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -25,6 +25,7 @@
 			<string>dev.vaache.shipyard</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>pullyard</string>
 				<string>shipyard</string>
 			</array>
 		</dict>
@@ -36,11 +37,11 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSDesktopFolderUsageDescription</key>
-	<string>Shipyard runs git and Claude Code inside your project folders to show changes and start sessions.</string>
+	<string>PullYard runs git and Claude Code inside your project folders to show changes and start sessions.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
-	<string>Shipyard runs git and Claude Code inside your project folders to show changes and start sessions.</string>
+	<string>PullYard runs git and Claude Code inside your project folders to show changes and start sessions.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
-	<string>Shipyard runs git and Claude Code inside your project folders to show changes and start sessions.</string>
+	<string>PullYard runs git and Claude Code inside your project folders to show changes and start sessions.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>
