@@ -22,6 +22,26 @@ mod ui;
 mod updater;
 mod util;
 
+fn webkit_sandbox_guard() {
+    if std::env::var_os("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS").is_some() || util::is_flatpak() {
+        return;
+    }
+    let restricted = std::fs::read_to_string("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").map(|s| s.trim() == "1").unwrap_or(false);
+    if !restricted {
+        return;
+    }
+    let works = std::process::Command::new("bwrap")
+        .args(["--unshare-user", "--ro-bind", "/", "/", "true"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !works {
+        std::env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
@@ -42,6 +62,7 @@ fn main() {
     if args.iter().any(|a| a == "--selftest") {
         std::process::exit(selftest::run());
     }
+    webkit_sandbox_guard();
     let smoke = args.iter().any(|a| a == "--smoke");
     let code = app::run(smoke);
     std::process::exit(code.get() as i32);
