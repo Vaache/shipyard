@@ -214,6 +214,8 @@ pub fn list() -> gtk::Widget {
     empty.set_halign(gtk::Align::Center);
     empty.set_margin_top(30);
     empty.set_wrap(true);
+    empty.set_natural_wrap_mode(gtk::NaturalWrapMode::None);
+    empty.set_justify(gtk::Justification::Center);
     stack.add_named(&empty, Some("empty"));
     let holder: Rc<RefCell<Option<std::rc::Weak<ReposList>>>> = Rc::new(RefCell::new(None));
     let h = holder.clone();

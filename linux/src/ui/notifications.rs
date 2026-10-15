@@ -245,6 +245,7 @@ pub fn build() -> gtk::Widget {
     let empty_label = label_with("All caught up", &["sy-muted"]);
     empty_label.set_xalign(0.5);
     empty_label.set_wrap(true);
+    empty_label.set_natural_wrap_mode(gtk::NaturalWrapMode::None);
     empty.append(&empty_label);
     stack.add_named(&empty, Some("empty"));
     let mark_all = icon_button("sy-check-symbolic", "Mark all as read");

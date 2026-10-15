@@ -162,6 +162,17 @@ pub fn run(_app: Rc<App>) {
     p.act(move || app::select(Some(Route::Repo(rp)))).wait(8000).shot("14-repo");
     p.act(|| app::set_section(Section::Projects)).wait(5000).shot("15-projects");
     p.act(|| app::set_section(Section::Claude)).wait(4000).shot("16-claude");
+    p.act(|| {
+        let ws = app::get().claude.clone();
+        let tab = ws.new_session("/tmp", None, Some("Cancel stale searches".into()), None, Some(crate::claude::TabKind::Chat));
+        if let Some(chat) = &tab.chat {
+            for line in crate::fixtures::CHAT_STREAM {
+                chat.feed(line);
+            }
+        }
+    })
+    .wait(3000)
+    .shot("16-claude-chat");
     p.act(crate::ui::settings::show).wait(2500).shot("17-preferences").act(close_dialog);
     p.wait(1000).act(|| {
         println!("tour: done");

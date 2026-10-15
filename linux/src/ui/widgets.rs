@@ -87,7 +87,7 @@ pub fn fixed_box(css: &[&str], width: i32, height: i32) -> gtk::Box {
     b.set_size_request(width, height);
     b.set_hexpand(false);
     b.set_vexpand(false);
-    b.set_halign(gtk::Align::Start);
+    b.set_halign(gtk::Align::Center);
     b.set_valign(gtk::Align::Center);
     b
 }
