@@ -1,0 +1,44 @@
+name: macOS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - 'Resources/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'scripts/**'
+      - '.github/workflows/macos.yml'
+  pull_request:
+    paths:
+      - 'Sources/**'
+      - 'Resources/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'scripts/**'
+      - '.github/workflows/macos.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Build universal app
+        env:
+          UNIVERSAL: '1'
+          SIGN_ID: '-'
+        run: ./scripts/build.sh
+      - name: Verify bundle
+        run: |
+          codesign --verify --strict build/PullYard.app
+          lipo -archs build/PullYard.app/Contents/MacOS/PullYard

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roadmap · PullYard</title>
+<meta name="description" content="What the PullYard team is working on now, next and later.">
+<meta property="og:title" content="PullYard Roadmap">
+<meta property="og:description" content="What we are working on now, next and later.">
+<meta property="og:image" content="icon-512.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-512.png">
+<style>
+:root{
+  --bg:#0a0f1b;--bg2:#111a2c;--panel:#152036;--panel2:#18243c;--line:rgba(160,174,196,.10);--line2:rgba(160,174,196,.18);
+  --text:#e6ebf2;--muted:#8693a8;--dim:#5f6b80;
+  --coral:#ee6f5f;--violet:#9d8cf0;--sky:#5bb8ec;--green:#5dbe8a;--amber:#e8b44c;
+  --maxw:1160px;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+code{font-family:var(--mono);font-size:.88em;background:rgba(255,255,255,.06);padding:1px 6px;border-radius:5px}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+
+nav{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:28px;height:64px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:-.01em;font-size:17px}
+.brand img{width:30px;height:30px}
+nav .links{display:flex;gap:24px;margin-left:auto;color:var(--muted);font-size:14.5px}
+nav .links a:hover,nav .links a[aria-current]{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:10px;border-radius:8px;padding:11px 18px;font-weight:600;font-size:15px;transition:background .15s ease;white-space:nowrap}
+.btn-primary{background:var(--coral);color:#1a0b09}
+.btn-primary:hover{background:#f27f70}
+.btn-sm{padding:7px 13px;font-size:14px;border-radius:7px}
+
+.head{padding:84px 0 36px;border-bottom:1px solid var(--line)}
+.head h1{font-size:clamp(38px,5.4vw,60px);line-height:1.04;letter-spacing:-.035em;margin:0 0 14px;font-weight:700}
+.head p{color:var(--muted);font-size:18px;max-width:620px;margin:0}
+.head .row{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-top:30px}
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.filters button{font:inherit;font-size:14px;color:var(--muted);background:transparent;border:1px solid var(--line2);border-radius:999px;padding:6px 14px;cursor:pointer;transition:color .15s,background .15s,border-color .15s}
+.filters button:hover{color:var(--text)}
+.filters button[aria-pressed="true"]{color:var(--text);background:rgba(255,255,255,.07);border-color:transparent}
+.feed{display:flex;gap:16px;font-size:14px;color:var(--muted)}
+.feed a{border-bottom:1px dotted currentColor}
+.feed a:hover{color:var(--text)}
+
+.release{display:grid;grid-template-columns:220px 1fr;gap:40px;padding:56px 0;border-bottom:1px solid var(--line);scroll-margin-top:64px}
+.release.is-hidden{display:none}
+.side{position:sticky;top:96px;align-self:start}
+.ver{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:15px;font-weight:600;color:var(--text)}
+.ver .hash{color:var(--dim);opacity:0;transition:opacity .15s}
+.release:hover .ver .hash,.ver:focus-visible .hash{opacity:1}
+.date{display:block;color:var(--dim);font-size:14px;margin-top:4px}
+.badge{display:inline-block;margin-top:10px;font-size:12px;font-weight:600;letter-spacing:.02em;padding:3px 9px;border-radius:999px;background:rgba(232,180,76,.14);color:var(--amber)}
+.badge.latest{background:rgba(93,190,138,.14);color:var(--green)}
+.plats{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.plat{font-size:12px;color:var(--muted);border:1px solid var(--line2);border-radius:6px;padding:1px 7px}
+
+.body h2{font-size:clamp(24px,2.8vw,32px);line-height:1.15;letter-spacing:-.022em;margin:0 0 12px;font-weight:680}
+.body .lede{color:var(--muted);font-size:17px;margin:0 0 26px;max-width:680px}
+.group{margin-top:26px}
+.group h3{display:flex;align-items:center;gap:8px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0 0 10px;font-weight:650}
+.group h3 i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.g-new h3 i{background:var(--coral)}
+.g-improved h3 i{background:var(--sky)}
+.g-fixed h3 i{background:var(--green)}
+.g-security h3 i{background:var(--violet)}
+.g-note h3 i{background:var(--amber)}
+.group ul{list-style:none;margin:0;padding:0}
+.group li{position:relative;padding:7px 0 7px 18px;color:#c9d2df;max-width:720px}
+.group li::before{content:"";position:absolute;left:2px;top:17px;width:5px;height:5px;border-radius:50%;background:var(--dim)}
+.group li b{color:var(--text);font-weight:600}
+.group li.is-hidden{display:none}
+.group.is-empty{display:none}
+.os{display:inline-block;font-size:11.5px;font-weight:600;color:var(--muted);background:rgba(255,255,255,.05);border-radius:5px;padding:0 6px;margin-right:6px;vertical-align:1px}
+.empty{display:none;color:var(--muted);font-size:15px;margin:0}
+.release.only-empty .empty{display:block}
+
+.older{padding:56px 0 90px;color:var(--muted);font-size:15px}
+.older a{color:var(--text);border-bottom:1px dotted currentColor}
+
+footer{border-top:1px solid var(--line);padding:34px 0 46px;color:var(--dim);font-size:13.5px}
+footer .wrap{display:flex;gap:20px;justify-content:space-between;flex-wrap:wrap}
+footer a:hover{color:var(--text)}
+
+@media (max-width:800px){
+  .release{grid-template-columns:1fr;gap:18px;padding:44px 0}
+  .side{position:static;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+  .date,.badge,.plats{margin-top:0}
+}
+@media (max-width:680px){
+  .wrap{padding:0 16px}
+  nav .links{display:none}nav .wrap{gap:12px}nav .btn{margin-left:auto}
+  .head{padding:56px 0 28px}
+}
+.head .row{margin-top:22px}
+.board{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;padding:48px 0 90px}
+.col h2{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:650;margin:0 0 14px;color:var(--text)}
+.col h2 i{width:9px;height:9px;border-radius:50%}
+.col h2 .now{background:var(--coral)}.col h2 .next{background:var(--sky)}.col h2 .later{background:var(--dim)}
+.card{background:var(--panel);border-radius:12px;padding:16px 18px;margin-bottom:12px}
+.card h3{font-size:15.5px;margin:0 0 4px;font-weight:620;letter-spacing:-.01em}
+.card p{margin:0;color:var(--muted);font-size:14.5px;line-height:1.5}
+kbd{font-family:var(--mono);font-size:.85em;background:rgba(255,255,255,.07);border-radius:4px;padding:0 5px}
+@media (max-width:900px){.board{grid-template-columns:1fr;gap:30px}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="./"><img src="icon.svg" alt="">PullYard</a>
+    <div class="links">
+      <a href="./#features">Features</a>
+      <a href="./#claude">Claude Code</a>
+      <a href="./#install">Install</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html" aria-current="page">Roadmap</a>
+      <a href="https://github.com/pullyard/pullyard">GitHub</a>
+    </div>
+    <a class="btn btn-primary btn-sm" href="https://github.com/pullyard/pullyard/releases/latest">Download</a>
+  </div>
+</nav>
+
+<header class="head">
+  <div class="wrap">
+    <h1>Roadmap</h1>
+    <p>What we're working on and what comes next. Plans can change, and new features usually land on macOS first, then on Windows and Linux.</p>
+    <div class="row">
+      <div class="feed">
+        <a href="changelog.html">What's already shipped</a>
+        <a href="https://github.com/pullyard/pullyard/issues/new">Suggest a feature</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="board">
+    <section class="col">
+      <h2><i class="now"></i>Now</h2>
+      <article class="card"><h3>Fix failing CI with an agent</h3><p>One click sends the failing check's log and the diff to your coding agent.</p></article>
+      <article class="card"><h3>OpenRouter and custom providers</h3><p>Run Claude Code through OpenRouter or any Anthropic-compatible endpoint, with the key kept in your system keychain.</p></article>
+      <article class="card"><h3>Faster, more resilient sync</h3><p>Smarter retries and refresh that backs off when GitHub asks it to.</p></article>
+      <article class="card"><h3>Homebrew, winget and Flathub</h3><p>Install and update PullYard with your usual package manager.</p></article>
+    </section>
+    <section class="col">
+      <h2><i class="next"></i>Next</h2>
+      <article class="card"><h3>Codex support</h3><p>Chat with Codex next to your pull request and use it for Fix, with its own sessions and history.</p></article>
+      <article class="card"><h3>More agents</h3><p>Gemini CLI and other agents through the open Agent Client Protocol.</p></article>
+      <article class="card"><h3>Choose your agent</h3><p>Fix with Claude Code, Codex or another agent from the same sheet.</p></article>
+      <article class="card"><h3>Isolated worktrees</h3><p>Each fix runs in its own git worktree, so your working copy stays untouched.</p></article>
+      <article class="card"><h3>AI review drafts</h3><p>An agent reads the diff and drafts inline review comments. You pick which ones to post.</p></article>
+      <article class="card"><h3>Close the loop</h3><p>After a fix: commit, push, reply to the threads it addressed and resolve them.</p></article>
+      <article class="card"><h3>Create pull requests</h3><p>Open a PR from a branch inside the app, with a description your agent drafts.</p></article>
+    </section>
+    <section class="col">
+      <h2><i class="later"></i>Later</h2>
+      <article class="card"><h3>Compare agents side by side</h3><p>Run the same task with two agents and keep the better diff.</p></article>
+      <article class="card"><h3>Command palette</h3><p>Jump to any PR, repository or action with <kbd>⌘K</kbd>.</p></article>
+      <article class="card"><h3>GitHub Enterprise and more accounts</h3><p>Use PullYard with GitHub Enterprise Server and switch between several GitHub accounts.</p></article>
+      <article class="card"><h3>Usage across agents</h3><p>One place for plan limits and spend for every agent you use.</p></article>
+      <article class="card"><h3>Signed and notarized apps</h3><p>No more Gatekeeper or SmartScreen warnings on first launch.</p></article>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 PullYard contributors · <a href="./">Home</a> · <a href="changelog.html">Changelog</a> · <a href="roadmap.html">Roadmap</a></span>
+    <span>Not affiliated with GitHub, Inc. or Anthropic. GitHub and Claude are trademarks of their respective owners.</span>
+  </div>
+</footer>
+</body>
+</html>
