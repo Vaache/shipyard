@@ -69,6 +69,8 @@ jobs:
           "./target/release/${BIN_NAME}" --version
           "./target/release/${BIN_NAME}" --help
           export WEBKIT_DISABLE_COMPOSITING_MODE=1
+          export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
+          export GTK_A11Y=none
           export GSK_RENDERER=cairo
           export NO_AT_BRIDGE=1
           timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" dbus-run-session -- "./target/release/${BIN_NAME}" --smoke
