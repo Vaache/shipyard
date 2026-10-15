@@ -63,16 +63,17 @@ jobs:
         run: |
           [xml]$props = Get-Content windows/Branding.props
           $p = $props.Project.PropertyGroup
-          $version = $p.ShipyardVersion
+          $version = $p.BrandVersion
           if ($env:GITHUB_REF -like 'refs/tags/v*') { $version = $env:GITHUB_REF_NAME.TrimStart('v', 'V') }
-          "name=$($p.ShipyardDisplayName)" >> $env:GITHUB_OUTPUT
-          "appid=$($p.ShipyardAppId)" >> $env:GITHUB_OUTPUT
-          "exe=$($p.ShipyardExeName)" >> $env:GITHUB_OUTPUT
-          "publisher=$($p.ShipyardPublisher)" >> $env:GITHUB_OUTPUT
-          "scheme=$($p.ShipyardUrlScheme)" >> $env:GITHUB_OUTPUT
-          "repo=https://github.com/$($p.ShipyardGitHubOwner)/$($p.ShipyardGitHubRepo)" >> $env:GITHUB_OUTPUT
+          "name=$($p.BrandDisplayName)" >> $env:GITHUB_OUTPUT
+          "appid=$($p.BrandAppId)" >> $env:GITHUB_OUTPUT
+          "exe=$($p.BrandExeName)" >> $env:GITHUB_OUTPUT
+          "publisher=$($p.BrandPublisher)" >> $env:GITHUB_OUTPUT
+          "scheme=$($p.BrandUrlScheme)" >> $env:GITHUB_OUTPUT
+          "envprefix=$($p.BrandEnvPrefix)" >> $env:GITHUB_OUTPUT
+          "repo=https://github.com/$($p.BrandGitHubOwner)/$($p.BrandGitHubRepo)" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
-          Write-Host "Building $($p.ShipyardDisplayName) $version for ${{ matrix.arch }}"
+          Write-Host "Building $($p.BrandDisplayName) $version for ${{ matrix.arch }}"
 
       - name: Publish
         shell: pwsh
@@ -120,10 +121,10 @@ jobs:
         continue-on-error: true
         shell: pwsh
         env:
-          SHIPYARD_TOKEN: ${{ github.token }}
-          SHIPYARD_DEMO_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          Set-Item "env:${{ steps.brand.outputs.envprefix }}_TOKEN" $env:GH_TOKEN
+          Set-Item "env:${{ steps.brand.outputs.envprefix }}_DEMO_REPO" $env:GITHUB_REPOSITORY
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $exe = "windows/dist/x64/app/${{ steps.brand.outputs.exe }}.exe"
           $shots = New-Item -ItemType Directory -Force -Path "windows/dist/shots"
@@ -181,7 +182,7 @@ jobs:
             "/DSourceDir=$source" `
             "/DOutputDir=$($out.FullName)" `
             "/DOutputBase=${{ steps.brand.outputs.exe }}-windows-${{ matrix.arch }}-setup" `
-            windows/installer/Shipyard.iss
+            windows/installer/setup.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build portable zip

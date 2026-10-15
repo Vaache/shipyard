@@ -159,7 +159,7 @@ public sealed partial class AppViewModel : ObservableObject
         foreach (Match m in SchemeRx.Matches(arguments))
         {
             var url = m.Value.Trim('"', '\'');
-            if (url.StartsWith(AppInfo.UrlScheme + "://", StringComparison.OrdinalIgnoreCase))
+            if (url.StartsWith(AppInfo.UrlScheme + "://", StringComparison.OrdinalIgnoreCase) || url.StartsWith(AppInfo.LegacyUrlScheme + "://", StringComparison.OrdinalIgnoreCase))
             {
                 Handle(url);
                 return;
@@ -170,7 +170,7 @@ public sealed partial class AppViewModel : ObservableObject
     public void Handle(string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
-        if (!uri.Scheme.StartsWith(AppInfo.UrlScheme, StringComparison.OrdinalIgnoreCase) && !uri.Scheme.StartsWith("ghlite", StringComparison.OrdinalIgnoreCase)) return;
+        if (!uri.Scheme.StartsWith(AppInfo.UrlScheme, StringComparison.OrdinalIgnoreCase) && !uri.Scheme.StartsWith(AppInfo.LegacyUrlScheme, StringComparison.OrdinalIgnoreCase) && !uri.Scheme.StartsWith("ghlite", StringComparison.OrdinalIgnoreCase)) return;
         if (uri.Host == "section")
         {
             var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);

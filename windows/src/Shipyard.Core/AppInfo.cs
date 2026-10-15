@@ -12,15 +12,15 @@ public static class AppInfo
 
     private static string Get(string key, string fallback) => Meta.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v) ? v : fallback;
 
-    public static string DisplayName => Get("DisplayName", "Shipyard");
+    public static string DisplayName => Get("DisplayName", "PullYard");
     public static string Tagline => Get("Tagline", "Pull requests, without the browser");
-    public static string AppId => Get("AppId", "Shipyard.Shipyard");
-    public static string ExeName => Get("ExeName", "Shipyard");
-    public static string UrlScheme => Get("UrlScheme", "shipyard");
-    public static string EnvPrefix => Get("EnvPrefix", "SHIPYARD");
-    public static string Publisher => Get("Publisher", "Vaache");
-    public static string GitHubOwner => Get("GitHubOwner", "Vaache");
-    public static string GitHubRepo => Get("GitHubRepo", "shipyard");
+    public static string AppId => Get("AppId", "PullYard.PullYard");
+    public static string ExeName => Get("ExeName", "PullYard");
+    public static string UrlScheme => Get("UrlScheme", "pullyard");
+    public static string EnvPrefix => Get("EnvPrefix", "PULLYARD");
+    public static string Publisher => Get("Publisher", "PullYard");
+    public static string GitHubOwner => Get("GitHubOwner", "pullyard");
+    public static string GitHubRepo => Get("GitHubRepo", "pullyard");
 
     public static string Version
     {
@@ -41,7 +41,11 @@ public static class AppInfo
     public static string InstallerAssetName(string arch) => $"{ExeName}-windows-{arch}-setup.exe";
     public static string PortableAssetName(string arch) => $"{ExeName}-windows-{arch}-portable.zip";
 
-    public static string Env(string suffix) => Environment.GetEnvironmentVariable($"{EnvPrefix}_{suffix}") ?? "";
+    public static string LegacyEnvPrefix => "SHIPYARD";
+    public static string LegacyUrlScheme => "shipyard";
+
+    public static string Env(string suffix) =>
+        Environment.GetEnvironmentVariable($"{EnvPrefix}_{suffix}") ?? Environment.GetEnvironmentVariable($"{LegacyEnvPrefix}_{suffix}") ?? "";
 
     public static string DataDirectory
     {

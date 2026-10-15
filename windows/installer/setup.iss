@@ -1,23 +1,23 @@
 #ifndef AppName
-  #define AppName "Shipyard"
+  #define AppName "PullYard"
 #endif
 #ifndef AppId
-  #define AppId "Shipyard.Shipyard"
+  #define AppId "PullYard.PullYard"
 #endif
 #ifndef ExeName
-  #define ExeName "Shipyard"
+  #define ExeName "PullYard"
 #endif
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
 #ifndef Publisher
-  #define Publisher "Vaache"
+  #define Publisher "PullYard"
 #endif
 #ifndef UrlScheme
-  #define UrlScheme "shipyard"
+  #define UrlScheme "pullyard"
 #endif
 #ifndef RepoUrl
-  #define RepoUrl "https://github.com/Vaache/shipyard"
+  #define RepoUrl "https://github.com/pullyard/pullyard"
 #endif
 #ifndef Arch
   #define Arch "x64"

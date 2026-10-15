@@ -1,19 +1,19 @@
-# Shipyard for Windows
+# PullYard for Windows
 
-A native Windows build of Shipyard: C# / .NET 8, WinUI 3 (Windows App SDK 1.8), MVVM with CommunityToolkit.Mvvm. It is a port of the macOS app in `Sources/Shipyard`, not a cross-platform wrapper.
+A native Windows build of PullYard: C# / .NET 8, WinUI 3 (Windows App SDK 1.8), MVVM with CommunityToolkit.Mvvm. It is a port of the macOS app in `Sources/`, not a cross-platform wrapper.
 
 ## Install
 
-Download from the [latest release](https://github.com/Vaache/shipyard/releases/latest):
+Download from the [latest release](https://github.com/pullyard/pullyard/releases/latest):
 
-- `Shipyard-windows-x64-setup.exe` or `Shipyard-windows-arm64-setup.exe`: per-user installer. No administrator rights needed. It adds a Start menu entry, registers `shipyard://` links and comes with an uninstaller (Settings → Apps).
-- `Shipyard-windows-<arch>-portable.zip`: unzip anywhere and run `Shipyard.exe`.
+- `PullYard-windows-x64-setup.exe` or `PullYard-windows-arm64-setup.exe`: per-user installer. No administrator rights needed. It adds a Start menu entry, registers `pullyard://` links and comes with an uninstaller (Settings → Apps).
+- `PullYard-windows-<arch>-portable.zip`: unzip anywhere and run `PullYard.exe`.
 
 The builds are not code-signed yet, so SmartScreen may warn on first launch: click **More info → Run anyway**.
 
 **Requirements:** Windows 10 1809 or later (Windows 11 recommended for Mica), the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11). Optional: [GitHub CLI](https://cli.github.com) for one-click sign-in, [Claude Code](https://docs.claude.com/en/docs/claude-code) for the Claude workspace, Git for Windows for the workspace's change view.
 
-Installed copies update themselves: Shipyard checks the latest GitHub release every 6 hours, downloads the installer for your architecture and restarts into the new version. The portable build opens the release page instead.
+Installed copies update themselves: PullYard checks the latest GitHub release every 6 hours, downloads the installer for your architecture and restarts into the new version. The portable build opens the release page instead.
 
 ## What's in it
 
@@ -27,7 +27,7 @@ Everything from the macOS app, adapted to Windows:
 | Review, merge, edit, reviewers, reply, job log, Fix with Claude sheets | `ContentDialog`s |
 | Menu bar extra with review requests | Notification-area (tray) icon with the same menu content; closing the window keeps it running there (can be turned off in Settings) |
 | Keychain | Windows Credential Manager |
-| `UserDefaults` | `%LOCALAPPDATA%\Shipyard\settings.json` |
+| `UserDefaults` | `%LOCALAPPDATA%\PullYard\settings.json` |
 | SwiftTerm terminal | ConPTY pseudo console + xterm.js in WebView2 (bundled, no CDN) |
 | Native Claude chat | Same `stream-json` protocol; the transcript renders in WebView2 (markdown via bundled marked), composer is native with `/` and `@` completion, image paste and drag & drop |
 | User notifications | `AppNotificationManager` |
@@ -41,7 +41,7 @@ Needs Windows 10/11 with the .NET 8 SDK. Visual Studio 2022 (with the "Windows a
 
 ```powershell
 dotnet publish windows/src/Shipyard/Shipyard.csproj -c Release -r win-x64 -p:Platform=x64 -o windows/dist/x64/app
-.\windows\dist\x64\app\Shipyard.exe
+.\windows\dist\x64\app\PullYard.exe
 ```
 
 For ARM64 use `-r win-arm64 -p:Platform=ARM64`. The output is self-contained (the .NET runtime and Windows App SDK are bundled), so it runs on machines without either installed.
@@ -55,27 +55,27 @@ dotnet test windows/tests/Shipyard.Core.Tests/Shipyard.Core.Tests.csproj
 Smoke checks the CI also runs:
 
 ```powershell
-.\Shipyard.exe --version      # prints the version
-.\Shipyard.exe --self-test    # offline checks: resources, web assets, parsers; exit code 0 on success
+.\PullYard.exe --version      # prints the version
+.\PullYard.exe --self-test    # offline checks: resources, web assets, parsers; exit code 0 on success
 ```
 
-Set `SHIPYARD_TOKEN` before `--self-test` to also run the read-only GitHub API checks from the macOS `--selftest`. `SHIPYARD_DEMO_REPO` and `SHIPYARD_DEMO_FOLDER` work as on macOS. `SHIPYARD_DEVTOOLS=1` enables the WebView2 developer tools.
+Set `PULLYARD_TOKEN` (the old `SHIPYARD_` names still work) before `--self-test` to also run the read-only GitHub API checks from the macOS `--selftest`. `PULLYARD_DEMO_REPO` and `PULLYARD_DEMO_FOLDER` work as on macOS. `PULLYARD_DEVTOOLS=1` enables the WebView2 developer tools.
 
 ### Installer
 
-The installer is built with [Inno Setup 6](https://jrsoftware.org/isinfo.php) from `windows/installer/Shipyard.iss`:
+The installer is built with [Inno Setup 6](https://jrsoftware.org/isinfo.php) from `windows/installer/setup.iss`:
 
 ```powershell
-iscc /DArch=x64 /DAppVersion=2.5.0 /DSourceDir=$PWD\windows\dist\x64\app /DOutputDir=$PWD\windows\dist\out windows\installer\Shipyard.iss
+iscc /DArch=x64 /DAppVersion=2.5.0 /DSourceDir=$PWD\windows\dist\x64\app /DOutputDir=$PWD\windows\dist\out windows\installer\PullYard.iss
 ```
 
 ### CI
 
-`.github/workflows/windows.yml` runs the unit tests, publishes x64 and arm64, runs the smoke tests (version, self test including a ConPTY round trip, opening the window, silent install and uninstall), drives a short UI tour against the repository's own pull requests (`--smoke-tour`, screenshots uploaded as the `ui-tour-screenshots` artifact) and uploads `Shipyard-windows-<arch>-setup.exe` and `Shipyard-windows-<arch>-portable.zip` as artifacts. On a `v*` tag it also attaches them to the existing GitHub release for that tag (it does not create releases).
+`.github/workflows/windows.yml` runs the unit tests, publishes x64 and arm64, runs the smoke tests (version, self test including a ConPTY round trip, opening the window, silent install and uninstall), drives a short UI tour against the repository's own pull requests (`--smoke-tour`, screenshots uploaded as the `ui-tour-screenshots` artifact) and uploads `PullYard-windows-<arch>-setup.exe` and `PullYard-windows-<arch>-portable.zip` as artifacts. On a `v*` tag it also attaches them to the existing GitHub release for that tag (it does not create releases).
 
 ## Renaming
 
-The product name, app ID, executable name, URL scheme, environment variable prefix and GitHub owner/repo live in one file, `windows/Branding.props`. The C# code reads them at runtime from assembly metadata (`Shipyard.Core.AppInfo`), the CI passes them to the installer, and the updater uses them for the release URL and asset names. After a rename, also update the text in this README.
+The product name (PullYard), app ID (`PullYard.PullYard`), executable name, URL scheme (`pullyard://`), environment variable prefix (`PULLYARD_`) and GitHub owner/repo (`pullyard/pullyard`) live in one file, `windows/Branding.props` (`Brand*` properties). The C# code reads them at runtime from assembly metadata (`Shipyard.Core.AppInfo`), the CI passes them to the installer, and the updater uses them for the release URL and asset names. After a rename, also update the text in this README. The C# project, folder and namespace names (`Shipyard`, `Shipyard.Core`) are internal code names and don't appear in the product.
 
 Settings, the token and WebView2 data are stored under the display name (`%LOCALAPPDATA%\<name>`, credential `<AppId>:github-token`), so a rename starts with a fresh profile.
 
@@ -87,7 +87,7 @@ windows/
   src/Shipyard.Core/        platform-independent logic: GitHub API + models, HTML renderers, git, Claude (CLI launcher, sessions, chat protocol, ConPTY), updater
   src/Shipyard/             WinUI 3 app: views, view models, services (credentials, tray, notifications, theme), Web/ (HTML/JS for WebView2)
   tests/Shipyard.Core.Tests xUnit tests
-  installer/Shipyard.iss    Inno Setup script
+  installer/setup.iss    Inno Setup script
   tools/                    icon packer, resource generator
 ```
 

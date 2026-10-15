@@ -4,22 +4,22 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version Condition="'$(Version)' == ''">$(ShipyardVersion)</Version>
-    <Company>$(ShipyardPublisher)</Company>
-    <Product>$(ShipyardDisplayName)</Product>
+    <Version Condition="'$(Version)' == ''">$(BrandVersion)</Version>
+    <Company>$(BrandPublisher)</Company>
+    <Product>$(BrandDisplayName)</Product>
     <Copyright>MIT License</Copyright>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <NoWarn>$(NoWarn);CS1591;CA1416;MVVMTK0042;MVVMTK0045;MVVMTK0049;MVVMTK0050;CS8618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <AssemblyMetadata Include="DisplayName" Value="$(ShipyardDisplayName)" />
-    <AssemblyMetadata Include="Tagline" Value="$(ShipyardTagline)" />
-    <AssemblyMetadata Include="AppId" Value="$(ShipyardAppId)" />
-    <AssemblyMetadata Include="ExeName" Value="$(ShipyardExeName)" />
-    <AssemblyMetadata Include="UrlScheme" Value="$(ShipyardUrlScheme)" />
-    <AssemblyMetadata Include="EnvPrefix" Value="$(ShipyardEnvPrefix)" />
-    <AssemblyMetadata Include="Publisher" Value="$(ShipyardPublisher)" />
-    <AssemblyMetadata Include="GitHubOwner" Value="$(ShipyardGitHubOwner)" />
-    <AssemblyMetadata Include="GitHubRepo" Value="$(ShipyardGitHubRepo)" />
+    <AssemblyMetadata Include="DisplayName" Value="$(BrandDisplayName)" />
+    <AssemblyMetadata Include="Tagline" Value="$(BrandTagline)" />
+    <AssemblyMetadata Include="AppId" Value="$(BrandAppId)" />
+    <AssemblyMetadata Include="ExeName" Value="$(BrandExeName)" />
+    <AssemblyMetadata Include="UrlScheme" Value="$(BrandUrlScheme)" />
+    <AssemblyMetadata Include="EnvPrefix" Value="$(BrandEnvPrefix)" />
+    <AssemblyMetadata Include="Publisher" Value="$(BrandPublisher)" />
+    <AssemblyMetadata Include="GitHubOwner" Value="$(BrandGitHubOwner)" />
+    <AssemblyMetadata Include="GitHubRepo" Value="$(BrandGitHubRepo)" />
   </ItemGroup>
 </Project>

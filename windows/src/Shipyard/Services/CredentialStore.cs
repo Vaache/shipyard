@@ -38,7 +38,7 @@ public static class CredentialStore
     [DllImport("advapi32.dll")]
     private static extern void CredFree(IntPtr buffer);
 
-    private static string Target => $"{AppInfo.AppId}:github-token";
+    private static string Target => $"{AppInfo.DisplayName}:github-token";
 
     public static void Save(string token)
     {
