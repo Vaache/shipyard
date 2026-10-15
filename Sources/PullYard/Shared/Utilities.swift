@@ -64,6 +64,10 @@ enum Fmt {
     }
 }
 
+enum Support {
+    static let pizzaURL = "https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1"
+}
+
 func openInBrowser(_ s: String?) {
     guard let s, let u = URL(string: s) else { return }
     LinkBrowser.open(u)

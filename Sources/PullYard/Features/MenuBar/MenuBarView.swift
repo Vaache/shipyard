@@ -83,6 +83,7 @@ struct MenuBarView: View {
             HStack {
                 Button("Open window") { show(nil) }
                 Spacer()
+                Button("Buy me a pizza 🍕") { openInBrowser(Support.pizzaURL) }.foregroundStyle(Color.syMuted)
                 Button("Quit") { NSApp.terminate(nil) }.foregroundStyle(Color.syMuted)
             }
             .buttonStyle(.borderless)
