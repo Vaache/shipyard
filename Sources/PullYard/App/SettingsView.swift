@@ -136,6 +136,20 @@ struct SettingsView: View {
             } header: {
                 SettingsHeader(title: "OAuth Device Flow", icon: "key.fill", color: .syAmber)
             }
+            Section {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Buy me a pizza 🍕").foregroundStyle(Color.syText)
+                        Text("Pay what you want, from $3. PullYard stays free and open source.")
+                            .font(.caption)
+                            .foregroundStyle(Color.syMuted)
+                    }
+                    Spacer()
+                    Button("Support…") { openInBrowser(Support.pizzaURL) }
+                }
+            } header: {
+                SettingsHeader(title: "Support PullYard", icon: "heart.fill", color: .syCoral)
+            }
         }
         .formStyle(.grouped)
         .surface(.panel)

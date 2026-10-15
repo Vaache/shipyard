@@ -30,6 +30,7 @@ struct PullYardApp: App {
         .commands {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesButton()
+                Button("Buy Me a Pizza…") { openInBrowser(Support.pizzaURL) }
             }
             CommandGroup(after: .toolbar) {
                 Button("Refresh") { app.refresh() }
