@@ -725,6 +725,7 @@ impl App {
         add("check-updates", &[], Box::new(|| ui::update::show(true)));
         add("show-update", &[], Box::new(|| ui::update::show(false)));
         add("about", &[], Box::new(|| ui::main_view::about()));
+        add("donate", &[], Box::new(|| util::open_in_default_browser(brand::DONATE_URL)));
         add("quit", &["<Control>q"], Box::new(quit));
         let me = self.clone();
         add(
