@@ -144,6 +144,23 @@ impl PrModel {
         })
     }
 
+    pub fn inject(self: &Rc<Self>, resp: PrDetailResponse, files: Vec<PrFile>) {
+        *self.viewer_login.borrow_mut() = resp.viewer.login.clone();
+        let Some(mut repo) = resp.repository else { return };
+        let Some(pr) = repo.pull_request.take() else { return };
+        *self.html.borrow_mut() = conversation_html::render_pr(&pr, Look::current());
+        *self.viewed.borrow_mut() = pr.files.as_ref().map(|f| f.nodes.iter().filter(|v| v.viewer_viewed_state == "VIEWED").map(|v| v.path.clone()).collect()).unwrap_or_default();
+        self.index_threads(&pr.review_threads.nodes);
+        *self.files_oid.borrow_mut() = Some(pr.head_ref_oid.clone());
+        *self.repo.borrow_mut() = Some(repo);
+        *self.pr.borrow_mut() = Some(pr);
+        self.last_updated.set(Some(Utc::now()));
+        *self.files.borrow_mut() = files.iter().map(DiffFile::new).collect();
+        self.files_loaded.set(true);
+        self.emit(Change::Pr);
+        self.emit(Change::Files);
+    }
+
     pub fn emit(&self, c: Change) {
         self.changed.emit(&c);
     }

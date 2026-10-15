@@ -7,6 +7,7 @@ mod conversation_html;
 mod demo;
 mod diff;
 mod fix_prompt;
+mod fixtures;
 mod host;
 mod icons;
 mod local_repo;

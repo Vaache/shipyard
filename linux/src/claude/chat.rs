@@ -572,6 +572,12 @@ impl ChatSession {
         self.emit(Event::State);
     }
 
+    pub fn feed(&self, line: &str) {
+        if let Ok(v) = serde_json::from_str::<Value>(line) {
+            self.handle(&v);
+        }
+    }
+
     fn handle(&self, o: &Value) {
         self.last_activity.set(Instant::now());
         match o.get("type").and_then(|t| t.as_str()) {

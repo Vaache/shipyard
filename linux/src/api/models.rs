@@ -1373,6 +1373,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn decodes_fixtures() {
+        let r: PrDetailResponse = serde_json::from_str(crate::fixtures::PR_DETAIL).unwrap();
+        let pr = r.repository.unwrap().pull_request.unwrap();
+        assert_eq!(pr.checks().len(), 3);
+        assert_eq!(pr.review_threads.nodes.len(), 2);
+        assert_eq!(pr.timeline_items.nodes.len(), 6);
+        assert_eq!(pr.all_commits.nodes.len(), 2);
+        let files: Vec<PrFile> = serde_json::from_str(crate::fixtures::PR_FILES).unwrap();
+        assert_eq!(files[1].previous_filename.as_deref(), Some("README.txt"));
+        assert!(files[2].patch.is_none());
+        let html = crate::conversation_html::render_pr(&pr, crate::conversation_html::Look { dark: true, brand: true });
+        assert!(html.contains("requested changes"));
+        assert!(crate::fix_prompt::latest(&pr).is_some());
+    }
+
+    #[test]
     fn decodes_search() {
         let json = r#"{"search":{"issueCount":2,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
             {"__typename":"PullRequest","number":5,"title":"Fix","url":"https://github.com/a/b/pull/5","prState":"OPEN","isDraft":false,

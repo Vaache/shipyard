@@ -377,6 +377,13 @@ pub fn pr_model(r: &ItemRef) -> Option<Rc<PrModel>> {
     Some(m)
 }
 
+pub fn insert_pr_model(m: Rc<PrModel>) {
+    let a = get();
+    let mut models = a.pr_models.borrow_mut();
+    models.retain(|(k, _)| *k != m.r);
+    models.push((m.r.clone(), m));
+}
+
 impl App {
     pub fn present(&self) {
         if let Some(w) = self.window.borrow().clone() {
