@@ -161,12 +161,12 @@ public sealed partial class PRDetailViewModel : ObservableObject
             RefreshError = null;
             LastUpdated = DateTimeOffset.Now;
             NotifyDerived();
-            _ = LoadStack();
+            LoadStack().Forget();
             ScheduleMergeRecheck(pr);
             var filesStale = reloadFiles || (filesOid is not null && filesOid != pr.HeadRefOid);
             reloadFiles = false;
-            if (FilesLoaded && filesStale) _ = LoadFiles(true);
-            else if (!FilesLoaded && !FilesLoading) _ = LoadFiles();
+            if (FilesLoaded && filesStale) LoadFiles(true).Forget();
+            else if (!FilesLoaded && !FilesLoading) LoadFiles().Forget();
             else DiffVersion++;
         }
         catch (OperationCanceledException)
@@ -205,7 +205,7 @@ public sealed partial class PRDetailViewModel : ObservableObject
         mergeRecheck?.Cancel();
         var cts = new CancellationTokenSource();
         mergeRecheck = cts;
-        _ = Recheck(delay, cts.Token);
+        Recheck(delay, cts.Token).Forget();
     }
 
     private async Task Recheck(TimeSpan delay, CancellationToken ct)

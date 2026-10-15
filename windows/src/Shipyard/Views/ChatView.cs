@@ -117,7 +117,7 @@ public sealed class ChatView : Grid
                 AppViewModel.Shared.Claude.Restart(tab);
                 break;
             case "checkAuth":
-                _ = ClaudeAccountStore.Shared.Refresh();
+                ClaudeAccountStore.Shared.Refresh().Forget();
                 break;
             case "open":
                 if (msg.Str("path") is { } path) Proc.OpenUrl(path);
@@ -351,7 +351,7 @@ public sealed class ChatView : Grid
             }
             left.Children.Add(Small("\uEC4A", chat.Effort.Length == 0 ? "effort" : chat.Effort, effortMenu, L.T("Claude_Effort", "Effort")));
         }
-        left.Children.Add(Ui.IconButton("\uEB9F", L.T("Chat_AttachImage", "Attach image"), () => _ = PickImages()));
+        left.Children.Add(Ui.IconButton("\uEB9F", L.T("Chat_AttachImage", "Attach image"), () => PickImages().Forget()));
         var right = Ui.H(6, UsageRing());
         if (chat.Busy) right.Children.Add(Ui.IconButton("\uE71A", L.T("Chat_Stop", "Stop (Esc)"), chat.Interrupt, "red"));
         var send = new Button { Content = Ui.Glyph("\uE724", 13, "text"), Style = (Style)Application.Current.Resources["AccentButtonStyle"], Padding = new Thickness(10, 5, 10, 5) };
@@ -582,7 +582,7 @@ public sealed class ChatView : Grid
         else if (token.StartsWith('@'))
         {
             completionKind = "file";
-            if (files.Count == 0 && !filesLoading) _ = LoadFiles();
+            if (files.Count == 0 && !filesLoading) LoadFiles().Forget();
             items = RepoCodeViewModel.FuzzyMatch(token[1..], files, 12).Select(p => new Completion(p.Contains('/') ? p[(p.LastIndexOf('/') + 1)..] : p, p, "@" + p + " ")).ToList();
         }
         else
@@ -649,7 +649,7 @@ public sealed class ChatView : Grid
         foreach (var img in attached)
         {
             var bmp = new BitmapImage();
-            _ = SetImage(bmp, img.Data);
+            SetImage(bmp, img.Data).Forget();
             var picture = new Image { Source = bmp, Width = 52, Height = 52, Stretch = Stretch.UniformToFill };
             var remove = Ui.IconButton("", L.T("Chat_RemoveImage", "Remove"), () =>
             {

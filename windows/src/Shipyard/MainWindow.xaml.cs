@@ -51,11 +51,11 @@ public sealed partial class MainWindow : Window
             if (e.PropertyName == nameof(AppViewModel.Phase)) UpdateContent();
         };
         model.ActivateRequested += () => App.ShowMainWindow();
-        model.Updater.PresentRequested += () => _ = UpdateDialog.Show(RootGrid.XamlRoot);
-        model.SettingsRequested += () => _ = SettingsDialog.Show(RootGrid.XamlRoot);
-        model.OpenLinkRequested += () => _ = OpenLinkDialog.Show(RootGrid.XamlRoot);
+        model.Updater.PresentRequested += () => UpdateDialog.Show(RootGrid.XamlRoot).Forget();
+        model.SettingsRequested += () => SettingsDialog.Show(RootGrid.XamlRoot).Forget();
+        model.OpenLinkRequested += () => OpenLinkDialog.Show(RootGrid.XamlRoot).Forget();
         Host.Content = new SplashView();
-        _ = HoldSplash();
+        HoldSplash().Forget();
     }
 
     private async Task HoldSplash()
@@ -102,7 +102,7 @@ public sealed partial class MainWindow : Window
         model.IsActive = active;
         if (!active) return;
         model.DidBecomeActive();
-        _ = CheckClipboard();
+        CheckClipboard().Forget();
     }
 
     private async Task CheckClipboard()

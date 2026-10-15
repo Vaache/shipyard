@@ -219,7 +219,7 @@ public sealed partial class ClaudeWorkspace : ObservableObject
 
     public void StartMonitoring()
     {
-        monitor ??= new Timer(_ => Ui(() => _ = Tick()), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+        monitor ??= new Timer(_ => Ui(() => Tick().Forget()), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
     }
 
     public async Task Tick()
@@ -280,7 +280,7 @@ public sealed partial class ClaudeWorkspace : ObservableObject
         g = new GitWorkingCopy(folder);
         gits[folder] = g;
         g.StartWatching();
-        _ = g.Refresh();
+        g.Refresh().Forget();
         return g;
     }
 
@@ -445,7 +445,7 @@ public sealed partial class ClaudeWorkspace : ObservableObject
         if (select) SelectedTab = tab;
         StartMonitoring();
         TabOpened?.Invoke(tab);
-        _ = Task.Delay(4000).ContinueWith(_ => Ui(() => _ = ReloadProjects()), TaskScheduler.Default);
+        Task.Delay(4000).ContinueWith(_ => Ui(() => _ = ReloadProjects()), TaskScheduler.Default).Forget();
         return tab;
     }
 
@@ -453,7 +453,7 @@ public sealed partial class ClaudeWorkspace : ObservableObject
     {
         if (tab.Chat is not { } chat) return;
         chat.OnSessionId += sid => tab.SessionId = sid;
-        chat.OnTurnFinished += () => _ = tab.Git.Refresh();
+        chat.OnTurnFinished += () => tab.Git.Refresh().Forget();
         var m = modeOverride ?? Mode;
         chat.Start(resume, fork,
             Model == ClaudeModelOption.Standard ? null : Model.Raw(),

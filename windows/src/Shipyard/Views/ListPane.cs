@@ -61,7 +61,7 @@ public abstract class ListPane : Grid
         SetRow(area, 3);
         Children.Add(area);
 
-        Footer.Retry = () => _ = OnPullRefresh();
+        Footer.Retry = () => OnPullRefresh().Forget();
         SetRow(Footer, 4);
         Children.Add(Footer);
 
@@ -85,7 +85,7 @@ public abstract class ListPane : Grid
     {
     }
 
-    private void OnManualRefresh() => _ = OnPullRefresh();
+    private void OnManualRefresh() => OnPullRefresh().Forget();
 
     protected virtual void OnLiveTick()
     {

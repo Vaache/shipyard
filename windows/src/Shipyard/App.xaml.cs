@@ -149,11 +149,11 @@ public partial class App : Application
             AddSection(L.T("Tray_MyOpenPRs", "My open PRs"), m.MyPRCount, m.MyPRs, PRFilter.Mine);
             var unread = m.UnreadCount >= 50 ? "50+" : m.UnreadCount.ToString();
             items.Add(new() { Text = L.T("Section_Notifications", "Notifications") + (m.UnreadCount > 0 ? $"  ({unread})" : ""), Action = () => { m.Section = Section.Notifications; ShowMainWindow(); } });
-            items.Add(new() { Text = L.T("Common_Refresh", "Refresh"), Action = () => _ = m.RefreshBadges() });
+            items.Add(new() { Text = L.T("Common_Refresh", "Refresh"), Action = () => m.RefreshBadges().Forget() });
         }
         items.Add(new() { Separator = true });
         items.Add(new() { Text = L.F("Tray_Open", "Open {0}", AppInfo.DisplayName), Action = ShowMainWindow });
-        items.Add(new() { Text = L.T("Menu_CheckForUpdates", "Check for Updates…"), Action = () => { ShowMainWindow(); _ = m.Updater.Check(true); } });
+        items.Add(new() { Text = L.T("Menu_CheckForUpdates", "Check for Updates…"), Action = () => { ShowMainWindow(); m.Updater.Check(true).Forget(); } });
         items.Add(new() { Text = L.T("Tray_Quit", "Quit"), Action = Quit });
         return items;
     }

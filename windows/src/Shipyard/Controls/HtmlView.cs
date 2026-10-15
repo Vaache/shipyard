@@ -27,7 +27,7 @@ public sealed class HtmlView : Grid
         this.page = page;
         web.DefaultBackgroundColor = Microsoft.UI.Colors.Transparent;
         Children.Add(web);
-        Loaded += (_, _) => _ = EnsureInitialized();
+        Loaded += (_, _) => EnsureInitialized().Forget();
         ThemeService.Changed += OnTheme;
         Unloaded += (_, _) => ThemeService.Changed -= OnTheme;
         Loaded += (_, _) =>
@@ -119,7 +119,7 @@ public sealed class HtmlView : Grid
         else
         {
             queue.Add(json);
-            _ = EnsureInitialized();
+            EnsureInitialized().Forget();
         }
     }
 

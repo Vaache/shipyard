@@ -29,7 +29,7 @@ public sealed class ClaudeSessionsView : ListPane
             query = t.Trim();
             Render();
         }, 200));
-        var open = Ui.IconButton("", L.T("Claude_OpenFolder", "New session in folder…"), () => _ = OpenFolder(), "text");
+        var open = Ui.IconButton("", L.T("Claude_OpenFolder", "New session in folder…"), () => OpenFolder().Forget(), "text");
         Tools.Children.Add(open);
         List.SelectionMode = ListViewSelectionMode.None;
         List.ItemClick += (_, e) =>
@@ -77,7 +77,7 @@ public sealed class ClaudeSessionsView : ListPane
         stateTimer.Start();
         RenderAccount();
         Render();
-        _ = Initial();
+        Initial().Forget();
     }
 
     private void Detach(object sender, RoutedEventArgs e)
@@ -239,10 +239,10 @@ public static class ClaudeAccountCard
         var more = Ui.IconButton("", L.T("Common_More", "More"), () => { }, "text");
         var menu = ProfileMenu();
         menu.Items.Add(Ui.Separator());
-        menu.Items.Add(Ui.MenuItem(L.T("Claude_SignOutThis", "Sign out of this account…"), () => _ = ConfirmSignOut()));
+        menu.Items.Add(Ui.MenuItem(L.T("Claude_SignOutThis", "Sign out of this account…"), () => ConfirmSignOut().Forget()));
         menu.Items.Add(Ui.Separator());
         menu.Items.Add(Ui.MenuItem(L.T("Claude_UsagePage", "Usage page"), () => LinkBrowser.Open("https://claude.ai/settings/usage")));
-        menu.Items.Add(Ui.MenuItem(L.T("Claude_RefreshStatus", "Refresh status"), () => _ = ClaudeAccountStore.Shared.Refresh()));
+        menu.Items.Add(Ui.MenuItem(L.T("Claude_RefreshStatus", "Refresh status"), () => ClaudeAccountStore.Shared.Refresh().Forget()));
         more.Flyout = menu;
         var grid = Ui.Columns((ProfileBadge(profile, compact ? 26 : 34), Ui.Auto), (Ui.V(1, nameRow, sub), Ui.Star), (more, Ui.Auto));
         grid.ColumnSpacing = 10;
@@ -271,11 +271,11 @@ public static class ClaudeAccountCard
             var id = p.Id;
             menu.Items.Add(Ui.CheckItem(p.MenuTitle, id == profiles.ActiveId, () => app.SwitchClaudeProfile(id)));
         }
-        menu.Items.Add(Ui.MenuItem(L.T("Claude_AddAccountMenu", "Add account…"), () => _ = ClaudeDialogs.AddProfile(App.MainWindow?.Content?.XamlRoot)));
+        menu.Items.Add(Ui.MenuItem(L.T("Claude_AddAccountMenu", "Add account…"), () => ClaudeDialogs.AddProfile(App.MainWindow?.Content?.XamlRoot).Forget()));
         if (!profiles.Active.IsDefault)
         {
             var active = profiles.Active;
-            menu.Items.Add(Ui.MenuItem(L.F("Claude_RemoveAccount", "Remove “{0}”…", active.Label), () => _ = ClaudeDialogs.RemoveProfile(App.MainWindow?.Content?.XamlRoot, active)));
+            menu.Items.Add(Ui.MenuItem(L.F("Claude_RemoveAccount", "Remove “{0}”…", active.Label), () => ClaudeDialogs.RemoveProfile(App.MainWindow?.Content?.XamlRoot, active).Forget()));
         }
         return menu;
     }

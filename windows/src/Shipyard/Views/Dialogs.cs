@@ -309,7 +309,7 @@ public static class Dialogs
             if (log is not null) WindowInterop.Copy(log);
         };
         html.Render("<div class=\"tl\"><p class=\"empty\">Loading…</p></div>");
-        _ = Task.Run(async () =>
+        Task.Run(async () =>
         {
             try
             {
@@ -331,7 +331,7 @@ public static class Dialogs
             log = result;
             d.IsPrimaryButtonEnabled = true;
             Render();
-        }), TaskScheduler.Default);
+        }), TaskScheduler.Default).Forget();
         await ShowAsync(d);
     }
 
@@ -395,7 +395,8 @@ public static class Dialogs
         promptBox.FontSize = 11.5;
         promptBox.MaxHeight = 260;
         var editedChip = Ui.Chip(L.T("Fix_Edited", "edited"), "amber");
-        var reset = Ui.Link(L.T("Fix_Reset", "Reset"), () => { custom = null; Regenerate(); });
+        var reset = new HyperlinkButton { Content = L.T("Fix_Reset", "Reset"), Padding = new Thickness(0), FontSize = 12 };
+        var boxes = new List<(CheckBox, string)>();
         var charCount = Ui.Text("", 11, "dim");
         var updating = false;
 
@@ -415,6 +416,12 @@ public static class Dialogs
             reset.Visibility = editedChip.Visibility;
             charCount.Text = promptBox.Text.Length.ToString();
         }
+
+        reset.Click += (_, _) =>
+        {
+            custom = null;
+            Regenerate();
+        };
 
         promptBox.TextChanged += (_, _) =>
         {
@@ -453,7 +460,6 @@ public static class Dialogs
         }
         composedBox.Children.Add(Ui.Columns((Ui.Text(L.T("Fix_Unresolved", "Unresolved comments"), 12, "muted", FontWeights.SemiBold), Ui.Star),
             (Ui.H(8, Ui.Link(L.T("Fix_All", "All"), () => SetAll(true)), Ui.Link(L.T("Fix_None", "None"), () => SetAll(false))), Ui.Auto)));
-        var boxes = new List<(CheckBox, string)>();
         if (threads.Count == 0) threadPanel.Children.Add(Ui.Text(L.T("Fix_NoUnresolved", "No unresolved comments"), 13, "dim"));
         foreach (var th in threads)
         {
@@ -587,7 +593,7 @@ public static class Dialogs
                 args.Cancel = true;
             }
         };
-        _ = DetectFolder();
+        DetectFolder().Forget();
         async Task DetectFolder()
         {
             var f = await LocalRepoStore.Detect(model.Ref.Repo);

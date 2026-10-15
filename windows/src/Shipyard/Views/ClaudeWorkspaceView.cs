@@ -284,7 +284,7 @@ public sealed class ClaudeWorkspaceView : Grid
     private MenuFlyout MoreMenu(ClaudeTab tab)
     {
         var menu = new MenuFlyout();
-        menu.Items.Add(Ui.MenuItem(L.T("Claude_RestartNewSettings", "Restart with new settings"), () => _ = RestartTab(tab)));
+        menu.Items.Add(Ui.MenuItem(L.T("Claude_RestartNewSettings", "Restart with new settings"), () => RestartTab(tab).Forget()));
         menu.Items.Add(Ui.MenuItem(L.T("Claude_FreeMemoryNow", "Free memory now"), tab.SleepNow, enabled: tab.Running && tab.State is not (ClaudeTabState.Working or ClaudeTabState.Waiting)));
         var sleep = new MenuFlyoutSubItem { Text = L.T("Claude_SleepAfterIdle", "Sleep after idle") };
         foreach (var m in new[] { 0, 5, 15, 30, 60 })
@@ -345,7 +345,7 @@ public sealed class ClaudeAuthView : Grid
             ClaudeProfiles.Shared.PropertyChanged -= OnStore;
             ClaudeProfiles.Shared.PropertyChanged += OnStore;
             Render();
-            _ = ClaudeAccountStore.Shared.Refresh();
+            ClaudeAccountStore.Shared.Refresh().Forget();
         };
         Unloaded += (_, _) =>
         {
@@ -377,7 +377,7 @@ public sealed class ClaudeAuthView : Grid
                     Ui.Text(L.T("Claude_InstallHelp", "Install the CLI from PowerShell, then press “Check again”."), 13, "muted", wrap: true),
                     Ui.Card(Ui.Text(InstallCommand, 13, "text", mono: true, select: true), 8, "sunken", 8),
                     Ui.Columns((Ui.H(8, Ui.Button(L.T("Claude_CopyCommand", "Copy command"), () => WindowInterop.Copy(InstallCommand)), Ui.Button(L.T("Claude_Docs", "Docs"), () => LinkBrowser.Open("https://code.claude.com/docs/en/setup"))), Ui.Star),
-                        (Ui.Button(L.T("Claude_CheckAgain", "Check again"), () => _ = store.Refresh(), accent: true), Ui.Auto))));
+                        (Ui.Button(L.T("Claude_CheckAgain", "Check again"), () => store.Refresh().Forget(), accent: true), Ui.Auto))));
                 break;
             case ClaudeAccountStatus.Unknown:
             case ClaudeAccountStatus.Checking:

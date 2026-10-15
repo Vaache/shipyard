@@ -118,7 +118,7 @@ public sealed class ChangesPanel : Grid
         {
             tab.Git.PropertyChanged -= OnGit;
             tab.Git.PropertyChanged += OnGit;
-            _ = tab.Git.Refresh();
+            tab.Git.Refresh().Forget();
         };
         Render();
     }
@@ -136,7 +136,7 @@ public sealed class ChangesPanel : Grid
         if (git.Loading) summary.Children.Add(Ui.Spinner(12));
         summary.Children.Add(Ui.Caption(git.Changes.Count == 0 ? L.T("Changes_None", "No uncommitted changes") : Fmt.Plural(git.Changes.Count, "file changed", "files changed")));
         if (git.Changes.Count > 0) summary.Children.Add(Ui.DiffStat(git.TotalAdditions, git.TotalDeletions));
-        header.Children.Add(Ui.Columns((summary, Ui.Star), (Ui.IconButton("", L.T("Common_Refresh", "Refresh"), () => _ = git.Refresh()), Ui.Auto)));
+        header.Children.Add(Ui.Columns((summary, Ui.Star), (Ui.IconButton("", L.T("Common_Refresh", "Refresh"), () => git.Refresh().Forget()), Ui.Auto)));
         if (git.Unpushed.Count > 0)
         {
             header.Children.Add(Ui.Text(L.F("Changes_Unpushed", "Unpushed commits · {0}", git.Unpushed.Count), 12, "muted", FontWeights.SemiBold));
@@ -193,7 +193,7 @@ public sealed class LocalFilesPanel : Grid
             else
             {
                 file = item.Entry.Path;
-                _ = ShowFile();
+                ShowFile().Forget();
             }
         };
         SetRow(list, 1);
@@ -315,7 +315,7 @@ public sealed class BranchPRPanel : Grid
                 Ui.MenuItem(L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(p.Item.Url)),
                 Ui.MenuItem(L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(p.Item.Url))).ShowAt((FrameworkElement)args.OriginalSource);
         };
-        status.Retry = () => _ = Load();
+        status.Retry = () => Load().Forget();
         Loaded += (_, _) =>
         {
             tab.Git.PropertyChanged -= OnGit;
@@ -326,7 +326,7 @@ public sealed class BranchPRPanel : Grid
             app.LiveTick += OnLive;
             app.RefreshRequested -= OnLive;
             app.RefreshRequested += OnLive;
-            _ = Load();
+            Load().Forget();
         };
         Unloaded += (_, _) =>
         {
@@ -342,7 +342,7 @@ public sealed class BranchPRPanel : Grid
 
     private void OnLive()
     {
-        if (selected is null) _ = Load();
+        if (selected is null) Load().Forget();
     }
 
     private void OnGit(object? sender, PropertyChangedEventArgs e)
@@ -351,13 +351,13 @@ public sealed class BranchPRPanel : Grid
         {
             var key = $"{Repo?.Full}|{tab.Git.Branch}|{tab.Git.Ahead}";
             if (key == loadedKey) return;
-            _ = Load();
+            Load().Forget();
         }
     }
 
     private void OnTab(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ClaudeTab.State) && !tab.Busy && selected is null) _ = LoadBranch();
+        if (e.PropertyName == nameof(ClaudeTab.State) && !tab.Busy && selected is null) LoadBranch().Forget();
     }
 
     private async Task Load()
@@ -477,7 +477,7 @@ public sealed class BranchPRPanel : Grid
             if (s.SelectedItem?.Tag is string id && id != scope)
             {
                 scope = id;
-                _ = LoadList();
+                LoadList().Forget();
             }
         };
         if (error is { } err) items.Add(new TextRowItem(err));
@@ -559,8 +559,8 @@ public sealed class InspectorPRDetail : Grid
             model.PropertyChanged += OnModel;
             app.LiveTick -= OnLive;
             app.LiveTick += OnLive;
-            status.Retry = () => _ = model.Load(true);
-            _ = model.Load();
+            status.Retry = () => model.Load(true).Forget();
+            model.Load().Forget();
             Render();
         };
         Unloaded += (_, _) =>
@@ -570,7 +570,7 @@ public sealed class InspectorPRDetail : Grid
         };
     }
 
-    private void OnLive() => _ = model?.Load();
+    private void OnLive() => model?.Load().Forget();
 
     private void OnModel(object? sender, PropertyChangedEventArgs e)
     {
@@ -592,7 +592,7 @@ public sealed class InspectorPRDetail : Grid
                 if (model.ActionError is { } err)
                 {
                     model.ActionError = null;
-                    _ = Dialogs.Alert(XamlRoot, L.T("Common_Error", "Error"), err);
+                    Dialogs.Alert(XamlRoot, L.T("Common_Error", "Error"), err).Forget();
                 }
                 break;
         }
@@ -604,7 +604,7 @@ public sealed class InspectorPRDetail : Grid
         body.Children.Clear();
         if (model.Pr is not { } pr)
         {
-            body.Children.Add(model.Error is { } e ? Ui.Error(e, () => _ = model.Load()) : Ui.Loading());
+            body.Children.Add(model.Error is { } e ? Ui.Error(e, () => model.Load().Forget()) : Ui.Loading());
             return;
         }
         var unresolved = pr.ReviewThreads.Items.Where(t => !t.IsResolved).ToList();
@@ -673,7 +673,7 @@ public sealed class InspectorPRDetail : Grid
         filesHeader.Expanding += (_, _) =>
         {
             showFiles = true;
-            _ = model.LoadFiles();
+            model.LoadFiles().Forget();
         };
         filesHeader.Collapsed += (_, _) => showFiles = false;
         body.Children.Add(filesHeader);

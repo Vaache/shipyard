@@ -50,7 +50,7 @@ public sealed partial class AppViewModel : ObservableObject
     {
         Claude = new ClaudeWorkspace();
         ClaudeAccountStore.Shared.Attach(SynchronizationContext.Current!);
-        _ = Restore();
+        Restore().Forget();
     }
 
     public bool HasProjectScope => Scopes.Count == 0 || Scopes.Contains("read:project") || Scopes.Contains("project");
@@ -123,7 +123,7 @@ public sealed partial class AppViewModel : ObservableObject
     {
         lastLiveRefresh = DateTimeOffset.Now;
         RefreshRequested?.Invoke();
-        _ = RefreshBadges();
+        RefreshBadges().Forget();
     }
 
     public void Select(Route? route)
@@ -206,7 +206,7 @@ public sealed partial class AppViewModel : ObservableObject
                     "terminal" => ClaudeTabKind.Terminal,
                     _ => (ClaudeTabKind?)null
                 };
-                _ = ResumeById(id, kind);
+                ResumeById(id, kind).Forget();
             }
             ActivateRequested?.Invoke();
             return;
@@ -263,8 +263,8 @@ public sealed partial class AppViewModel : ObservableObject
         var cts = new CancellationTokenSource();
         pollCts = cts;
         lastLiveRefresh = DateTimeOffset.Now;
-        _ = RefreshBadges();
-        _ = Poll(cts.Token);
+        RefreshBadges().Forget();
+        Poll(cts.Token).Forget();
     }
 
     private async Task Poll(CancellationToken ct)
@@ -296,7 +296,7 @@ public sealed partial class AppViewModel : ObservableObject
     {
         lastLiveRefresh = DateTimeOffset.Now;
         LiveTick?.Invoke();
-        _ = RefreshBadges();
+        RefreshBadges().Forget();
     }
 
     public async Task RefreshBadges()
@@ -338,7 +338,7 @@ public sealed partial class AppViewModel : ObservableObject
         ClaudeUsageStore.Shared.Windows = new();
         ClaudeUsageStore.Shared.Subscription = null;
         ClaudeAccountStore.Shared.Status = ClaudeAccountStatus.Checking;
-        _ = SwitchProfileRefresh();
+        SwitchProfileRefresh().Forget();
     }
 
     private async Task SwitchProfileRefresh()
@@ -352,7 +352,7 @@ public sealed partial class AppViewModel : ObservableObject
         var profiles = ClaudeProfiles.Shared;
         if (profiles.Profiles.FirstOrDefault(p => p.Id == id) is not { IsDefault: false } profile) return;
         if (profiles.ActiveId == id) SwitchClaudeProfile(ClaudeProfiles.DefaultId);
-        _ = RemoveProfile(profile);
+        RemoveProfile(profile).Forget();
     }
 
     private async Task RemoveProfile(ClaudeProfile profile)

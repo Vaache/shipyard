@@ -70,7 +70,7 @@ public static class SettingsDialog
         var mode = Segmented(new[] { ("auto", L.T("Settings_MatchSystem", "Match system")), ("light", L.T("Settings_Light", "Light")), ("dark", L.T("Settings_Dark", "Dark")) },
             ThemeService.Appearance switch { AppearanceMode.Light => "light", AppearanceMode.Dark => "dark", _ => "auto" },
             v => ThemeService.Appearance = v switch { "light" => AppearanceMode.Light, "dark" => AppearanceMode.Dark, _ => AppearanceMode.Auto });
-        panel.Children.Add(Section(L.T("Settings_Appearance", "Appearance"), "", "violet", Row(L.T("Settings_Theme", "Theme"), style), Row(L.T("Settings_Mode", "Mode"), mode)));
+        panel.Children.Add(Group(L.T("Settings_Appearance", "Appearance"), "", "violet", Row(L.T("Settings_Theme", "Theme"), style), Row(L.T("Settings_Mode", "Mode"), mode)));
 
         var account = Ui.V(8);
         if (app.User is { } u)
@@ -78,7 +78,7 @@ public static class SettingsDialog
             account.Children.Add(Ui.H(10, Ui.Avatar(u.AvatarUrl, 36), Ui.V(0, Ui.Text(u.Name ?? u.Login, 14, "text", FontWeights.SemiBold), Ui.Caption("@" + u.Login))));
             account.Children.Add(Row(L.T("Settings_Scopes", "Token scopes"), Ui.Text(app.Scopes.Count == 0 ? "fine-grained / unknown" : string.Join(", ", app.Scopes), 12, "muted", wrap: true)));
             var buttons = Ui.H(8);
-            if (GhCli.Binary is not null) buttons.Children.Add(Ui.Button(L.T("Settings_RefreshFromGh", "Refresh token from gh"), () => _ = app.RefreshTokenFromGh()));
+            if (GhCli.Binary is not null) buttons.Children.Add(Ui.Button(L.T("Settings_RefreshFromGh", "Refresh token from gh"), () => app.RefreshTokenFromGh().Forget()));
             buttons.Children.Add(Ui.Button(L.T("Settings_SignOut", "Sign out"), () =>
             {
                 app.Logout();
@@ -90,14 +90,14 @@ public static class SettingsDialog
         {
             account.Children.Add(Ui.Text(L.T("Settings_NotSignedIn", "Not signed in"), 13, "muted"));
         }
-        panel.Children.Add(Section(L.T("Settings_Account", "Account"), "", "teal", account));
+        panel.Children.Add(Group(L.T("Settings_Account", "Account"), "", "teal", account));
 
         var browsers = new ComboBox { MinWidth = 240 };
         browsers.Items.Add(new ComboBoxItem { Content = L.T("Settings_SystemDefault", "System default"), Tag = LinkBrowser.SystemDefault });
         foreach (var b in LinkBrowser.Installed) browsers.Items.Add(new ComboBoxItem { Content = b.Name, Tag = b.Id });
         browsers.SelectedItem = browsers.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == LinkBrowser.Selected) ?? browsers.Items[0];
         browsers.SelectionChanged += (_, _) => LinkBrowser.Selected = (browsers.SelectedItem as ComboBoxItem)?.Tag as string ?? LinkBrowser.SystemDefault;
-        panel.Children.Add(Section(L.T("Settings_Links", "Links"), "", "indigo", Row(L.T("Settings_OpenLinksIn", "Open links in"), browsers)));
+        panel.Children.Add(Group(L.T("Settings_Links", "Links"), "", "indigo", Row(L.T("Settings_OpenLinksIn", "Open links in"), browsers)));
 
         var poll = new ComboBox { MinWidth = 240 };
         var intervals = new[] { (15.0, L.T("Settings_Every15s", "Every 15 seconds")), (30.0, L.T("Settings_Every30s", "Every 30 seconds")), (60.0, L.T("Settings_EveryMinute", "Every minute")), (120.0, L.T("Settings_Every2m", "Every 2 minutes")), (300.0, L.T("Settings_Every5m", "Every 5 minutes")), (900.0, L.T("Settings_Every15m", "Every 15 minutes")) };
@@ -114,24 +114,24 @@ public static class SettingsDialog
         };
         var tray = new ToggleSwitch { IsOn = Settings.Shared.GetBool(Keys.CloseToTray, true), OnContent = "", OffContent = "" };
         tray.Toggled += (_, _) => Settings.Shared.Set(Keys.CloseToTray, tray.IsOn);
-        panel.Children.Add(Section(L.T("Settings_Refresh", "Refresh"), "", "green", Row(L.T("Settings_AutoRefresh", "Auto-refresh pull requests"), poll), Row(L.T("Settings_CloseToTray", "Keep running in the notification area when the window is closed"), tray)));
+        panel.Children.Add(Group(L.T("Settings_Refresh", "Refresh"), "", "green", Row(L.T("Settings_AutoRefresh", "Auto-refresh pull requests"), poll), Row(L.T("Settings_CloseToTray", "Keep running in the notification area when the window is closed"), tray)));
 
-        panel.Children.Add(Section(L.T("Section_Claude", "Claude Code"), "", "coral", ClaudeSettings(app)));
+        panel.Children.Add(Group(L.T("Section_Claude", "Claude Code"), "", "coral", ClaudeSettings(app)));
 
         var auto = new ToggleSwitch { IsOn = UpdaterViewModel.AutoCheck, OnContent = "", OffContent = "" };
         auto.Toggled += (_, _) => UpdaterViewModel.AutoCheck = auto.IsOn;
         var check = Ui.Button(L.T("Settings_CheckNow", "Check Now"), () =>
         {
             CloseOpenDialog();
-            _ = app.Updater.Check(true);
+            app.Updater.Check(true).Forget();
         });
-        panel.Children.Add(Section(L.T("Settings_Updates", "Updates"), "", "green",
+        panel.Children.Add(Group(L.T("Settings_Updates", "Updates"), "", "green",
             Row(L.T("Settings_AutoUpdates", "Check for updates automatically"), auto),
             Ui.Columns((Ui.Text(L.F("Settings_CurrentVersion", "Current version {0}", AppInfo.Version), 13, "muted"), Ui.Star), (check, Ui.Auto))));
 
         var clientId = new TextBox { PlaceholderText = L.T("Login_ClientId", "Client ID"), Text = Settings.Shared.GetString(Keys.OAuthClientId) ?? "", MinWidth = 240 };
         clientId.TextChanged += (_, _) => Settings.Shared.Set(Keys.OAuthClientId, clientId.Text);
-        panel.Children.Add(Section(L.T("Settings_DeviceFlow", "OAuth Device Flow"), "", "amber", Row(L.T("Login_ClientId", "Client ID"), clientId)));
+        panel.Children.Add(Group(L.T("Settings_DeviceFlow", "OAuth Device Flow"), "", "amber", Row(L.T("Login_ClientId", "Client ID"), clientId)));
 
         var d = Dialogs.Create(root, L.T("Common_Settings", "Settings"), new ScrollViewer { Content = panel, MaxHeight = 620, Padding = new Thickness(0, 0, 12, 0) }, close: L.T("Common_Done", "Done"), maxWidth: 640);
         openDialog = d;
@@ -156,7 +156,7 @@ public static class SettingsDialog
         var add = Ui.Button(L.T("Claude_AddAccount", "Add…"), () =>
         {
             CloseOpenDialog();
-            _ = ClaudeDialogs.AddProfile(App.MainWindow?.Content?.XamlRoot);
+            ClaudeDialogs.AddProfile(App.MainWindow?.Content?.XamlRoot).Forget();
         });
         panel.Children.Add(Row(L.T("Claude_Account", "Account"), Ui.H(8, profiles, add)));
         var store = ClaudeAccountStore.Shared;
@@ -164,7 +164,7 @@ public static class SettingsDialog
         {
             case ClaudeAccountStatus.LoggedIn when store.Info is { } info:
                 panel.Children.Add(Ui.Text(info.Email ?? L.T("Claude_SignedIn", "Signed in") + (info.Subscription is { } s ? $" · {s}" : ""), 13, "text"));
-                panel.Children.Add(Ui.Button(L.T("Claude_SignOut", "Sign out of Claude Code"), () => _ = ConfirmLogout(app)));
+                panel.Children.Add(Ui.Button(L.T("Claude_SignOut", "Sign out of Claude Code"), () => ConfirmLogout(app).Forget()));
                 break;
             case ClaudeAccountStatus.NotInstalled:
                 panel.Children.Add(Ui.Text(L.T("Claude_NotInstalled", "claude CLI isn't installed"), 13, "muted"));
@@ -187,7 +187,7 @@ public static class SettingsDialog
         };
         panel.Children.Add(Row(L.T("Claude_SleepAfter", "Sleep idle sessions after"), idle));
         panel.Children.Add(Ui.Text(L.T("Claude_SleepHelp", "A sleeping session uses no memory: the claude process stops, the conversation stays, and the next message resumes it."), 12, "muted", wrap: true));
-        _ = store.Refresh();
+        store.Refresh().Forget();
         return panel;
     }
 
@@ -201,7 +201,7 @@ public static class SettingsDialog
         await ClaudeAccountStore.Shared.Logout();
     }
 
-    private static FrameworkElement Section(string title, string glyph, string color, params UIElement[] rows)
+    private static FrameworkElement Group(string title, string glyph, string color, params UIElement[] rows)
     {
         var panel = Ui.V(10, Ui.H(8, Ui.IconTile(glyph, color, 18), Ui.Text(title, 14, "text", FontWeights.SemiBold)));
         var inner = Ui.V(10);
@@ -341,16 +341,16 @@ public static class UpdateDialog
                     updater.Relaunch();
                     break;
                 case UpdateState.Failed when !updater.ShowsRelease:
-                    _ = updater.Check(true);
+                    updater.Check(true).Forget();
                     break;
                 default:
-                    _ = updater.DownloadAndInstall();
+                    updater.DownloadAndInstall().Forget();
                     break;
             }
         };
         d.SecondaryButtonClick += (_, _) => updater.Skip();
         Render();
-        if (updater.State == UpdateState.Idle) _ = updater.Check(true);
+        if (updater.State == UpdateState.Idle) updater.Check(true).Forget();
         await Dialogs.ShowAsync(d);
         updater.PropertyChanged -= handler;
         updater.Later();

@@ -71,7 +71,7 @@ public sealed class TerminalView : Grid, IDisposable
                 if (msg.Str("data") is { } text) WindowInterop.Copy(text);
                 break;
             case "paste":
-                _ = Paste();
+                Paste().Forget();
                 break;
         }
     }

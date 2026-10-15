@@ -327,7 +327,7 @@ public sealed partial class ClaudeAccountStore : ObservableObject
             var tail = string.Join("\n", output.ToString().Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0 && !l.Contains("http")).TakeLast(3));
             LoginError = tail.Length == 0 ? $"Sign-in failed (code {code})" : tail;
         }
-        _ = Refresh();
+        Refresh().Forget();
     }
 
     public async Task Logout(string? configDir = null)

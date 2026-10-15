@@ -152,10 +152,10 @@ public sealed partial class GitWorkingCopy : ObservableObject, IDisposable
     private void FireRefresh(object? state)
     {
         if (context is not null) context.Post(RefreshFromContext, null);
-        else _ = Refresh();
+        else Refresh().Forget();
     }
 
-    private void RefreshFromContext(object? state) => _ = Refresh();
+    private void RefreshFromContext(object? state) => Refresh().Forget();
 
     public void Dispose()
     {

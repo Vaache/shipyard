@@ -65,7 +65,7 @@ public sealed partial class UpdaterViewModel : ObservableObject
     {
         if (periodic is not null) return;
         periodic = new CancellationTokenSource();
-        _ = Periodic(periodic.Token);
+        Periodic(periodic.Token).Forget();
     }
 
     private async Task Periodic(CancellationToken ct)

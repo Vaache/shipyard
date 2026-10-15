@@ -48,9 +48,9 @@ public sealed class PRDetailView : Grid
         };
     }
 
-    private void OnRefresh() => _ = model?.Load(true);
+    private void OnRefresh() => model?.Load(true).Forget();
 
-    private void OnLive() => _ = model?.Load();
+    private void OnLive() => model?.Load().Forget();
 
     private void Start()
     {
@@ -59,7 +59,7 @@ public sealed class PRDetailView : Grid
         model.PropertyChanged -= OnModel;
         model.PropertyChanged += OnModel;
         Update();
-        _ = model.Load();
+        model.Load().Forget();
     }
 
     private void OnModel(object? sender, PropertyChangedEventArgs e)
@@ -84,7 +84,7 @@ public sealed class PRDetailView : Grid
             }
             return;
         }
-        root.Content = model.Error is { } e ? Ui.Error(e, () => _ = model.Load()) : Ui.Loading();
+        root.Content = model.Error is { } e ? Ui.Error(e, () => model.Load().Forget()) : Ui.Loading();
     }
 }
 
@@ -134,7 +134,7 @@ public sealed class PRContent : Grid
         Children.Add(tabArea);
 
         tabs.SelectionChanged += id => model.Tab = Enum.Parse<PRTab>(id);
-        status.Retry = () => _ = model.Load(true);
+        status.Retry = () => model.Load(true).Forget();
         busy.Visibility = Visibility.Collapsed;
         model.PropertyChanged += OnModel;
         Unloaded += (_, _) => model.PropertyChanged -= OnModel;
@@ -204,7 +204,7 @@ public sealed class PRContent : Grid
                 if (model.ActionError is { } err)
                 {
                     model.ActionError = null;
-                    _ = Dialogs.Alert(XamlRoot, L.T("Common_Error", "Error"), err);
+                    Dialogs.Alert(XamlRoot, L.T("Common_Error", "Error"), err).Forget();
                 }
                 break;
             case nameof(PRDetailViewModel.DiffVersion):
@@ -277,7 +277,7 @@ public sealed class PRContent : Grid
             header.Children.Add(new ScrollViewer { Content = row, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, HorizontalScrollMode = ScrollMode.Enabled, VerticalScrollMode = ScrollMode.Disabled });
         }
         if (model.Stack.Count > 1) header.Children.Add(StackStrip());
-        if (MergeStatusBar(model, app, () => _ = Dialogs.Merge(XamlRoot, model)) is { } bar) header.Children.Add(bar);
+        if (MergeStatusBar(model, app, () => Dialogs.Merge(XamlRoot, model).Forget()) is { } bar) header.Children.Add(bar);
     }
 
     public static Border BranchChip(string name, string color)
@@ -416,7 +416,7 @@ public sealed class PRContent : Grid
         }
         var actions = Ui.H(6);
         if (pr.MergeStateStatus == "BEHIND" && (model.CanWrite || pr.ViewerCanUpdate))
-            actions.Children.Add(Ui.Button(L.T("Merge_UpdateBranch", "Update branch"), () => _ = model.Simple(Q.UpdateBranch)));
+            actions.Children.Add(Ui.Button(L.T("Merge_UpdateBranch", "Update branch"), () => model.Simple(Q.UpdateBranch).Forget()));
         if (model.CanWrite && !pr.IsDraft)
         {
             var merge = Ui.Button(L.T("Merge_Merge", "Merge…"), onMerge, accent: s.ready);
@@ -430,8 +430,8 @@ public sealed class PRContent : Grid
     {
         banners.Children.Clear();
         if (model.Pr is null) return;
-        if (ReReviewBanner(model, () => _ = Dialogs.Reviewers(XamlRoot, model)) is { } rr) banners.Children.Add(rr);
-        if (FixBanner(Pr, () => _ = Dialogs.FixWithClaude(XamlRoot, model)) is { } fix) banners.Children.Add(fix);
+        if (ReReviewBanner(model, () => Dialogs.Reviewers(XamlRoot, model).Forget()) is { } rr) banners.Children.Add(rr);
+        if (FixBanner(Pr, () => Dialogs.FixWithClaude(XamlRoot, model).Forget()) is { } fix) banners.Children.Add(fix);
         banners.Visibility = banners.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -499,17 +499,17 @@ public sealed class PRContent : Grid
             {
                 Content = Ui.H(6, Ui.Glyph("", 13, "text"), new TextBlock { Text = model.PendingCount == 0 ? L.T("PR_Review", "Review") : L.F("PR_ReviewN", "Review ({0})", model.PendingCount) })
             };
-            review.Click += (_, _) => _ = Dialogs.Review(XamlRoot, model);
-            var flyout = Ui.Menu(Ui.MenuItem(L.T("PR_WriteReview", "Write review…"), () => _ = Dialogs.Review(XamlRoot, model)));
-            if (!pr.ViewerDidAuthor) flyout.Items.Add(Ui.MenuItem(L.T("PR_Approve", "Approve"), () => _ = ConfirmApprove()));
+            review.Click += (_, _) => Dialogs.Review(XamlRoot, model).Forget();
+            var flyout = Ui.Menu(Ui.MenuItem(L.T("PR_WriteReview", "Write review…"), () => Dialogs.Review(XamlRoot, model).Forget()));
+            if (!pr.ViewerDidAuthor) flyout.Items.Add(Ui.MenuItem(L.T("PR_Approve", "Approve"), () => ConfirmApprove().Forget()));
             review.Flyout = flyout;
             Ui.Tip(review, L.T("PR_SubmitReview", "Submit review"));
             toolbar.Children.Add(review);
-            toolbar.Children.Add(Ui.IconButton("", L.T("PR_RequestReview", "Request or re-request review"), () => _ = Dialogs.Reviewers(XamlRoot, model), "text"));
+            toolbar.Children.Add(Ui.IconButton("", L.T("PR_RequestReview", "Request or re-request review"), () => Dialogs.Reviewers(XamlRoot, model).Forget(), "text"));
         }
-        toolbar.Children.Add(Ui.IconButton("", L.T("PR_FixWithClaude", "Send review comments to a new Claude Code session"), () => _ = Dialogs.FixWithClaude(XamlRoot, model), "coral"));
+        toolbar.Children.Add(Ui.IconButton("", L.T("PR_FixWithClaude", "Send review comments to a new Claude Code session"), () => Dialogs.FixWithClaude(XamlRoot, model).Forget(), "coral"));
         if (pr.IsOpen && !pr.IsDraft && model.CanWrite)
-            toolbar.Children.Add(Ui.IconButton("", L.T("PR_Merge", "Merge pull request"), () => _ = Dialogs.Merge(XamlRoot, model), "green"));
+            toolbar.Children.Add(Ui.IconButton("", L.T("PR_Merge", "Merge pull request"), () => Dialogs.Merge(XamlRoot, model).Forget(), "green"));
         var more = Ui.IconButton("", L.T("Common_More", "More"), () => { }, "text");
         more.Flyout = MoreMenu();
         toolbar.Children.Add(more);
@@ -524,30 +524,30 @@ public sealed class PRContent : Grid
             Ui.MenuItem(L.F("PR_CopyCheckout", "Copy “gh pr checkout {0}”", pr.Number), () => WindowInterop.Copy($"gh pr checkout {pr.Number} -R {model.Ref.Repo.Full}"), ""),
             Ui.MenuItem(L.T("PR_CopyBranch", "Copy branch name"), () => WindowInterop.Copy(pr.HeadRefName), ""),
             Ui.Separator());
-        if (pr.ViewerCanUpdate) menu.Items.Add(Ui.MenuItem(L.T("PR_Edit", "Edit title and description…"), () => _ = Dialogs.EditPR(XamlRoot, model), ""));
+        if (pr.ViewerCanUpdate) menu.Items.Add(Ui.MenuItem(L.T("PR_Edit", "Edit title and description…"), () => Dialogs.EditPR(XamlRoot, model).Forget(), ""));
         if (pr.IsOpen)
         {
-            menu.Items.Add(Ui.MenuItem(L.T("PR_RequestReviewMenu", "Request review…"), () => _ = Dialogs.Reviewers(XamlRoot, model)));
+            menu.Items.Add(Ui.MenuItem(L.T("PR_RequestReviewMenu", "Request review…"), () => Dialogs.Reviewers(XamlRoot, model).Forget()));
             if (pr.ViewerCanUpdate)
             {
                 menu.Items.Add(pr.IsDraft
-                    ? Ui.MenuItem(L.T("PR_ReadyForReview", "Ready for review"), () => _ = model.Simple(Q.ReadyForReview))
-                    : Ui.MenuItem(L.T("PR_ConvertToDraft", "Convert to draft"), () => _ = model.Simple(Q.ConvertToDraft)));
+                    ? Ui.MenuItem(L.T("PR_ReadyForReview", "Ready for review"), () => model.Simple(Q.ReadyForReview).Forget())
+                    : Ui.MenuItem(L.T("PR_ConvertToDraft", "Convert to draft"), () => model.Simple(Q.ConvertToDraft).Forget()));
             }
             if (pr.MergeStateStatus is "BEHIND" or "BLOCKED" or "UNSTABLE")
-                menu.Items.Add(Ui.MenuItem(L.F("PR_UpdateBranchFrom", "Update branch from {0}", pr.BaseRefName), () => _ = model.Simple(Q.UpdateBranch)));
+                menu.Items.Add(Ui.MenuItem(L.F("PR_UpdateBranchFrom", "Update branch from {0}", pr.BaseRefName), () => model.Simple(Q.UpdateBranch).Forget()));
             if (pr.AutoMergeRequest is not null)
-                menu.Items.Add(Ui.MenuItem(L.T("PR_DisableAutoMerge", "Disable auto-merge"), () => _ = Confirm(L.T("PR_DisableAutoMergeQ", "Disable auto-merge?"), L.T("PR_Disable", "Disable"), () => model.Simple(Q.DisableAutoMerge))));
+                menu.Items.Add(Ui.MenuItem(L.T("PR_DisableAutoMerge", "Disable auto-merge"), () => Confirm(L.T("PR_DisableAutoMergeQ", "Disable auto-merge?"), L.T("PR_Disable", "Disable"), () => model.Simple(Q.DisableAutoMerge)).Forget()));
             menu.Items.Add(Ui.Separator());
             if (pr.ViewerCanUpdate)
-                menu.Items.Add(Ui.MenuItem(L.T("PR_Close", "Close pull request…"), () => _ = Confirm(L.T("PR_CloseQ", "Close pull request without merging?"), L.T("PR_CloseButton", "Close pull request"), () => model.Simple(Q.ClosePR))));
+                menu.Items.Add(Ui.MenuItem(L.T("PR_Close", "Close pull request…"), () => Confirm(L.T("PR_CloseQ", "Close pull request without merging?"), L.T("PR_CloseButton", "Close pull request"), () => model.Simple(Q.ClosePR)).Forget()));
         }
         else if (!pr.Merged && pr.ViewerCanUpdate)
         {
-            menu.Items.Add(Ui.MenuItem(L.T("PR_Reopen", "Reopen pull request"), () => _ = model.Simple(Q.ReopenPR)));
+            menu.Items.Add(Ui.MenuItem(L.T("PR_Reopen", "Reopen pull request"), () => model.Simple(Q.ReopenPR).Forget()));
         }
         if (!pr.IsOpen && pr.HeadRef is not null && model.CanWrite)
-            menu.Items.Add(Ui.MenuItem(L.F("PR_DeleteBranch", "Delete branch {0}…", pr.HeadRefName), () => _ = Confirm(L.F("PR_DeleteBranchQ", "Delete branch {0}?", pr.HeadRefName), L.T("PR_DeleteBranchButton", "Delete branch"), model.DeleteBranch)));
+            menu.Items.Add(Ui.MenuItem(L.F("PR_DeleteBranch", "Delete branch {0}…", pr.HeadRefName), () => Confirm(L.F("PR_DeleteBranchQ", "Delete branch {0}?", pr.HeadRefName), L.T("PR_DeleteBranchButton", "Delete branch"), model.DeleteBranch).Forget()));
         return menu;
     }
 
@@ -597,7 +597,7 @@ public sealed class PRContent : Grid
             tabArea.Children.Add(view);
         }
         foreach (var (tab, view) in tabViews) view.Visibility = tab == model.Tab ? Visibility.Visible : Visibility.Collapsed;
-        if (model.Tab == PRTab.Files) _ = model.LoadFiles();
+        if (model.Tab == PRTab.Files) model.LoadFiles().Forget();
     }
 
     private FrameworkElement BuildConversation()
@@ -632,12 +632,12 @@ public sealed class PRContent : Grid
             if (await send(body)) box.Text = "";
             button.IsEnabled = box.Text.Trim().Length > 0;
         }
-        button.Click += (_, _) => _ = Submit();
+        button.Click += (_, _) => Submit().Forget();
         var acc = new KeyboardAccelerator { Key = VirtualKey.Enter, Modifiers = VirtualKeyModifiers.Control };
         acc.Invoked += (_, e) =>
         {
             e.Handled = true;
-            _ = Submit();
+            Submit().Forget();
         };
         box.KeyboardAccelerators.Add(acc);
         var grid = Ui.Columns((box, Ui.Star), (button, Ui.Auto));
@@ -668,17 +668,17 @@ public sealed class PRContent : Grid
         switch (type)
         {
             case "reply":
-                if (Pr.ReviewThreads.Items.FirstOrDefault(t => t.Id == id) is { } thread) _ = Dialogs.Reply(XamlRoot, model, thread);
+                if (Pr.ReviewThreads.Items.FirstOrDefault(t => t.Id == id) is { } thread) Dialogs.Reply(XamlRoot, model, thread).Forget();
                 break;
             case "resolve":
-                _ = model.SetResolved(id, true);
+                model.SetResolved(id, true).Forget();
                 break;
             case "unresolve":
-                _ = model.SetResolved(id, false);
+                model.SetResolved(id, false).Forget();
                 break;
             case "file":
                 model.RevealFile(id);
-                _ = model.LoadFiles();
+                model.LoadFiles().Forget();
                 break;
         }
     }
@@ -728,8 +728,8 @@ public sealed class PRContent : Grid
             var failedRuns = checks.Where(c => c.Outcome == CheckOutcome.Failure && c.RunId is not null).Select(c => c.RunId).Distinct().Count();
             var items = new List<object>();
             if (checks.Count == 0) items.Add(new TextRowItem(L.T("Checks_None", "No checks for the latest commit")));
-            if (failedRuns > 0 && model.CanWrite) items.Add(new ActionRowItem(L.F("Checks_Rerun", "Re-run failed jobs ({0} workflow)", failedRuns), () => _ = model.RerunFailed(), ""));
-            foreach (var c in checks) items.Add(new CheckRowItem(c, () => _ = Dialogs.JobLog(XamlRoot, model.Api, model.Ref.Repo, c)));
+            if (failedRuns > 0 && model.CanWrite) items.Add(new ActionRowItem(L.F("Checks_Rerun", "Re-run failed jobs ({0} workflow)", failedRuns), () => model.RerunFailed().Forget(), ""));
+            foreach (var c in checks) items.Add(new CheckRowItem(c, () => Dialogs.JobLog(XamlRoot, model.Api, model.Ref.Repo, c).Forget()));
             list.ItemsSource = items;
         }
         return list;
@@ -820,12 +820,12 @@ public sealed class PRContent : Grid
                 if (parts.Length >= 3 && int.TryParse(parts[^1], out var line))
                 {
                     var path = string.Join("|", parts[..^2]);
-                    _ = Dialogs.InlineComment(XamlRoot, model, new DiffAnchor(path, line, parts[^2]));
+                    Dialogs.InlineComment(XamlRoot, model, new DiffAnchor(path, line, parts[^2])).Forget();
                 }
                 break;
             }
             case "viewed":
-                _ = model.ToggleViewed(id);
+                model.ToggleViewed(id).Forget();
                 break;
             case "copy":
                 WindowInterop.Copy(id);
@@ -842,13 +842,13 @@ public sealed class PRContent : Grid
                 if (Guid.TryParse(id, out var gid)) model.RemovePending(gid);
                 break;
             case "reply":
-                if (Pr.ReviewThreads.Items.FirstOrDefault(t => t.Id == id) is { } thread) _ = Dialogs.Reply(XamlRoot, model, thread);
+                if (Pr.ReviewThreads.Items.FirstOrDefault(t => t.Id == id) is { } thread) Dialogs.Reply(XamlRoot, model, thread).Forget();
                 break;
             case "resolve":
-                _ = model.SetResolved(id, true);
+                model.SetResolved(id, true).Forget();
                 break;
             case "unresolve":
-                _ = model.SetResolved(id, false);
+                model.SetResolved(id, false).Forget();
                 break;
         }
     }

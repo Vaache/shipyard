@@ -77,7 +77,7 @@ public sealed class RepoDetailView : LiveDetail
             if ((combo.SelectedItem as ComboBoxItem)?.Tag is StateFilter f)
             {
                 stateFilter = f;
-                _ = LoadItems();
+                LoadItems().Forget();
             }
         };
         return combo;
@@ -92,18 +92,18 @@ public sealed class RepoDetailView : LiveDetail
             code = new RepoCodeViewModel(repo, api);
             ShowTab();
         }
-        _ = LoadInfo();
+        LoadInfo().Forget();
     }
 
     protected override void OnRefresh()
     {
-        if (tab == "code") _ = code?.OpenDir(code.Dir);
-        else _ = LoadItems();
+        if (tab == "code") code?.OpenDir(code.Dir).Forget();
+        else LoadItems().Forget();
     }
 
     protected override void OnLive()
     {
-        if (tab != "code") _ = listModel.Load(App.Api, Query, true);
+        if (tab != "code") listModel.Load(App.Api, Query, true).Forget();
     }
 
     private async Task LoadInfo()
@@ -161,7 +161,7 @@ public sealed class RepoDetailView : LiveDetail
             if (codeView is null)
             {
                 codeView = new RepoCodeView(code);
-                if (info is not null || code.CurrentRef.Length == 0) _ = code.Start(info?.DefaultBranchRef?.Name ?? "HEAD");
+                if (info is not null || code.CurrentRef.Length == 0) code.Start(info?.DefaultBranchRef?.Name ?? "HEAD").Forget();
             }
             body.Content = codeView;
             return;
@@ -175,7 +175,7 @@ public sealed class RepoDetailView : LiveDetail
             };
             itemsList.ContainerContentChanging += (_, e) =>
             {
-                if (e.Item is SearchItem s && listModel.Items.Count > 0 && ReferenceEquals(s, listModel.Items[^1])) _ = listModel.LoadMore(App.Api);
+                if (e.Item is SearchItem s && listModel.Items.Count > 0 && ReferenceEquals(s, listModel.Items[^1])) listModel.LoadMore(App.Api).Forget();
             };
             itemsList.ContextRequested += (_, args) =>
             {
@@ -192,9 +192,9 @@ public sealed class RepoDetailView : LiveDetail
         grid.Children.Add(itemsList);
         SetRow(footer, 1);
         grid.Children.Add(footer);
-        footer.Retry = () => _ = LoadItems();
+        footer.Retry = () => LoadItems().Forget();
         body.Content = grid;
-        _ = LoadItems();
+        LoadItems().Forget();
     }
 
     private Task LoadItems() => listModel.Load(App.Api, Query);
@@ -231,7 +231,7 @@ public sealed class RepoCodeView : Grid
         side.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         side.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         branchButton.Padding = new Thickness(8, 4, 8, 4);
-        var quick = Ui.IconButton("", L.T("Code_GoToFile", "Go to file (Ctrl+P)"), () => _ = QuickOpen());
+        var quick = Ui.IconButton("", L.T("Code_GoToFile", "Go to file (Ctrl+P)"), () => QuickOpen().Forget());
         var topRow = Ui.Columns((branchButton, Ui.Star), (quick, Ui.Auto));
         topRow.Padding = new Thickness(10, 8, 6, 4);
         side.Children.Add(topRow);
@@ -244,11 +244,11 @@ public sealed class RepoCodeView : Grid
             switch (e.ClickedItem)
             {
                 case EntryItem item:
-                    _ = model.Select(item.Entry);
+                    model.Select(item.Entry).Forget();
                     break;
                 case UpItem:
                     var dir = model.Dir;
-                    _ = model.OpenDir(dir.Contains('/') ? dir[..dir.LastIndexOf('/')] : "");
+                    model.OpenDir(dir.Contains('/') ? dir[..dir.LastIndexOf('/')] : "").Forget();
                     break;
             }
         };
@@ -274,7 +274,7 @@ public sealed class RepoCodeView : Grid
         acc.Invoked += (_, e) =>
         {
             e.Handled = true;
-            _ = QuickOpen();
+            QuickOpen().Forget();
         };
         KeyboardAccelerators.Add(acc);
 
@@ -330,7 +330,7 @@ public sealed class RepoCodeView : Grid
         foreach (var b in model.Branches.Take(300))
         {
             var name = b.Name;
-            menu.Items.Add(Ui.CheckItem(name, name == model.CurrentRef, () => _ = model.SwitchRef(name)));
+            menu.Items.Add(Ui.CheckItem(name, name == model.CurrentRef, () => model.SwitchRef(name).Forget()));
         }
         branchButton.Flyout = menu;
     }
@@ -349,7 +349,7 @@ public sealed class RepoCodeView : Grid
             {
                 model.SelectedFile = null;
                 model.File = null;
-                _ = model.OpenDir(path);
+                model.OpenDir(path).Forget();
             };
             crumbs.Children.Add(b);
         }
@@ -376,7 +376,7 @@ public sealed class RepoCodeView : Grid
             grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             grid.Children.Add(FileHeader(path));
             FrameworkElement bodyElement;
-            if (model.FileError is { } err) bodyElement = Ui.Error(err, () => _ = model.OpenFile(path));
+            if (model.FileError is { } err) bodyElement = Ui.Error(err, () => model.OpenFile(path).Forget());
             else if (model.File is { } file) bodyElement = FileBody(file, path);
             else bodyElement = Ui.Loading();
             SetRow(bodyElement, 1);
@@ -481,7 +481,7 @@ public sealed class RepoCodeView : Grid
             case FileContentKind.Image:
             {
                 var image = new Image { Stretch = Stretch.None, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20) };
-                _ = LoadImage(image, file.Bytes ?? Array.Empty<byte>(), ext);
+                LoadImage(image, file.Bytes ?? Array.Empty<byte>(), ext).Forget();
                 return new Border
                 {
                     Margin = new Thickness(10, 0, 10, 10),
@@ -540,8 +540,8 @@ public sealed class RepoCodeView : Grid
         if (uri.Host == "github.com" && parts.Length >= 4 && parts[0].Equals(model.Repo.Owner, StringComparison.OrdinalIgnoreCase) && parts[1].Equals(model.Repo.Name, StringComparison.OrdinalIgnoreCase) && parts[2] is "blob" or "tree")
         {
             var path = string.Join("/", parts.Skip(4).Select(Uri.UnescapeDataString));
-            if (parts[2] == "blob") _ = model.Reveal(path);
-            else _ = model.OpenDir(path);
+            if (parts[2] == "blob") model.Reveal(path).Forget();
+            else model.OpenDir(path).Forget();
             return;
         }
         if (GitHubUrl.Parse(url, allowShort: false) is { Kind: RouteKind.Repo }) LinkBrowser.Open(url);
@@ -570,9 +570,9 @@ public sealed class RepoCodeView : Grid
             var pick = e.ChosenSuggestion as string ?? RepoCodeViewModel.FuzzyMatch(box.Text, model.AllPaths ?? new List<string>(), 1).FirstOrDefault();
             if (pick is null) return;
             d.Hide();
-            _ = model.Reveal(pick);
+            model.Reveal(pick).Forget();
         };
-        _ = LoadPaths();
+        LoadPaths().Forget();
         async Task LoadPaths()
         {
             await model.LoadAllPaths();

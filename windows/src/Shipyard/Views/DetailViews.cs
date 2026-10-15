@@ -78,12 +78,12 @@ public sealed class IssueDetailView : LiveDetail
             model = new IssueDetailViewModel(itemRef, api);
             model.PropertyChanged += OnModel;
         }
-        _ = model?.Load();
+        model?.Load().Forget();
     }
 
-    protected override void OnRefresh() => _ = model?.Load();
+    protected override void OnRefresh() => model?.Load().Forget();
 
-    protected override void OnLive() => _ = model?.Load();
+    protected override void OnLive() => model?.Load().Forget();
 
     private void OnModel(object? sender, PropertyChangedEventArgs e)
     {
@@ -116,7 +116,7 @@ public sealed class IssueDetailView : LiveDetail
                 if (model.ActionError is { } err)
                 {
                     model.ActionError = null;
-                    _ = Dialogs.Alert(XamlRoot, L.T("Common_Error", "Error"), err);
+                    Dialogs.Alert(XamlRoot, L.T("Common_Error", "Error"), err).Forget();
                 }
                 break;
         }
@@ -127,7 +127,7 @@ public sealed class IssueDetailView : LiveDetail
         if (model is null || model.IsPR) return;
         if (model.Issue is not { } issue)
         {
-            host.Content = model.Error is { } e ? Ui.Error(e, () => _ = model.Load()) : Ui.Loading();
+            host.Content = model.Error is { } e ? Ui.Error(e, () => model.Load().Forget()) : Ui.Loading();
             return;
         }
         if (html is null)
@@ -175,8 +175,8 @@ public sealed class IssueDetailView : LiveDetail
         if (issue.ViewerCanUpdate)
         {
             tools.Children.Add(issue.IssueState == "OPEN"
-                ? Ui.IconButton("", L.T("Issue_Close", "Close issue"), () => _ = model.SetOpen(false), "text")
-                : Ui.IconButton("", L.T("Issue_Reopen", "Reopen issue"), () => _ = model.SetOpen(true), "text"));
+                ? Ui.IconButton("", L.T("Issue_Close", "Close issue"), () => model.SetOpen(false).Forget(), "text")
+                : Ui.IconButton("", L.T("Issue_Reopen", "Reopen issue"), () => model.SetOpen(true).Forget(), "text"));
         }
         tools.Children.Add(Ui.IconButton("", L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(issue.Url), "text"));
         tools.Children.Add(Ui.IconButton("", L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(issue.Url), "text"));
@@ -210,7 +210,7 @@ public sealed class CommitDetailView : LiveDetail
 
     protected override void OnAttached()
     {
-        if (!loaded) _ = Load();
+        if (!loaded) Load().Forget();
     }
 
     private async Task Load()
@@ -225,7 +225,7 @@ public sealed class CommitDetailView : LiveDetail
         }
         catch (Exception e)
         {
-            host.Content = Ui.Error(e.Message, () => _ = Load());
+            host.Content = Ui.Error(e.Message, () => Load().Forget());
         }
     }
 
@@ -294,12 +294,12 @@ public sealed class ProjectBoardView : LiveDetail
             model = new ProjectBoardViewModel(project, api);
             model.PropertyChanged += OnModel;
         }
-        _ = model?.Load();
+        model?.Load().Forget();
     }
 
-    protected override void OnRefresh() => _ = model?.Load();
+    protected override void OnRefresh() => model?.Load().Forget();
 
-    protected override void OnLive() => _ = model?.Load();
+    protected override void OnLive() => model?.Load().Forget();
 
     private void OnModel(object? sender, PropertyChangedEventArgs e)
     {
@@ -320,7 +320,7 @@ public sealed class ProjectBoardView : LiveDetail
                 if (model.ActionError is { } err)
                 {
                     model.ActionError = null;
-                    _ = Dialogs.Alert(XamlRoot, L.T("Common_Error", "Error"), err);
+                    Dialogs.Alert(XamlRoot, L.T("Common_Error", "Error"), err).Forget();
                 }
                 break;
         }
@@ -358,7 +358,7 @@ public sealed class ProjectBoardView : LiveDetail
         };
         SetRow(scroll, 2);
         grid.Children.Add(scroll);
-        footer.Retry = () => _ = model?.Load();
+        footer.Retry = () => model?.Load().Forget();
         SetRow(footer, 3);
         grid.Children.Add(footer);
         host.Content = grid;
@@ -369,7 +369,7 @@ public sealed class ProjectBoardView : LiveDetail
         if (model is null) return;
         if (model.Detail is null)
         {
-            host.Content = model.Error is { } e ? Ui.Error(e, () => _ = model.Load()) : Ui.Loading();
+            host.Content = model.Error is { } e ? Ui.Error(e, () => model.Load().Forget()) : Ui.Loading();
             built = false;
             return;
         }
@@ -482,9 +482,9 @@ public sealed class ProjectBoardView : LiveDetail
         };
         var menu = new MenuFlyout();
         var move = new MenuFlyoutSubItem { Text = L.T("Board_MoveTo", "Move to") };
-        foreach (var o in options) move.Items.Add(Ui.MenuItem(o.Name, () => _ = model?.Move(item.Id, o.Id)));
+        foreach (var o in options) move.Items.Add(Ui.MenuItem(o.Name, () => model?.Move(item.Id, o.Id).Forget()));
         move.Items.Add(Ui.Separator());
-        move.Items.Add(Ui.MenuItem(L.T("Board_NoStatus", "No Status"), () => _ = model?.Move(item.Id, null)));
+        move.Items.Add(Ui.MenuItem(L.T("Board_NoStatus", "No Status"), () => model?.Move(item.Id, null).Forget()));
         if (options.Count > 0) menu.Items.Add(move);
         if (c?.Url is { } url)
         {

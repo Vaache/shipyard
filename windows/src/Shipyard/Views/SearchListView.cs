@@ -27,18 +27,18 @@ public sealed class SearchListView : ListPane
         FilterRow.Children.Add(StateBar(stateFilter, f =>
         {
             stateFilter = f;
-            _ = Reload();
+            Reload().Forget();
         }));
         FilterRow.Children.Add(SearchBox(L.T("Search_Placeholder", "Filter: text, repo:org/name, label:bug"), t =>
         {
             text = t.Trim();
-            _ = Reload(typing: true);
+            Reload(typing: true).Forget();
         }));
         List.SelectionChanged += OnSelection;
         List.ItemClick += OnItemClick;
         List.ContainerContentChanging += (_, e) =>
         {
-            if (!grouped && e.Item is SearchItem item && vm.Items.Count > 0 && ReferenceEquals(item, vm.Items[^1])) _ = vm.LoadMore(Model.Api);
+            if (!grouped && e.Item is SearchItem item && vm.Items.Count > 0 && ReferenceEquals(item, vm.Items[^1])) vm.LoadMore(Model.Api).Forget();
         };
         List.ContextRequested += OnContext;
         vm.PropertyChanged += OnVm;
@@ -53,9 +53,9 @@ public sealed class SearchListView : ListPane
 
     private string Query => string.Join(" ", new[] { baseQuery, $"is:{kind}", stateFilter.Query(), "archived:false", "sort:updated-desc", text }.Where(s => s.Length > 0));
 
-    protected override void OnAttached() => _ = Reload();
+    protected override void OnAttached() => Reload().Forget();
 
-    protected override void OnLiveTick() => _ = Reload(silent: true);
+    protected override void OnLiveTick() => Reload(silent: true).Forget();
 
     protected override Task OnPullRefresh() => Reload(silent: true);
 
@@ -68,7 +68,7 @@ public sealed class SearchListView : ListPane
     private void OnModel(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(AppViewModel.DetailRoot)) SyncSelection();
-        if (e.PropertyName == nameof(AppViewModel.Api)) _ = Reload();
+        if (e.PropertyName == nameof(AppViewModel.Api)) Reload().Forget();
     }
 
     private void OnVm(object? sender, PropertyChangedEventArgs e)
@@ -96,7 +96,7 @@ public sealed class SearchListView : ListPane
         if (vm.Items.Count == 0)
         {
             if (vm.Loading) ShowOverlay(Ui.Loading());
-            else if (vm.Error is { } e) ShowOverlay(Ui.Error(e, () => _ = Reload()));
+            else if (vm.Error is { } e) ShowOverlay(Ui.Error(e, () => Reload().Forget()));
             else ShowOverlay(Ui.Empty("", "green", L.T("Common_NothingHere", "Nothing here")));
         }
         else
@@ -219,32 +219,32 @@ public sealed class NotificationsView : ListPane
         bar.SelectionChanged += (s, _) =>
         {
             showAll = s.SelectedItem == all;
-            _ = Load(true);
+            Load(true).Forget();
         };
         FilterRow.Children.Add(bar);
-        Tools.Children.Add(Ui.IconButton("", L.T("Notifications_MarkAllRead", "Mark all as read"), () => _ = MarkAll()));
+        Tools.Children.Add(Ui.IconButton("", L.T("Notifications_MarkAllRead", "Mark all as read"), () => MarkAll().Forget()));
         List.SelectionChanged += (_, _) =>
         {
             if (syncing || List.SelectedItem is not NotificationThread n) return;
             if (n.Route is { } r) Model.Select(r);
             else LinkBrowser.Open(n.WebUrl);
-            if (n.Unread) _ = MarkRead(n);
+            if (n.Unread) MarkRead(n).Forget();
         };
         List.ContextRequested += (s, args) =>
         {
             if ((args.OriginalSource as FrameworkElement)?.DataContext is not NotificationThread n) return;
             args.Handled = true;
             var menu = Ui.Menu(
-                n.Unread ? Ui.MenuItem(L.T("Notifications_MarkRead", "Mark as read"), () => _ = MarkRead(n)) : null,
-                Ui.MenuItem(L.T("Notifications_Done", "Done (remove from inbox)"), () => _ = MarkDone(n)),
+                n.Unread ? Ui.MenuItem(L.T("Notifications_MarkRead", "Mark as read"), () => MarkRead(n).Forget()) : null,
+                Ui.MenuItem(L.T("Notifications_Done", "Done (remove from inbox)"), () => MarkDone(n).Forget()),
                 Ui.MenuItem(L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(n.WebUrl)));
             menu.ShowAt((FrameworkElement)args.OriginalSource);
         };
     }
 
-    protected override void OnAttached() => _ = Load(true);
+    protected override void OnAttached() => Load(true).Forget();
 
-    protected override void OnLiveTick() => _ = Load(false);
+    protected override void OnLiveTick() => Load(false).Forget();
 
     protected override Task OnPullRefresh() => Load(false);
 
@@ -289,7 +289,7 @@ public sealed class NotificationsView : ListPane
         if (items.Count == 0)
         {
             if (loading) ShowOverlay(Ui.Loading());
-            else if (error is { } e) ShowOverlay(Ui.Error(e, () => _ = Load(true)));
+            else if (error is { } e) ShowOverlay(Ui.Error(e, () => Load(true).Forget()));
             else ShowOverlay(Ui.Empty(showAll ? "" : "", showAll ? "slate" : "green", showAll ? L.T("Notifications_None", "No notifications") : L.T("Notifications_CaughtUp", "All caught up")));
         }
         else
@@ -363,7 +363,7 @@ public sealed class ReposView : ListPane
         {
             text = t.Trim();
             Render();
-            if (text.Length > 0 && hasMore) _ = LoadAll();
+            if (text.Length > 0 && hasMore) LoadAll().Forget();
         }, 200));
         Tools.Children.Add(Toggle("", L.T("Repos_HideArchived", "Hide archived"), hideArchived, on =>
         {
@@ -377,7 +377,7 @@ public sealed class ReposView : ListPane
         };
         List.ContainerContentChanging += (_, e) =>
         {
-            if (e.Item is RepoSummary r && repos.Count > 0 && ReferenceEquals(r, repos[^1])) _ = LoadMore();
+            if (e.Item is RepoSummary r && repos.Count > 0 && ReferenceEquals(r, repos[^1])) LoadMore().Forget();
         };
         List.ContextRequested += (s, args) =>
         {
@@ -392,7 +392,7 @@ public sealed class ReposView : ListPane
 
     protected override void OnAttached()
     {
-        if (repos.Count == 0) _ = Load();
+        if (repos.Count == 0) Load().Forget();
     }
 
     protected override Task OnPullRefresh() => Load();
@@ -476,7 +476,7 @@ public sealed class ReposView : ListPane
         if (repos.Count == 0)
         {
             if (loading) ShowOverlay(Ui.Loading());
-            else if (error is { } e) ShowOverlay(Ui.Error(e, () => _ = Load()));
+            else if (error is { } e) ShowOverlay(Ui.Error(e, () => Load().Forget()));
             else ShowOverlay(Ui.Empty("", "teal", L.T("Common_NothingHere", "Nothing here")));
         }
         else
@@ -517,9 +517,9 @@ public sealed class ProjectsView : ListPane
         };
     }
 
-    protected override void OnAttached() => _ = Load();
+    protected override void OnAttached() => Load().Forget();
 
-    protected override void OnLiveTick() => _ = Load();
+    protected override void OnLiveTick() => Load().Forget();
 
     protected override Task OnPullRefresh() => Load();
 
@@ -564,7 +564,7 @@ public sealed class ProjectsView : ListPane
         if (projects.Count == 0)
         {
             if (loading) ShowOverlay(Ui.Loading());
-            else if (error is { } e && !scopeProblem) ShowOverlay(Ui.Error(e, () => _ = Load()));
+            else if (error is { } e && !scopeProblem) ShowOverlay(Ui.Error(e, () => Load().Forget()));
             else ShowOverlay(Ui.Empty("", "indigo", L.T("Projects_None", "No projects")));
         }
         else
@@ -578,7 +578,7 @@ public sealed class ProjectsView : ListPane
         const string command = "gh auth refresh -s read:project,project";
         var code = Ui.Card(Ui.Text(command, 12, "text", mono: true, select: true), 6, "sunken", 8);
         var copy = Ui.Button(L.T("Projects_CopyCommand", "Copy Command"), () => WindowInterop.Copy(command));
-        var refresh = Ui.Button(L.T("Projects_RefreshToken", "Refresh Token from gh"), () => _ = RefreshToken());
+        var refresh = Ui.Button(L.T("Projects_RefreshToken", "Refresh Token from gh"), () => RefreshToken().Forget());
         var panel = Ui.V(8,
             Ui.H(8, Ui.IconTile("", "amber", 22), Ui.Text(L.T("Projects_MissingScopes", "Token is missing Projects scopes"), 13, "text", Microsoft.UI.Text.FontWeights.SemiBold)),
             Ui.Text(L.T("Projects_ScopeHelp", "Run this in a terminal, then click “Refresh Token”:"), 12, "muted", wrap: true),
