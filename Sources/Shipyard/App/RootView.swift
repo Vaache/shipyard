@@ -129,6 +129,7 @@ struct SidebarView: View {
                 ForEach(PRFilter.allCases) { f in
                     SidebarRow(section: .prs(f), title: f.title, icon: f.tileIcon, color: f.tint, count: f == .reviewRequested ? app.reviewRequestCount : (f == .mine ? app.myPRCount : 0))
                 }
+                SidebarRow(section: .myPRsByRepo, title: "My PRs by project", icon: "folder.fill", color: .syCoral)
             }
             Section("Issues") {
                 ForEach(IssueFilter.allCases) { f in
@@ -314,6 +315,8 @@ struct ContentColumn: View {
             NotificationsView()
         case .prs(let f):
             SearchListView(title: f.title, kind: "pr", baseQuery: f.query).id("pr-\(f.rawValue)")
+        case .myPRsByRepo:
+            SearchListView(title: "My PRs by project", kind: "pr", baseQuery: PRFilter.mine.query, grouped: true).id("pr-mine-by-repo")
         case .issues(let f):
             SearchListView(title: "Issues: \(f.title)", kind: "issue", baseQuery: f.query).id("issue-\(f.rawValue)")
         case .repos:

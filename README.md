@@ -29,6 +29,7 @@ GitHub in a browser tab can take up a gigabyte of memory to show a single diff. 
 
 **Pull requests**
 - Review requests, your own PRs and anything you're involved in, filtered by state
+- "My PRs by project": your pull requests grouped by repository, in sections you can collapse
 - Conversation, review threads, commits, checks and changed files
 - Comment, approve, request changes and merge
 - A diff viewer built on `NSTableView`, with file headers that stay pinned as you scroll

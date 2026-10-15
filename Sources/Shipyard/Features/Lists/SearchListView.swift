@@ -123,6 +123,33 @@ final class SearchListModel {
             Self.cache[query] = Snapshot(items: items, total: total, cursor: self.cursor, hasMore: hasMore, updated: lastUpdated ?? Date())
         }
     }
+
+    func loadAll(api: GitHubAPI?, limit: Int = 400) async {
+        while hasMore, items.count < limit, !Task.isCancelled {
+            let before = items.count
+            await loadMore(api: api)
+            if items.count == before { return }
+        }
+    }
+
+    var groups: [RepoGroup] {
+        var order: [String] = []
+        var byRepo: [String: [SearchItem]] = [:]
+        for item in items {
+            let key = item.repository.nameWithOwner
+            if byRepo[key] == nil { order.append(key) }
+            byRepo[key, default: []].append(item)
+        }
+        return order.map { RepoGroup(id: $0, items: byRepo[$0] ?? []) }
+    }
+}
+
+struct RepoGroup: Identifiable {
+    let id: String
+    let items: [SearchItem]
+
+    var owner: String { id.split(separator: "/").first.map(String.init) ?? "" }
+    var name: String { id.split(separator: "/").last.map(String.init) ?? id }
 }
 
 struct LoadingBar: View {
@@ -147,17 +174,20 @@ struct SearchListView: View {
     let title: String
     let kind: String
     let baseQuery: String
+    let grouped: Bool
     @Environment(AppModel.self) private var app
     @State private var model: SearchListModel
     @State private var stateFilter: StateFilter = .open
     @State private var text = ""
     @State private var loadedText = ""
+    @State private var collapsed: Set<String> = []
 
-    init(title: String, kind: String, baseQuery: String) {
+    init(title: String, kind: String, baseQuery: String, grouped: Bool = false) {
         self.title = title
         self.kind = kind
         self.baseQuery = baseQuery
-        _model = State(initialValue: SearchListModel(rows: .shared("search|\(kind)|\(baseQuery)")))
+        self.grouped = grouped
+        _model = State(initialValue: SearchListModel(rows: .shared("search|\(kind)|\(baseQuery)\(grouped ? "|grouped" : "")")))
     }
 
     private var query: String {
@@ -181,16 +211,21 @@ struct SearchListView: View {
                 if let e = model.error, model.items.isEmpty {
                     Text(e).foregroundStyle(.red).font(.caption)
                 }
-                ForEach(model.items) { item in
-                    ItemRow(item: item)
-                        .rowAppear(item.id, model.rows)
-                        .tag(item.route)
-                        .listRowSeparator(.visible)
-                        .listRowSeparatorTint(Color.syLine)
-                        .onAppear {
-                            if item.id == model.items.last?.id { Task { await model.loadMore(api: app.api) } }
+                if grouped {
+                    ForEach(model.groups) { group in
+                        let open = !collapsed.contains(group.id) || !text.isEmpty
+                        Section {
+                            if open {
+                                ForEach(group.items) { row($0) }
+                            }
+                        } header: {
+                            RepoGroupHeader(group: group, expanded: open) {
+                                if collapsed.contains(group.id) { collapsed.remove(group.id) } else { collapsed.insert(group.id) }
+                            }
                         }
-                        .contextMenu { ItemContextMenu(item: item) }
+                    }
+                } else {
+                    ForEach(model.items) { row($0) }
                 }
                 if model.items.isEmpty, !model.loading, model.error == nil {
                     Text("Nothing here").foregroundStyle(Color.syMuted)
@@ -202,7 +237,7 @@ struct SearchListView: View {
                 if model.loading && model.items.isEmpty { ProgressView().controlSize(.small) }
             }
             .liveRefresh(updated: model.lastUpdated, refreshing: model.refreshing, error: model.items.isEmpty ? nil : model.error) {
-                await model.load(api: app.api, query: query, silent: true)
+                await reload(silent: true)
             }
         }
         .searchable(text: $text, placement: .toolbar, prompt: "Filter: text, repo:org/name, label:bug")
@@ -213,10 +248,57 @@ struct SearchListView: View {
             guard !Task.isCancelled else { return }
             let typing = text != loadedText
             loadedText = text
-            await model.load(api: app.api, query: query, typing: typing)
+            await reload(typing: typing)
         }
-        .onChange(of: app.refreshTick) { Task { await model.load(api: app.api, query: query) } }
-        .onChange(of: app.liveTick) { Task { await model.load(api: app.api, query: query, silent: true) } }
+        .onChange(of: app.refreshTick) { Task { await reload() } }
+        .onChange(of: app.liveTick) { Task { await reload(silent: true) } }
+    }
+
+    private func row(_ item: SearchItem) -> some View {
+        ItemRow(item: item, showRepo: !grouped)
+            .rowAppear(item.id, model.rows)
+            .tag(item.route)
+            .listRowSeparator(.visible)
+            .listRowSeparatorTint(Color.syLine)
+            .onAppear {
+                if !grouped, item.id == model.items.last?.id { Task { await model.loadMore(api: app.api) } }
+            }
+            .contextMenu { ItemContextMenu(item: item) }
+    }
+
+    private func reload(silent: Bool = false, typing: Bool = false) async {
+        await model.load(api: app.api, query: query, silent: silent, typing: typing)
+        if grouped { await model.loadAll(api: app.api) }
+    }
+}
+
+struct RepoGroupHeader: View {
+    let group: RepoGroup
+    let expanded: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        let color = ProjectPalette.color(for: group.id)
+        HStack(spacing: 7) {
+            Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(Color.syDim).frame(width: 10)
+            IconTile(systemImage: "book.closed.fill", color: color, size: 24)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(group.name).font(.callout.weight(.semibold)).foregroundStyle(Color.syText).lineLimit(1)
+                Text(group.owner).font(.caption2).foregroundStyle(Color.syDim).lineLimit(1)
+            }
+            Spacer()
+            Text("\(group.items.count)")
+                .font(.caption2.weight(.semibold).monospacedDigit())
+                .foregroundStyle(color)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(color.opacity(0.14)))
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onToggle)
+        .textCase(nil)
+        .padding(.vertical, 3)
+        .help(group.id)
     }
 }
 
@@ -234,6 +316,7 @@ struct ItemContextMenu: View {
 
 struct ItemRow: View {
     let item: SearchItem
+    var showRepo = true
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -241,7 +324,7 @@ struct ItemRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title).lineLimit(2).fontWeight(.semibold)
                 HStack(spacing: 5) {
-                    Text("\(item.repository.nameWithOwner)#\(item.number)").lineLimit(1)
+                    Text(showRepo ? "\(item.repository.nameWithOwner)#\(item.number)" : "#\(item.number)").lineLimit(1)
                     Text("·")
                     Text(Fmt.rel(item.updatedAt)).lineLimit(1)
                 }

@@ -70,6 +70,7 @@ enum IssueFilter: String, CaseIterable, Identifiable {
 enum SidebarSection: Hashable {
     case notifications
     case prs(PRFilter)
+    case myPRsByRepo
     case issues(IssueFilter)
     case repos
     case projects
@@ -200,6 +201,7 @@ final class AppModel {
             case ("repos", _): section = .repos
             case ("projects", _): section = .projects
             case ("claude", _): section = .claude
+            case ("prs", "byProject"): section = .myPRsByRepo
             case ("prs", let f): section = .prs(f.flatMap(PRFilter.init(rawValue:)) ?? .reviewRequested)
             case ("issues", let f): section = .issues(f.flatMap(IssueFilter.init(rawValue:)) ?? .assigned)
             default: break
