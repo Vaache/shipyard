@@ -3,7 +3,7 @@ use std::fs;
 
 fn main() {
     println!("cargo:rerun-if-changed=brand.env");
-    println!("cargo:rerun-if-env-changed=SHIPYARD_VERSION");
+    println!("cargo:rerun-if-env-changed=PULLYARD_VERSION");
     let text = fs::read_to_string("brand.env").expect("brand.env is missing");
     for line in text.lines() {
         let line = line.trim();
@@ -14,7 +14,7 @@ fn main() {
             println!("cargo:rustc-env=BRAND_{}={}", key.trim(), value.trim().trim_matches('"'));
         }
     }
-    let version = env::var("SHIPYARD_VERSION")
+    let version = env::var("PULLYARD_VERSION")
         .ok()
         .map(|v| v.trim().trim_start_matches(['v', 'V']).to_string())
         .filter(|v| !v.is_empty())

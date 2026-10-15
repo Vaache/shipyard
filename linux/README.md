@@ -1,6 +1,6 @@
-# Shipyard for Linux
+# PullYard for Linux
 
-A native GNOME build of Shipyard: Rust, GTK 4 and libadwaita, with VTE for the
+A native GNOME build of PullYard: Rust, GTK 4 and libadwaita, with VTE for the
 Claude Code terminal, WebKitGTK for conversations and READMEs, and GtkSourceView
 for code. It talks to the same GitHub GraphQL/REST endpoints as the macOS app and
 stores the token in the Secret Service keyring.
@@ -14,21 +14,21 @@ Every CI run (and every `v*` release) produces three artifacts:
 
 | File | Use |
 | --- | --- |
-| `shipyard_<version>_<arch>.deb` | Debian, Ubuntu 24.04+ and derivatives |
-| `Shipyard-linux-x86_64.flatpak` | Any distribution with Flatpak |
-| `Shipyard-linux-<arch>.tar.gz` | Portable build for distributions with GTK 4.14+ |
+| `pullyard_<version>_<arch>.deb` | Debian, Ubuntu 24.04+ and derivatives |
+| `PullYard-linux-x86_64.flatpak` | Any distribution with Flatpak |
+| `PullYard-linux-<arch>.tar.gz` | Portable build for distributions with GTK 4.14+ |
 
 ### .deb
 
 ```bash
-sudo apt install ./shipyard_2.5.0_amd64.deb
+sudo apt install ./pullyard_2.5.0_amd64.deb
 ```
 
 ### Flatpak
 
 ```bash
-flatpak install --user Shipyard-linux-x86_64.flatpak
-flatpak run app.shipyard.Shipyard
+flatpak install --user PullYard-linux-x86_64.flatpak
+flatpak run io.github.pullyard.PullYard
 ```
 
 The Flatpak needs the GNOME 47 runtime from Flathub
@@ -39,9 +39,9 @@ projects, and it runs `git`, `gh` and `claude` on the host through `flatpak-spaw
 ### Tarball
 
 ```bash
-tar xzf Shipyard-linux-x86_64.tar.gz
-./Shipyard-linux-x86_64/install.sh          # installs to ~/.local (PREFIX=... to change)
-./Shipyard-linux-x86_64/uninstall.sh
+tar xzf PullYard-linux-x86_64.tar.gz
+./PullYard-linux-x86_64/install.sh          # installs to ~/.local (PREFIX=... to change)
+./PullYard-linux-x86_64/uninstall.sh
 ```
 
 Runtime libraries for the tarball (Debian/Ubuntu names):
@@ -54,7 +54,7 @@ Optional tools: [GitHub CLI](https://cli.github.com) for one-click sign-in and
 
 The app checks `releases/latest` every 6 hours (Preferences → Updates).
 A tarball install in a folder you can write to downloads the new
-`Shipyard-linux-<arch>.tar.gz`, swaps the binary and restarts. Package and Flatpak
+`PullYard-linux-<arch>.tar.gz`, swaps the binary and restarts. Package and Flatpak
 installs open the release page instead.
 
 ## Build from source
@@ -65,7 +65,7 @@ sudo apt install build-essential pkg-config libssl-dev librsvg2-bin \
 curl https://sh.rustup.rs -sSf | sh       # Rust 1.92 or newer
 cd linux
 cargo build --release
-./target/release/shipyard
+./target/release/pullyard
 ```
 
 Fedora: `gtk4-devel libadwaita-devel vte291-gtk4-devel webkitgtk6.0-devel gtksourceview5-devel openssl-devel`.
@@ -76,20 +76,20 @@ Packaging, the same steps CI runs:
 ```bash
 ./packaging/render.sh                      # desktop file, AppStream metadata, icons, Flatpak manifest → dist/
 cargo install cargo-deb && cargo deb --no-build
-flatpak-builder --user --install build-dir dist/flatpak/app.shipyard.Shipyard.yml
+flatpak-builder --user --install build-dir dist/flatpak/io.github.pullyard.PullYard.yml
 ```
 
 Checks:
 
 ```bash
 cargo test
-./target/release/shipyard --version
-xvfb-run -a dbus-run-session ./target/release/shipyard --smoke      # builds every screen offline
-SHIPYARD_TOKEN=$(gh auth token) ./target/release/shipyard --selftest  # read-only API test
+./target/release/pullyard --version
+xvfb-run -a dbus-run-session ./target/release/pullyard --smoke      # builds every screen offline
+PULLYARD_TOKEN=$(gh auth token) ./target/release/pullyard --selftest  # read-only API test
 ```
 
-`SHIPYARD_DEMO_REPO=owner/name` and `SHIPYARD_DEMO_FOLDER=/path` work as on macOS.
-`SHIPYARD_DEBUG=1` logs skipped GraphQL nodes and enables the WebKit inspector.
+`PULLYARD_DEMO_REPO=owner/name` and `PULLYARD_DEMO_FOLDER=/path` work as on macOS.
+`PULLYARD_DEBUG=1` logs skipped GraphQL nodes and enables the WebKit inspector.
 
 ## Renaming
 

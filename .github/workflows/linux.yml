@@ -39,7 +39,7 @@ jobs:
       - name: Version
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "SHIPYARD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "PULLYARD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           fi
 
       - name: System dependencies
@@ -150,7 +150,7 @@ jobs:
           echo "bundle=${APP_NAME}-linux-x86_64.flatpak" >> "$GITHUB_OUTPUT"
           echo "manifest=linux/dist/flatpak/${APP_ID}.yml" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "SHIPYARD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "PULLYARD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           fi
 
       - uses: flathub-infra/flatpak-github-actions/flatpak-builder@master

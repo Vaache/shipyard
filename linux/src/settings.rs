@@ -63,7 +63,7 @@ impl Default for Settings {
         Settings {
             poll_interval: 30.0,
             oauth_client_id: String::new(),
-            theme_style: "shipyard".into(),
+            theme_style: "pullyard".into(),
             appearance: "auto".into(),
             link_browser: "system".into(),
             update_auto_check: true,

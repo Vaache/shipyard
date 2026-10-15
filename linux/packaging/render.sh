@@ -4,7 +4,7 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 set -a
 . "$here/brand.env"
 set +a
-VERSION="${SHIPYARD_VERSION:-$(sed -n 's/^version = "\(.*\)"/\1/p' "$here/Cargo.toml" | head -1)}"
+VERSION="${PULLYARD_VERSION:-$(sed -n 's/^version = "\(.*\)"/\1/p' "$here/Cargo.toml" | head -1)}"
 VERSION="${VERSION#v}"
 DATE="$(date -u +%Y-%m-%d)"
 REPO_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}"

@@ -181,7 +181,7 @@ pub fn show() {
         &[crate::brand::APP_NAME, "System"],
         if style == "system" { 1 } else { 0 },
         |i| {
-            settings::update(|s| s.theme_style = if i == 1 { "system".into() } else { "shipyard".into() });
+            settings::update(|s| s.theme_style = if i == 1 { "system".into() } else { "pullyard".into() });
             theme::apply();
         },
     ));
