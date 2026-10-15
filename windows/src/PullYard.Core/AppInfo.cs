@@ -37,6 +37,7 @@ public static class AppInfo
     public static string RepoSlug => $"{GitHubOwner}/{GitHubRepo}";
     public static string RepoUrl => $"https://github.com/{RepoSlug}";
     public static string ReleasesPage => $"{RepoUrl}/releases/latest";
+    public static string ChangelogUrl(string version) => $"https://{GitHubOwner}.github.io/{GitHubRepo}/changelog.html#v{version}";
     public static string DonateUrl => Get("DonateUrl", "https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1");
     public static string LatestReleaseApi => $"https://api.github.com/repos/{RepoSlug}/releases/latest";
     public static string InstallerAssetName(string arch) => $"{ExeName}-windows-{arch}-setup.exe";

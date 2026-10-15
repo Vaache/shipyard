@@ -34,7 +34,7 @@ jobs:
       run:
         working-directory: linux
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Version
         run: |
@@ -50,9 +50,11 @@ jobs:
             libgtksourceview-5-dev libssl-dev pkg-config librsvg2-bin xvfb xauth dbus-x11 \
             appstream desktop-file-utils dpkg-dev
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249
+        with:
+          toolchain: stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           workspaces: linux
           key: ${{ matrix.arch }}
@@ -104,14 +106,14 @@ jobs:
           ls -la dist
 
       - name: Upload tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tarball-${{ matrix.arch }}
           path: linux/dist/*.tar.gz
           if-no-files-found: error
 
       - name: Upload deb
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: deb-${{ matrix.arch }}
           path: linux/dist/*.deb
@@ -119,7 +121,7 @@ jobs:
 
       - name: Upload packaging metadata
         if: matrix.arch == 'x86_64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: packaging
           path: |
@@ -133,7 +135,7 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: tarball-x86_64
           path: dist
@@ -168,7 +170,7 @@ jobs:
           test -n "$(find shots -name '*.png' | head -1)"
 
       - name: Upload screenshots
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ui-screenshots
           path: shots
@@ -182,9 +184,9 @@ jobs:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-47
       options: --privileged
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: packaging
           path: linux/dist
@@ -199,7 +201,7 @@ jobs:
             echo "PULLYARD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           fi
 
-      - uses: flathub-infra/flatpak-github-actions/flatpak-builder@master
+      - uses: flathub-infra/flatpak-github-actions/flatpak-builder@933e9e8ca36e85046ebca8e211f0785c6becac40
         with:
           bundle: ${{ steps.names.outputs.bundle }}
           manifest-path: ${{ steps.names.outputs.manifest }}
@@ -220,7 +222,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           path: artifacts
           merge-multiple: true

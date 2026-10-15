@@ -175,6 +175,8 @@ footer a:hover{color:var(--text)}
       <a href="#claude">Claude Code</a>
       <a href="#tour">Tour</a>
       <a href="#install">Install</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
       <a href="https://github.com/pullyard/pullyard" data-repo>GitHub</a>
       <a href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1">Buy me a pizza 🍕</a>
     </div>
@@ -204,7 +206,7 @@ footer a:hover{color:var(--text)}
         View source
       </a>
     </div>
-    <div class="meta"><a href="https://github.com/pullyard/pullyard/releases/latest" data-version>Version 2.5.0</a> · <span data-os-meta>macOS, Windows and Linux</span></div>
+    <div class="meta"><a href="https://github.com/pullyard/pullyard/releases/latest" data-version>Version 2.7.0</a> · <a href="changelog.html" data-whats-new>What's new</a> · <span data-os-meta>macOS, Windows and Linux</span></div>
     <details class="platforms">
       <summary>Other platforms</summary>
       <ul class="assets">
@@ -409,7 +411,7 @@ footer a:hover{color:var(--text)}
 
 <footer>
   <div class="wrap">
-    <span>© 2026 PullYard contributors · <a href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1">Buy me a pizza 🍕</a></span>
+    <span>© 2026 PullYard contributors · <a href="changelog.html">Changelog</a> · <a href="roadmap.html">Roadmap</a> · <a href="https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1">Buy me a pizza 🍕</a></span>
     <span>Not affiliated with GitHub, Inc. or Anthropic. GitHub and Claude are trademarks of their respective owners.</span>
   </div>
 </footer>
@@ -496,6 +498,8 @@ footer a:hover{color:var(--text)}
   if(window.fetch)fetch("https://api.github.com/repos/pullyard/pullyard/releases/latest").then(function(r){return r.ok?r.json():null}).then(function(j){
     if(!j)return;
     if(version&&j.tag_name)version.textContent="Version "+j.tag_name.replace(/^v/i,"");
+    var news=document.querySelector("[data-whats-new]");
+    if(news&&j.tag_name)news.href="changelog.html#v"+j.tag_name.replace(/^v/i,"");
     release=j;
     (j.assets||[]).forEach(function(a){if(/^pullyard_.+_amd64\.deb$/i.test(a.name))deb=a});
     apply();

@@ -88,7 +88,7 @@ enum ClaudeLauncher {
         export PATH="$HOME/.local/bin:$HOME/.claude/local:/opt/homebrew/bin:/usr/local/bin:$PATH"
         unset CLAUDECODE $(env | grep -o '^CLAUDE_CODE_[A-Z_]*')
         \(configExport)
-        cd \(shellQuote(folder)) || { echo "Folder not found: \(folder.replacingOccurrences(of: "\"", with: ""))"; exit 1; }
+        cd \(shellQuote(folder)) || { printf '%s\\n' \(shellQuote("Folder not found: " + folder)); exit 1; }
         PROMPT="$(cat \(shellQuote(promptURL.path)))"
         rm -f \(shellQuote(promptURL.path)) "$0"
         clear

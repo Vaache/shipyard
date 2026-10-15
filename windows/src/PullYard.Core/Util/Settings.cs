@@ -23,12 +23,27 @@ public sealed class Settings
     {
         try
         {
-            if (File.Exists(path) && JsonNode.Parse(File.ReadAllText(path)) is JsonObject o) return o;
+            if (!File.Exists(path)) return new JsonObject();
+            if (JsonNode.Parse(File.ReadAllText(path)) is JsonObject o) return o;
         }
-        catch
+        catch (Exception e)
         {
+            ErrorLog.Write(e, $"settings load failed for {path}");
         }
+        Quarantine(path);
         return new JsonObject();
+    }
+
+    private static void Quarantine(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.Move(path, path + ".corrupt", true);
+        }
+        catch (Exception e)
+        {
+            ErrorLog.Write(e, $"settings quarantine failed for {path}");
+        }
     }
 
     private void Save()
@@ -37,11 +52,19 @@ public sealed class Settings
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var tmp = path + ".tmp";
-            File.WriteAllText(tmp, data.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-            File.Move(tmp, path, true);
+            var json = data.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+            using (var stream = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                var bytes = new System.Text.UTF8Encoding(false).GetBytes(json);
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(true);
+            }
+            if (File.Exists(path)) File.Replace(tmp, path, null);
+            else File.Move(tmp, path);
         }
-        catch
+        catch (Exception e)
         {
+            ErrorLog.Write(e, $"settings save failed for {path}");
         }
     }
 

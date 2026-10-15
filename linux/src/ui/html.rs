@@ -40,6 +40,9 @@ impl HtmlView {
             let text = value.to_str().to_string();
             let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return };
             let t = v.get("type").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            if !matches!(t.as_str(), "reply" | "resolve" | "unresolve" | "file") {
+                return;
+            }
             let id = v.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
             let f = me.on_action.borrow().clone();
             if let Some(f) = f {

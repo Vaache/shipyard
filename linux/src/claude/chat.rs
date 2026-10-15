@@ -299,9 +299,15 @@ impl ChatSession {
     fn kill(&self) {
         let pid = self.pid.get();
         if pid > 0 && self.running.get() {
+            let group = -(pid as i32);
             unsafe {
-                libc::kill(pid as i32, libc::SIGTERM);
+                libc::kill(group, libc::SIGTERM);
             }
+            gtk::glib::timeout_add_local_once(std::time::Duration::from_secs(3), move || unsafe {
+                if libc::kill(group, 0) == 0 {
+                    libc::kill(group, libc::SIGKILL);
+                }
+            });
         }
     }
 
@@ -359,6 +365,7 @@ impl ChatSession {
         }
         let cmd = accounts::command(&bin, self.config_dir.as_deref()).args(args).cwd(&self.folder);
         let mut c = cmd.command();
+        std::os::unix::process::CommandExt::process_group(&mut c, 0);
         c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         let mut child = match c.spawn() {
             Ok(ch) => ch,

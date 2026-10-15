@@ -66,8 +66,8 @@ public sealed partial class GitWorkingCopy : ObservableObject, IDisposable
             return new LoadResult(false, null, null, new(), new());
         var branch = (await GitCli.Run(new[] { "rev-parse", "--abbrev-ref", "HEAD" }, dir).ConfigureAwait(false)).Out.Trim();
         var repo = await GitCli.RemoteRepo(dir).ConfigureAwait(false);
-        var files = GitCli.ParseUnifiedDiff((await GitCli.Run(new[] { "diff", "HEAD", "--no-color", "-M" }, dir).ConfigureAwait(false)).Out);
-        if (files.Count == 0) files = GitCli.ParseUnifiedDiff((await GitCli.Run(new[] { "diff", "--no-color", "-M" }, dir).ConfigureAwait(false)).Out);
+        var files = GitCli.ParseUnifiedDiff((await GitCli.Run(new[] { "diff", "HEAD", "--no-color", "--no-ext-diff", "--no-textconv", "-M" }, dir).ConfigureAwait(false)).Out);
+        if (files.Count == 0) files = GitCli.ParseUnifiedDiff((await GitCli.Run(new[] { "diff", "--no-color", "--no-ext-diff", "--no-textconv", "-M" }, dir).ConfigureAwait(false)).Out);
         var untracked = (await GitCli.Run(new[] { "ls-files", "--others", "--exclude-standard" }, dir).ConfigureAwait(false)).Out
             .Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(s => s.TrimEnd('\r')).Take(200);
         foreach (var name in untracked)

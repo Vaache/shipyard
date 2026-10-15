@@ -22,13 +22,12 @@ public partial class App : Application
         {
             e.Handled = true;
             if (Program.SmokeUi) ExitCode = 4;
-            try
-            {
-                File.AppendAllText(Path.Combine(AppInfo.DataDirectory, "errors.log"), $"{DateTimeOffset.Now:o} {e.Exception}\n");
-            }
-            catch
-            {
-            }
+            ErrorLog.Write(e.Exception.ToString());
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            e.SetObserved();
+            ErrorLog.Write(e.Exception.Flatten(), "Unobserved task exception");
         };
     }
 

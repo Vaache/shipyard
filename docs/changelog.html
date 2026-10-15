@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changelog · PullYard</title>
+<meta name="description" content="New features, improvements and fixes in every PullYard release for macOS, Windows and Linux.">
+<meta property="og:title" content="PullYard Changelog">
+<meta property="og:description" content="New features, improvements and fixes in every PullYard release.">
+<meta property="og:image" content="icon-512.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-512.png">
+<link rel="alternate" type="application/atom+xml" title="PullYard releases" href="https://github.com/pullyard/pullyard/releases.atom">
+<style>
+:root{
+  --bg:#0a0f1b;--bg2:#111a2c;--panel:#152036;--panel2:#18243c;--line:rgba(160,174,196,.10);--line2:rgba(160,174,196,.18);
+  --text:#e6ebf2;--muted:#8693a8;--dim:#5f6b80;
+  --coral:#ee6f5f;--violet:#9d8cf0;--sky:#5bb8ec;--green:#5dbe8a;--amber:#e8b44c;
+  --maxw:1160px;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+code{font-family:var(--mono);font-size:.88em;background:rgba(255,255,255,.06);padding:1px 6px;border-radius:5px}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+
+nav{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:28px;height:64px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:-.01em;font-size:17px}
+.brand img{width:30px;height:30px}
+nav .links{display:flex;gap:24px;margin-left:auto;color:var(--muted);font-size:14.5px}
+nav .links a:hover,nav .links a[aria-current]{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:10px;border-radius:8px;padding:11px 18px;font-weight:600;font-size:15px;transition:background .15s ease;white-space:nowrap}
+.btn-primary{background:var(--coral);color:#1a0b09}
+.btn-primary:hover{background:#f27f70}
+.btn-sm{padding:7px 13px;font-size:14px;border-radius:7px}
+
+.head{padding:84px 0 36px;border-bottom:1px solid var(--line)}
+.head h1{font-size:clamp(38px,5.4vw,60px);line-height:1.04;letter-spacing:-.035em;margin:0 0 14px;font-weight:700}
+.head p{color:var(--muted);font-size:18px;max-width:620px;margin:0}
+.head .row{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-top:30px}
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.filters button{font:inherit;font-size:14px;color:var(--muted);background:transparent;border:1px solid var(--line2);border-radius:999px;padding:6px 14px;cursor:pointer;transition:color .15s,background .15s,border-color .15s}
+.filters button:hover{color:var(--text)}
+.filters button[aria-pressed="true"]{color:var(--text);background:rgba(255,255,255,.07);border-color:transparent}
+.feed{display:flex;gap:16px;font-size:14px;color:var(--muted)}
+.feed a{border-bottom:1px dotted currentColor}
+.feed a:hover{color:var(--text)}
+
+.release{display:grid;grid-template-columns:220px 1fr;gap:40px;padding:56px 0;border-bottom:1px solid var(--line);scroll-margin-top:64px}
+.release.is-hidden{display:none}
+.side{position:sticky;top:96px;align-self:start}
+.ver{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:15px;font-weight:600;color:var(--text)}
+.ver .hash{color:var(--dim);opacity:0;transition:opacity .15s}
+.release:hover .ver .hash,.ver:focus-visible .hash{opacity:1}
+.date{display:block;color:var(--dim);font-size:14px;margin-top:4px}
+.badge{display:inline-block;margin-top:10px;font-size:12px;font-weight:600;letter-spacing:.02em;padding:3px 9px;border-radius:999px;background:rgba(232,180,76,.14);color:var(--amber)}
+.badge.latest{background:rgba(93,190,138,.14);color:var(--green)}
+.plats{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.plat{font-size:12px;color:var(--muted);border:1px solid var(--line2);border-radius:6px;padding:1px 7px}
+
+.body h2{font-size:clamp(24px,2.8vw,32px);line-height:1.15;letter-spacing:-.022em;margin:0 0 12px;font-weight:680}
+.body .lede{color:var(--muted);font-size:17px;margin:0 0 26px;max-width:680px}
+.group{margin-top:26px}
+.group h3{display:flex;align-items:center;gap:8px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0 0 10px;font-weight:650}
+.group h3 i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.g-new h3 i{background:var(--coral)}
+.g-improved h3 i{background:var(--sky)}
+.g-fixed h3 i{background:var(--green)}
+.g-security h3 i{background:var(--violet)}
+.g-note h3 i{background:var(--amber)}
+.group ul{list-style:none;margin:0;padding:0}
+.group li{position:relative;padding:7px 0 7px 18px;color:#c9d2df;max-width:720px}
+.group li::before{content:"";position:absolute;left:2px;top:17px;width:5px;height:5px;border-radius:50%;background:var(--dim)}
+.group li b{color:var(--text);font-weight:600}
+.group li.is-hidden{display:none}
+.group.is-empty{display:none}
+.os{display:inline-block;font-size:11.5px;font-weight:600;color:var(--muted);background:rgba(255,255,255,.05);border-radius:5px;padding:0 6px;margin-right:6px;vertical-align:1px}
+.empty{display:none;color:var(--muted);font-size:15px;margin:0}
+.release.only-empty .empty{display:block}
+
+.older{padding:56px 0 90px;color:var(--muted);font-size:15px}
+.older a{color:var(--text);border-bottom:1px dotted currentColor}
+
+footer{border-top:1px solid var(--line);padding:34px 0 46px;color:var(--dim);font-size:13.5px}
+footer .wrap{display:flex;gap:20px;justify-content:space-between;flex-wrap:wrap}
+footer a:hover{color:var(--text)}
+
+@media (max-width:800px){
+  .release{grid-template-columns:1fr;gap:18px;padding:44px 0}
+  .side{position:static;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+  .date,.badge,.plats{margin-top:0}
+}
+@media (max-width:680px){
+  .wrap{padding:0 16px}
+  nav .links{display:none}nav .wrap{gap:12px}nav .btn{margin-left:auto}
+  .head{padding:56px 0 28px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="./"><img src="icon.svg" alt="">PullYard</a>
+    <div class="links">
+      <a href="./#features">Features</a>
+      <a href="./#claude">Claude Code</a>
+      <a href="./#install">Install</a>
+      <a href="changelog.html" aria-current="page">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="https://github.com/pullyard/pullyard">GitHub</a>
+    </div>
+    <a class="btn btn-primary btn-sm" href="https://github.com/pullyard/pullyard/releases/latest">Download</a>
+  </div>
+</nav>
+
+<header class="head">
+  <div class="wrap">
+    <h1>Changelog</h1>
+    <p>New features, improvements and fixes in every PullYard release. Existing installs update from inside the app with <b>Check for Updates…</b></p>
+    <div class="row">
+      <div class="filters" role="group" aria-label="Filter by platform">
+        <button type="button" data-filter="all" aria-pressed="true">All platforms</button>
+        <button type="button" data-filter="mac" aria-pressed="false">macOS</button>
+        <button type="button" data-filter="windows" aria-pressed="false">Windows</button>
+        <button type="button" data-filter="linux" aria-pressed="false">Linux</button>
+      </div>
+      <div class="feed">
+        <a href="https://github.com/pullyard/pullyard/releases.atom">RSS feed</a>
+        <a href="https://github.com/pullyard/pullyard/releases">All releases on GitHub</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<article class="release" id="v2.7.0">
+  <div class="side">
+    <a class="ver" href="#v2.7.0">2.7.0 <span class="hash">#</span></a>
+    <time class="date" datetime="2026-10-15">October 15, 2026</time>
+    <span class="badge latest">Latest</span>
+    <div class="plats"><span class="plat">macOS</span><span class="plat">Windows</span><span class="plat">Linux</span></div>
+  </div>
+  <div class="body">
+    <h2>Security and reliability hardening</h2>
+    <p class="lede">PullYard holds your GitHub sign-in and drives Claude Code in your repositories, so we audited every platform and closed the gaps we found.</p>
+    <div class="group g-security">
+      <h3><i></i>Security</h3>
+      <ul>
+        <li data-os="all">Links in pull requests, comments and Claude replies open only when they are <code>http</code>, <code>https</code> or <code>mailto</code>. Local files and custom app schemes are ignored.</li>
+        <li data-os="all">Git commands ignore repository settings that could run code, such as <code>core.fsmonitor</code> and external diff drivers, so opening an untrusted clone is safe.</li>
+        <li data-os="mac"><span class="os">macOS</span><code>pullyard://claude/new</code> links now ask before starting a Claude session and show the folder and prompt. A link can no longer pick the permission mode.</li>
+        <li data-os="windows"><span class="os">Windows</span><b>Fix with Claude Code</b> in a terminal passes the prompt through a temporary file instead of the command line, so PR titles and review comments can't inject shell commands.</li>
+        <li data-os="windows"><span class="os">Windows</span><b>Open</b> on a file Claude edited works only inside the session folder. Scripts and programs are shown in Explorer instead of being run.</li>
+        <li data-os="windows"><span class="os">Windows</span>The chat view no longer loads remote images, and your GitHub token is sent only to <code>api.github.com</code>.</li>
+        <li data-os="linux"><span class="os">Linux</span>The WebKit sandbox stays on. If your system can't run it, PullYard explains how to opt out with <code>PULLYARD_DISABLE_WEBKIT_SANDBOX=1</code>.</li>
+        <li data-os="linux"><span class="os">Linux</span>Pull request pages run under a strict Content Security Policy.</li>
+      </ul>
+    </div>
+    <div class="group g-improved">
+      <h3><i></i>Reliability</h3>
+      <ul>
+        <li data-os="all">If your token can't be saved to the system keychain, you see the error at sign-in instead of being signed out after a restart.</li>
+        <li data-os="windows linux">A damaged settings file is kept as <code>settings.json.corrupt</code> instead of being silently overwritten, and settings are flushed to disk before they replace the old file.</li>
+        <li data-os="mac"><span class="os">macOS</span>Git and GitHub CLI calls time out instead of hanging, and PullYard no longer quits if Claude exits while it is sending a message.</li>
+        <li data-os="windows"><span class="os">Windows</span>An unexpected message from Claude no longer leaves a chat stuck in the busy state. Background errors are written to <code>errors.log</code>.</li>
+        <li data-os="linux"><span class="os">Linux</span>Stopping a chat stops Claude and every tool it started. Sign-in keeps going through short network drops.</li>
+      </ul>
+    </div>
+    <div class="group g-new">
+      <h3><i></i>New</h3>
+      <ul>
+        <li data-os="all">A changelog and a public roadmap on the website.</li>
+        <li data-os="all">The update window links to <b>What's new in all versions</b>.</li>
+      </ul>
+    </div>
+    <div class="group g-note">
+      <h3><i></i>Heads-up</h3>
+      <ul>
+        <li data-os="windows"><span class="os">Windows</span>If Claude Code is installed only as the npm <code>claude.cmd</code> shim and neither <code>claude.exe</code> nor Node.js can be found, launching a terminal session with a prompt now asks you to install one of them or use <b>Copy</b>.</li>
+      </ul>
+    </div>
+    <p class="empty">No changes for this platform in this release.</p>
+  </div>
+</article>
+
+<article class="release" id="v2.6.2">
+  <div class="side">
+    <a class="ver" href="#v2.6.2">2.6.2 <span class="hash">#</span></a>
+    <time class="date" datetime="2026-10-15">October 15, 2026</time>
+    <div class="plats"><span class="plat">Linux</span></div>
+  </div>
+  <div class="body">
+    <h2>Linux looks right now</h2>
+    <p class="lede">A full visual pass on the Linux app so it matches macOS.</p>
+    <div class="group g-improved">
+      <h3><i></i>Improved</h3>
+      <ul>
+        <li data-os="linux"><span class="os">Linux</span>Sidebar and list icons show their colors, and icon tiles keep a fixed size so labels and PR titles line up.</li>
+        <li data-os="linux"><span class="os">Linux</span>The <b>unresolved comments · Fix with Claude Code</b> banner is a compact row again.</li>
+        <li data-os="linux"><span class="os">Linux</span>Fixes across the PR header, branch chips, checks, files and other screens, in dark and light.</li>
+        <li data-os="linux"><span class="os">Linux</span>CI takes a screenshot of every screen, so layout regressions are caught before a release.</li>
+      </ul>
+    </div>
+    <p class="empty">No changes for this platform in this release.</p>
+  </div>
+</article>
+
+<article class="release" id="v2.6.1">
+  <div class="side">
+    <a class="ver" href="#v2.6.1">2.6.1 <span class="hash">#</span></a>
+    <time class="date" datetime="2026-10-15">October 15, 2026</time>
+    <div class="plats"><span class="plat">macOS</span><span class="plat">Windows</span><span class="plat">Linux</span></div>
+  </div>
+  <div class="body">
+    <h2>Buy me a pizza in every app</h2>
+    <p class="lede">An optional, pay-what-you-want donation from $3. PullYard stays free and nothing is locked.</p>
+    <div class="group g-new">
+      <h3><i></i>New</h3>
+      <ul>
+        <li data-os="mac"><span class="os">macOS</span>Settings → Support PullYard, the PullYard menu and the menu bar window.</li>
+        <li data-os="windows"><span class="os">Windows</span>Settings → Support PullYard and the tray menu.</li>
+        <li data-os="linux"><span class="os">Linux</span>Preferences → General → Support PullYard and the main menu.</li>
+      </ul>
+    </div>
+    <p class="empty">No changes for this platform in this release.</p>
+  </div>
+</article>
+
+<article class="release" id="v2.6.0">
+  <div class="side">
+    <a class="ver" href="#v2.6.0">2.6.0 <span class="hash">#</span></a>
+    <time class="date" datetime="2026-10-15">October 15, 2026</time>
+    <div class="plats"><span class="plat">macOS</span><span class="plat">Windows</span><span class="plat">Linux</span></div>
+  </div>
+  <div class="body">
+    <h2>Shipyard is now PullYard, on Windows and Linux too</h2>
+    <p class="lede">A new name, a new home at <a href="https://github.com/pullyard/pullyard">github.com/pullyard/pullyard</a>, and native apps for two more platforms. Your sign-in, settings and Claude accounts carry over.</p>
+    <div class="group g-new">
+      <h3><i></i>New</h3>
+      <ul>
+        <li data-os="windows"><span class="os">Windows</span><b>Native Windows app</b> built with WinUI 3, for x64 and ARM64, as an installer or a portable zip.</li>
+        <li data-os="linux"><span class="os">Linux</span><b>Native Linux app</b> built with GTK 4 and libadwaita, as a .deb, a Flatpak or a portable tarball.</li>
+        <li data-os="all"><b>Merge conflicts:</b> when a pull request conflicts with its base branch, PullYard lists the conflicting files and offers <b>Resolve Conflicts with Claude Code</b>.</li>
+        <li data-os="all"><b>Buy me a pizza 🍕:</b> an optional PullYard Supporter license.</li>
+      </ul>
+    </div>
+    <div class="group g-improved">
+      <h3><i></i>Improved</h3>
+      <ul>
+        <li data-os="mac"><span class="os">macOS</span>Existing Shipyard installs move to PullYard through <b>Check for Updates…</b></li>
+        <li data-os="all">The website picks the right download for your platform.</li>
+      </ul>
+    </div>
+    <p class="empty">No changes for this platform in this release.</p>
+  </div>
+</article>
+
+<article class="release" id="v2.5.0">
+  <div class="side">
+    <a class="ver" href="#v2.5.0">2.5.0 <span class="hash">#</span></a>
+    <time class="date" datetime="2026-10-15">October 15, 2026</time>
+    <div class="plats"><span class="plat">macOS</span></div>
+  </div>
+  <div class="body">
+    <h2>My PRs, grouped by project</h2>
+    <div class="group g-new">
+      <h3><i></i>New</h3>
+      <ul>
+        <li data-os="mac"><span class="os">macOS</span><b>My PRs by project:</b> your own pull requests grouped by repository.</li>
+        <li data-os="all">A one-minute product tour video at the top of the website.</li>
+      </ul>
+    </div>
+    <p class="empty">No changes for this platform in this release.</p>
+  </div>
+</article>
+
+<article class="release" id="v2.4.1">
+  <div class="side">
+    <a class="ver" href="#v2.4.1">2.4.1 <span class="hash">#</span></a>
+    <time class="date" datetime="2026-10-14">October 14, 2026</time>
+    <div class="plats"><span class="plat">macOS</span></div>
+  </div>
+  <div class="body">
+    <h2>Quieter sidebar, regular update checks</h2>
+    <div class="group g-improved">
+      <h3><i></i>Improved</h3>
+      <ul>
+        <li data-os="mac"><span class="os">macOS</span>Sidebar selection uses a neutral fill with a bar in the section's color.</li>
+        <li data-os="mac"><span class="os">macOS</span>PullYard checks for updates every 6 hours and lets you know when a new version is out.</li>
+      </ul>
+    </div>
+    <p class="empty">No changes for this platform in this release.</p>
+  </div>
+</article>
+
+<article class="release" id="v2.4.0">
+  <div class="side">
+    <a class="ver" href="#v2.4.0">2.4.0 <span class="hash">#</span></a>
+    <time class="date" datetime="2026-10-14">October 14, 2026</time>
+    <div class="plats"><span class="plat">macOS</span></div>
+  </div>
+  <div class="body">
+    <h2>In-app updates and live refresh</h2>
+    <p class="lede">Updates now install in place from inside the app. The macOS quarantine prompt is needed only once.</p>
+    <div class="group g-new">
+      <h3><i></i>New</h3>
+      <ul>
+        <li data-os="mac"><span class="os">macOS</span><b>Check for Updates…</b> downloads and installs new versions without leaving the app.</li>
+        <li data-os="mac"><span class="os">macOS</span>Pull to refresh on every list.</li>
+        <li data-os="mac"><span class="os">macOS</span>Re-request a review with one click.</li>
+      </ul>
+    </div>
+    <div class="group g-improved">
+      <h3><i></i>Improved</h3>
+      <ul>
+        <li data-os="mac"><span class="os">macOS</span>A retuned palette without decorative borders and gradients, quiet sidebar icon tiles and Claude in coral.</li>
+        <li data-os="mac"><span class="os">macOS</span>Rows animate in as they appear, and the Claude permission card is calmer.</li>
+      </ul>
+    </div>
+    <div class="group g-fixed">
+      <h3><i></i>Fixed</h3>
+      <ul>
+        <li data-os="mac"><span class="os">macOS</span>The repository browser no longer shows stale folder contents.</li>
+        <li data-os="mac"><span class="os">macOS</span><kbd>⌘R</kbd> in the conversation view no longer loads github.com.</li>
+      </ul>
+    </div>
+    <p class="empty">No changes for this platform in this release.</p>
+  </div>
+</article>
+
+<div class="older">Looking for something older? See <a href="https://github.com/pullyard/pullyard/releases">every release on GitHub</a>.</div>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 PullYard contributors · <a href="./">Home</a> · <a href="changelog.html">Changelog</a> · <a href="roadmap.html">Roadmap</a></span>
+    <span>Not affiliated with GitHub, Inc. or Anthropic. GitHub and Claude are trademarks of their respective owners.</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var buttons=document.querySelectorAll(".filters button");
+  function apply(os){
+    buttons.forEach(function(b){b.setAttribute("aria-pressed",String(b.getAttribute("data-filter")===os))});
+    document.querySelectorAll(".release").forEach(function(r){
+      var shown=0;
+      r.querySelectorAll(".group").forEach(function(g){
+        var n=0;
+        g.querySelectorAll("li").forEach(function(li){
+          var tags=(li.getAttribute("data-os")||"all").split(" ");
+          var ok=os==="all"||tags.indexOf("all")>=0||tags.indexOf(os)>=0;
+          li.classList.toggle("is-hidden",!ok);
+          if(ok)n++;
+        });
+        g.classList.toggle("is-empty",n===0);
+        shown+=n;
+      });
+      r.classList.toggle("only-empty",shown===0);
+    });
+  }
+  buttons.forEach(function(b){
+    b.addEventListener("click",function(){
+      var os=b.getAttribute("data-filter");
+      apply(os);
+      try{var u=new URL(location.href);if(os==="all")u.searchParams.delete("os");else u.searchParams.set("os",os);history.replaceState(null,"",u)}catch(e){}
+    });
+  });
+  var q=null;
+  try{q=new URLSearchParams(location.search).get("os")}catch(e){}
+  if(q&&/^(mac|windows|linux)$/.test(q))apply(q);
+})();
+</script>
+</body>
+</html>

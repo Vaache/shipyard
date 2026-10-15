@@ -15,6 +15,9 @@ enum GHCLI {
             p.standardOutput = out
             p.standardError = err
             try p.run()
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 30) { [weak p] in
+                if p?.isRunning == true { p?.terminate() }
+            }
             p.waitUntilExit()
             let token = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             guard p.terminationStatus == 0, !token.isEmpty else {

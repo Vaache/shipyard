@@ -161,5 +161,5 @@ impl TabState {
 }
 
 pub fn clean_env_keys() -> Vec<String> {
-    std::env::vars().map(|(k, _)| k).filter(|k| k == &crate::brand::env_key("TOKEN") || k == "CLAUDECODE" || k.starts_with("CLAUDE_CODE_")).collect()
+    std::env::vars().map(|(k, _)| k).filter(|k| k == &crate::brand::env_key("TOKEN") || k == "CLAUDECODE" || k == "WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS" || k.starts_with("CLAUDE_CODE_")).collect()
 }

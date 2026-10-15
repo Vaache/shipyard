@@ -21,6 +21,10 @@ pub fn releases_page() -> String {
     format!("{}/releases/latest", repo_url())
 }
 
+pub fn changelog_url(version: &str) -> String {
+    format!("https://{GITHUB_OWNER}.github.io/{GITHUB_REPO}/changelog.html#v{version}")
+}
+
 pub fn latest_release_api() -> String {
     format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest")
 }

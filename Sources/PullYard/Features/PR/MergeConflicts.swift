@@ -39,7 +39,7 @@ enum MergeConflicts {
         if baseOid == nil || !has(baseRev) || !has(headOid) {
             let env = ["GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"]
             let refspecs = ["+refs/heads/\(base):refs/remotes/\(remote)/\(base)", "refs/pull/\(number)/head"]
-            _ = Git.run(["fetch", "--no-tags", "--no-write-fetch-head", "--quiet", remote] + refspecs, in: folder, env: env, timeout: 60)
+            _ = Git.run(["fetch", "--no-tags", "--no-write-fetch-head", "--quiet", remote] + refspecs, in: folder, env: env, timeout: 120)
             guard has(baseRev), has(headOid) else {
                 return .unavailable("Couldn't fetch the latest \(base) and PR commits into \(abbreviate(folder)).")
             }

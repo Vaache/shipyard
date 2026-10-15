@@ -185,6 +185,19 @@ pub fn show(user_initiated: bool) {
     texts.append(&label_with(&format!("You have {}", updater::current_version()), &["sy-muted"]));
     let date = label_with("", &["sy-dim", "sy-small"]);
     texts.append(&date);
+    let changelog = gtk::Button::with_label("What's new in all versions");
+    changelog.add_css_class("link");
+    changelog.add_css_class("sy-small");
+    changelog.set_halign(gtk::Align::Start);
+    changelog.connect_clicked(|_| {
+        let current = updater::current_version().to_string();
+        let version = updater::release()
+            .map(|r| r.version)
+            .filter(|v| updater::version_components(v) > updater::version_components(&current))
+            .unwrap_or(current);
+        util::open_url(&brand::changelog_url(&version));
+    });
+    texts.append(&changelog);
     header.append(&texts);
     let sp = spinner(16);
     header.append(&sp);

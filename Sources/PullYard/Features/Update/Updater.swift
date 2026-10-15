@@ -67,6 +67,7 @@ final class Updater {
     static let announcedVersionKey = "update.announcedVersion"
     static let checkInterval: TimeInterval = 6 * 3600
     static let releasesPage = "https://github.com/pullyard/pullyard/releases/latest"
+    static func changelogURL(_ version: String) -> String { "https://pullyard.github.io/pullyard/changelog.html#v\(version)" }
     nonisolated static let latestAPI = URL(string: "https://api.github.com/repos/pullyard/pullyard/releases/latest")!
     nonisolated static let userAgent = "PullYard-macOS"
     nonisolated static let appName = "PullYard.app"
@@ -277,7 +278,7 @@ final class Updater {
         if legacy != target { steps.append("rm -rf \(q(legacy.path))") }
         let command = steps.joined(separator: " && ")
         let escaped = command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        let result = run("/usr/bin/osascript", ["-e", "do shell script \"\(escaped)\" with administrator privileges with prompt \"PullYard wants to install an update.\""])
+        let result = run("/usr/bin/osascript", ["-e", "do shell script \"\(escaped)\" with administrator privileges with prompt \"PullYard wants to install an update.\""], timeout: 600)
         try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
         guard result.ok else {
             if result.out.contains("-128") { throw UpdateError.cancelled }
@@ -415,7 +416,7 @@ final class Updater {
         return staged
     }
 
-    nonisolated private static func run(_ tool: String, _ args: [String]) -> (out: String, ok: Bool) {
+    nonisolated private static func run(_ tool: String, _ args: [String], timeout: TimeInterval = 120) -> (out: String, ok: Bool) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: tool)
         p.arguments = args
@@ -423,6 +424,9 @@ final class Updater {
         p.standardOutput = out
         p.standardError = out
         do { try p.run() } catch { return (error.localizedDescription, false) }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { [weak p] in
+            if p?.isRunning == true { p?.terminate() }
+        }
         let data = out.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         return (String(decoding: data, as: UTF8.self), p.terminationStatus == 0)

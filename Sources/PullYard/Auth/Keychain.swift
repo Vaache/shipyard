@@ -13,12 +13,20 @@ enum Keychain {
          kSecAttrAccount as String: account]
     }
 
-    static func save(_ token: String) {
-        delete()
-        var query = base(service)
-        query[kSecValueData as String] = Data(token.utf8)
-        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(query as CFDictionary, nil)
+    static func save(_ token: String) throws {
+        let data = Data(token.utf8)
+        let update = [kSecValueData as String: data, kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock] as [String: Any]
+        var status = SecItemUpdate(base(service) as CFDictionary, update as CFDictionary)
+        if status == errSecItemNotFound {
+            var query = base(service)
+            query[kSecValueData as String] = data
+            query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            status = SecItemAdd(query as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else {
+            let reason = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
+            throw APIError(message: "Could not save token to Keychain: \(reason)")
+        }
     }
 
     static func load() -> String? {
@@ -26,7 +34,7 @@ enum Keychain {
         guard !UserDefaults.standard.bool(forKey: legacyCheckedKey) else { return nil }
         UserDefaults.standard.set(true, forKey: legacyCheckedKey)
         guard let token = read(legacyService) else { return nil }
-        save(token)
+        try? save(token)
         return token
     }
 

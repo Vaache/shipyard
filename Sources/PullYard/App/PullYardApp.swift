@@ -3,6 +3,7 @@ import SwiftUI
 @main
 enum Main {
     static func main() {
+        signal(SIGPIPE, SIG_IGN)
         if CommandLine.arguments.contains("--selftest") {
             SelfTest.run()
         } else {

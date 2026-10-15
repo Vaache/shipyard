@@ -26,7 +26,7 @@ public static class GitCli
     }
 
     public static Task<Proc.Result> Run(IEnumerable<string> args, string dir, CancellationToken ct = default) =>
-        Proc.Run(Binary, new[] { "-C", dir, "-c", "core.quotepath=off", "--no-pager" }.Concat(args), env: new Dictionary<string, string?>
+        Proc.Run(Binary, new[] { "-C", dir, "-c", "core.quotepath=off", "-c", "core.fsmonitor=false", "--no-pager" }.Concat(args), env: new Dictionary<string, string?>
         {
             ["GIT_OPTIONAL_LOCKS"] = "0",
             ["LC_ALL"] = "C",

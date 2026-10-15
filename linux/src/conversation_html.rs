@@ -106,15 +106,15 @@ pub fn thread(t: &ReviewThread) -> String {
     let id = esc(&t.id);
     let mut actions = String::new();
     if t.viewer_can_reply {
-        actions.push_str(&format!("<button onclick=\"post('reply','{id}')\">Reply</button>"));
+        actions.push_str(&format!("<button data-a=\"reply\" data-id=\"{id}\">Reply</button>"));
     }
     if t.is_resolved && t.viewer_can_unresolve {
-        actions.push_str(&format!("<button onclick=\"post('unresolve','{id}')\">Unresolve</button>"));
+        actions.push_str(&format!("<button data-a=\"unresolve\" data-id=\"{id}\">Unresolve</button>"));
     }
     if !t.is_resolved && t.viewer_can_resolve {
-        actions.push_str(&format!("<button onclick=\"post('resolve','{id}')\">Resolve</button>"));
+        actions.push_str(&format!("<button data-a=\"resolve\" data-id=\"{id}\">Resolve</button>"));
     }
-    actions.push_str(&format!("<button class=\"ghost\" onclick=\"post('file','{}')\">View in files</button>", esc(&t.path.replace('\\', "\\\\").replace('\'', "\\'"))));
+    actions.push_str(&format!("<button class=\"ghost\" data-a=\"file\" data-id=\"{}\">View in files</button>", esc(&t.path)));
     format!(
         "<details class=\"thread\"{}><summary class=\"th\">{}{}{tags}</summary>\n{}{comments}<div class=\"actions\">{actions}</div></details>",
         if t.is_resolved { "" } else { " open" },
@@ -259,19 +259,30 @@ fn common(item: &TimelineItem, author_login: Option<&str>, base: &str) -> String
     }
 }
 
-pub const POST_SCRIPT: &str = "function post(t,id){try{window.webkit.messageHandlers.app.postMessage(JSON.stringify({type:t,id:id}))}catch(e){}}";
+pub const POST_SCRIPT: &str = "function post(t,id){try{window.webkit.messageHandlers.app.postMessage(JSON.stringify({type:t,id:id}))}catch(e){}}document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('button[data-a]');if(b){post(b.getAttribute('data-a'),b.getAttribute('data-id'))}});";
+
+fn nonce() -> String {
+    uuid::Uuid::new_v4().simple().to_string()
+}
+
+fn csp_meta(nonce: &str) -> String {
+    format!("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; script-src 'nonce-{nonce}'\">")
+}
 
 pub fn page(content: &str, look: Look) -> String {
+    let nonce = nonce();
+    let csp = csp_meta(&nonce);
     format!(
-        "<!doctype html><html class=\"{}\"><head><meta charset=\"utf-8\"><style>{}</style>\n<script>{POST_SCRIPT}</script>\n</head><body><div class=\"tl\">{content}</div></body></html>",
+        "<!doctype html><html class=\"{}\"><head><meta charset=\"utf-8\">{csp}<style>{}</style>\n<script nonce=\"{nonce}\">{POST_SCRIPT}</script>\n</head><body><div class=\"tl\">{content}</div></body></html>",
         if look.dark { "dark" } else { "light" },
         css(look)
     )
 }
 
 pub fn markdown_page(inner: &str, look: Look) -> String {
+    let csp = csp_meta(&nonce());
     format!(
-        "<!doctype html><html class=\"{}\"><head><meta charset=\"utf-8\"><style>{} .md{{padding:8px 4px}} .tl{{max-width:900px}} .md a.anchor,.md .anchor,.md .octicon-link{{display:none}}</style></head>\n<body><div class=\"tl\"><div class=\"md\">{inner}</div></div></body></html>",
+        "<!doctype html><html class=\"{}\"><head><meta charset=\"utf-8\">{csp}<style>{} .md{{padding:8px 4px}} .tl{{max-width:900px}} .md a.anchor,.md .anchor,.md .octicon-link{{display:none}}</style></head>\n<body><div class=\"tl\"><div class=\"md\">{inner}</div></div></body></html>",
         if look.dark { "dark" } else { "light" },
         css(look)
     )

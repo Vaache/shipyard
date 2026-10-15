@@ -227,7 +227,7 @@ pub fn is_flatpak() -> bool {
 }
 
 pub fn open_url(uri: &str) {
-    if !(uri.starts_with("http://") || uri.starts_with("https://") || uri.starts_with("file://") || uri.starts_with("mailto:")) {
+    if !(uri.starts_with("http://") || uri.starts_with("https://") || uri.starts_with("mailto:")) {
         return;
     }
     let browser = settings::read(|s| s.link_browser.clone());

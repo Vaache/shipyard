@@ -44,6 +44,11 @@ struct UpdateView: View {
                         .font(.caption)
                         .foregroundStyle(Color.syDim)
                 }
+                Button("What's new in all versions") {
+                    openInBrowser(Updater.changelogURL(showsRelease ? updater.release?.version ?? updater.currentVersion : updater.currentVersion))
+                }
+                .buttonStyle(.link)
+                .font(.caption)
             }
             Spacer(minLength: 0)
             if updater.state == .checking || updater.state == .installing {

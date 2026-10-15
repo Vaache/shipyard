@@ -76,6 +76,7 @@ public static class LinkBrowser
 
     public static async Task OpenInDefaultBrowser(string url)
     {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https" or "mailto")) return;
         try
         {
             if (await Windows.System.Launcher.LaunchUriAsync(new Uri(url))) return;
