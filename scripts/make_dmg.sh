@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 
 APP="${1:?Usage: scripts/make_dmg.sh <app> <output.dmg>}"
 OUT="${2:?Usage: scripts/make_dmg.sh <app> <output.dmg>}"
-VOLUME="Shipyard"
+VOLUME="PullYard"
 README="Resources/DMG/How to Install.rtf"
 WORK="$(mktemp -d)"
 RW="$WORK/rw.dmg"

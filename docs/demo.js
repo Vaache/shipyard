@@ -473,7 +473,7 @@
     if (!text) return;
     if (!state.chat) state.chat = { step: SCRIPT.length, items: [] };
     state.chat.items.push('<div class="d-um">' + esc(text) + "</div>");
-    state.chat.items.push('<div class="d-ans">This is a live demo with a scripted session. Download Shipyard to run Claude Code on your own repositories.</div>');
+    state.chat.items.push('<div class="d-ans">This is a live demo with a scripted session. Download PullYard to run Claude Code on your own repositories.</div>');
     state.chat.fresh = state.chat.items.length - 1;
     render();
   });
