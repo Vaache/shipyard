@@ -29,9 +29,7 @@ struct PRDetailView: View {
         .onChange(of: app.refreshTick) {
             Task { await model?.load(full: true) }
         }
-        .onChange(of: app.liveTick) {
-            Diagnostics.liveTask { await model?.load() }
-        }
+        .onLiveTick { await model?.load(live: true) }
     }
 }
 

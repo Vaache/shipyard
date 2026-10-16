@@ -138,7 +138,7 @@ struct SearchItem: Decodable, Identifiable {
     let reviewDecision: String?
     let additions: Int?
     let deletions: Int?
-    let comments: Count
+    let comments: Count?
     let labels: Nodes<LabelInfo>?
     let commits: Nodes<RollupCommitNode>?
 

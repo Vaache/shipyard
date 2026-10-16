@@ -813,7 +813,7 @@ struct BranchPRPanel: View {
         }
         .task(id: "\(repo?.full ?? "")|\(tab.git.branch ?? "")") { await loadBranch() }
         .task(id: "\(repo?.full ?? "")|\(scope.rawValue)") { await loadList() }
-        .onChange(of: app.liveTick) { if selected == nil { Diagnostics.liveTask { await load() } } }
+        .onLiveTick { if selected == nil { await load() } }
         .onChange(of: app.refreshTick) { if selected == nil { Task { await load() } } }
         .onChange(of: tab.busy) { _, busy in if !busy { Task { await loadBranch() } } }
         .onChange(of: tab.git.ahead) { Task { await loadBranch() } }
@@ -1001,7 +1001,7 @@ struct InspectorPRDetail: View {
             model = m
             await m?.load()
         }
-        .onChange(of: app.liveTick) { Diagnostics.liveTask { await model?.load() } }
+        .onLiveTick { await model?.load(live: true) }
         .onChange(of: app.refreshTick) { Task { await model?.load(full: true) } }
         .onChange(of: tab.busy) { _, busy in if !busy { Task { await model?.load() } } }
         .alert("Error", isPresented: Binding(get: { model?.actionError != nil }, set: { if !$0 { model?.actionError = nil } })) {

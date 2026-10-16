@@ -401,3 +401,51 @@ private struct ScrollPullProbe: NSViewRepresentable {
         }
     }
 }
+
+private struct LiveFrontKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var liveFront: Bool {
+        get { self[LiveFrontKey.self] }
+        set { self[LiveFrontKey.self] = newValue }
+    }
+}
+
+struct LiveTickModifier: ViewModifier {
+    @Environment(AppModel.self) private var app
+    @Environment(\.liveFront) private var front
+    @State private var shown = false
+    @State private var stale = false
+    let action: @MainActor () async -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                shown = true
+                catchUp()
+            }
+            .onDisappear { shown = false }
+            .onChange(of: front) { catchUp() }
+            .onChange(of: app.liveTick) {
+                if shown && front {
+                    Diagnostics.liveTask { await action() }
+                } else {
+                    stale = true
+                }
+            }
+    }
+
+    private func catchUp() {
+        guard stale, shown, front else { return }
+        stale = false
+        Task { await action() }
+    }
+}
+
+extension View {
+    func onLiveTick(_ action: @escaping @MainActor () async -> Void) -> some View {
+        modifier(LiveTickModifier(action: action))
+    }
+}

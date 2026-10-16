@@ -63,6 +63,9 @@ final class PRDetailModel {
     @ObservationIgnored private var activeLoad: Task<Void, Never>?
     @ObservationIgnored private var queuedLoad: Task<Void, Never>?
     @ObservationIgnored private var reloadFiles = false
+    @ObservationIgnored private var stackRequest: Bool?
+    private static var stackCache: [String: (stack: [StackPR], at: Date)] = [:]
+    private static let stackTTL: TimeInterval = 600
     @ObservationIgnored private var filesOid: String?
     @ObservationIgnored private var mergeRecheck: Task<Void, Never>?
     @ObservationIgnored private var mergeRechecks = 0
@@ -128,8 +131,9 @@ final class PRDetailModel {
 
     var reviewersToReRequest: [String] { staleReviews.map(\.login) }
 
-    func load(full: Bool = false) async {
+    func load(full: Bool = false, live: Bool = false) async {
         if full { reloadFiles = true }
+        if !live { stackRequest = (stackRequest ?? false) || full }
         if let queuedLoad {
             await queuedLoad.value
             return
@@ -175,7 +179,10 @@ final class PRDetailModel {
             error = nil
             refreshError = nil
             lastUpdated = Date()
-            Task(priority: .utility) { await self.loadStack() }
+            if let force = stackRequest {
+                stackRequest = nil
+                Task(priority: .utility) { await self.loadStack(force: force) }
+            }
             scheduleMergeRecheck(pr)
             let filesStale = reloadFiles || (filesOid != nil && filesOid != pr.headRefOid)
             reloadFiles = false
@@ -256,8 +263,18 @@ final class PRDetailModel {
         }
     }
 
-    func loadStack() async {
-        guard let s = try? await api.pullRequestStack(ref) else { return }
+    func loadStack(force: Bool = false) async {
+        guard let pr else { return }
+        let key = "\(ref.repo.full)|\(pr.headRefName)|\(pr.baseRefName)"
+        let now = Date()
+        if !force, let hit = Self.stackCache[key], now.timeIntervalSince(hit.at) < Self.stackTTL {
+            if hit.stack != stack { stack = hit.stack }
+            return
+        }
+        let current = StackPR(number: pr.number, title: pr.title, state: pr.state, isDraft: pr.isDraft, headRefName: pr.headRefName, baseRefName: pr.baseRefName)
+        guard let s = try? await api.pullRequestStack(ref, current: current) else { return }
+        Self.stackCache = Self.stackCache.filter { now.timeIntervalSince($0.value.at) < Self.stackTTL }
+        Self.stackCache[key] = (s, Date())
         if s != stack { stack = s }
     }
 

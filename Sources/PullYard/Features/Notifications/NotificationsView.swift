@@ -56,7 +56,7 @@ struct NotificationsView: View {
         }
         .task(id: showAll) { await load() }
         .onChange(of: app.refreshTick) { Task { await load() } }
-        .onChange(of: app.liveTick) { Diagnostics.liveTask { await load() } }
+        .onLiveTick { await load(live: true) }
         .onChange(of: selection) { _, id in
             guard let id, let n = items.first(where: { $0.id == id }) else { return }
             if let route = n.route { app.select(route) } else { openInBrowser(n.webURL) }
@@ -64,13 +64,13 @@ struct NotificationsView: View {
         }
     }
 
-    private func load() async {
+    private func load(live: Bool = false) async {
         guard let api = app.api else { return }
         loading = true
         defer { loading = false }
         do {
             let all = showAll
-            let fetched = try await api.notifications(all: all)
+            let fetched = try await api.notifications(all: all, live: live)
             guard all == showAll else { return }
             rows.ingest(fetched.map(\.id), mode: loadedAll == all ? .refresh : .cascade)
             loadedAll = all

@@ -3,6 +3,7 @@ import Foundation
 struct APIError: LocalizedError {
     let message: String
     var status: Int = 0
+    var schemaError = false
     var errorDescription: String? { message }
 }
 
@@ -26,17 +27,32 @@ private final class NoRedirect: NSObject, URLSessionTaskDelegate {
     }
 }
 
+private struct PolledEntry {
+    var value: Any
+    var lastModified: String?
+    var fetchedAt: Date
+    var pollInterval: TimeInterval
+}
+
 final class GitHubAPI {
     let token: String
+    var onRateLimit: ((Date) -> Void)?
     private let session: URLSession
     private let gqlDecoder: JSONDecoder
     private let restDecoder: JSONDecoder
+    private let lock = NSLock()
+    private var polled: [String: PolledEntry] = [:]
+
+    static let retryDelay: UInt64 = 1_000_000_000
+    static let retryStatuses: Set<Int> = [502, 503, 504]
+    static let retryErrors: Set<URLError.Code> = [.timedOut, .networkConnectionLost]
 
     init(token: String) {
         self.token = token
         let config = URLSessionConfiguration.default
-        config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        config.timeoutIntervalForRequest = 40
+        config.urlCache = nil
+        config.timeoutIntervalForRequest = 10
+        config.timeoutIntervalForResource = 120
         session = URLSession(configuration: config)
         gqlDecoder = JSONDecoder()
         gqlDecoder.dateDecodingStrategy = .custom(GitHubAPI.decodeDate)
@@ -74,9 +90,51 @@ final class GitHubAPI {
         return req
     }
 
+    private func perform(_ req: URLRequest, _ kind: RequestKind, _ name: @autoclosure () -> String, retry: Bool, delegate: URLSessionTaskDelegate? = nil) async throws -> (Data, URLResponse, Int?) {
+        var attempt = 1
+        while true {
+            let canRetry = retry && attempt == 1
+            do {
+                let (data, response, id) = try await Diagnostics.measure(kind, name(), url: req.url) { try await session.data(for: req, delegate: delegate) }
+                if let http = response as? HTTPURLResponse {
+                    noteRateLimit(http, data)
+                    if canRetry, Self.retryStatuses.contains(http.statusCode) {
+                        attempt += 1
+                        try await Task.sleep(nanoseconds: Self.retryDelay)
+                        continue
+                    }
+                }
+                return (data, response, id)
+            } catch let e as URLError where canRetry && Self.retryErrors.contains(e.code) {
+                attempt += 1
+                try await Task.sleep(nanoseconds: Self.retryDelay)
+            }
+        }
+    }
+
+    private func noteRateLimit(_ http: HTTPURLResponse, _ data: Data) {
+        guard http.statusCode == 403 || http.statusCode == 429 else { return }
+        if let until = Self.rateLimitEnd(http, data) { onRateLimit?(until) }
+    }
+
+    static func rateLimitEnd(_ http: HTTPURLResponse, _ data: Data?) -> Date? {
+        if let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init) {
+            return Date().addingTimeInterval(max(retryAfter, 1))
+        }
+        let reset = http.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap(TimeInterval.init).map { Date(timeIntervalSince1970: $0) }
+        if http.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0", let reset, reset > Date() {
+            return reset
+        }
+        let message = data.flatMap { try? JSONDecoder().decode(RESTMessage.self, from: $0) }?.message?.lowercased() ?? ""
+        if message.contains("rate limit") {
+            return Date().addingTimeInterval(60)
+        }
+        return nil
+    }
+
     private func check(_ response: URLResponse, _ data: Data) throws {
         guard let http = response as? HTTPURLResponse else { return }
-        guard !(200..<300).contains(http.statusCode) else { return }
+        guard !(200..<300).contains(http.statusCode), http.statusCode != 304 else { return }
         let msg = (try? JSONDecoder().decode(RESTMessage.self, from: data))?.message ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
         if http.statusCode == 401 {
             throw APIError(message: "Token is invalid or revoked (401)", status: 401)
@@ -89,7 +147,8 @@ final class GitHubAPI {
         let vars = variables.compactMapValues { $0 }
         req.httpBody = try JSONSerialization.data(withJSONObject: ["query": query, "variables": vars])
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response, recordID) = try await Diagnostics.measure(.graphql, Diagnostics.graphQLName(query), url: req.url) { try await session.data(for: req) }
+        let isRead = !query.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("mutation")
+        let (data, response, recordID) = try await perform(req, .graphql, Diagnostics.graphQLName(query), retry: isRead)
         try check(response, data)
         let decoded: GraphQLResponse<T>
         do {
@@ -97,14 +156,17 @@ final class GitHubAPI {
         } catch {
             if let errs = try? gqlDecoder.decode(GraphQLResponse<EmptyData>.self, from: data).errors, let first = errs.first {
                 if let recordID { Diagnostics.shared.annotate(recordID, error: "graphql error") }
-                throw APIError(message: GitHubAPI.describe(first))
+                throw APIError(message: GitHubAPI.describe(first), schemaError: first.type == nil)
             }
             if let recordID { Diagnostics.shared.annotate(recordID, error: "parse error") }
             throw APIError(message: "Failed to parse response: \(error)")
         }
+        if let errors = decoded.errors, errors.contains(where: { $0.type == "RATE_LIMITED" }), let http = response as? HTTPURLResponse {
+            onRateLimit?(Self.rateLimitEnd(http, nil) ?? Date().addingTimeInterval(60))
+        }
         if let errors = decoded.errors, let first = errors.first, strict || decoded.data == nil {
             if let recordID { Diagnostics.shared.annotate(recordID, error: "graphql error") }
-            throw APIError(message: GitHubAPI.describe(first))
+            throw APIError(message: GitHubAPI.describe(first), schemaError: first.type == nil)
         }
         if let recordID, decoded.errors?.isEmpty == false { Diagnostics.shared.annotate(recordID, note: "partial") }
         guard let value = decoded.data else { throw APIError(message: "Empty response from GitHub") }
@@ -137,20 +199,51 @@ final class GitHubAPI {
     }
 
     @discardableResult
-    func restRaw(_ method: String, _ path: String, body: [String: Any]? = nil) async throws -> (Data, HTTPURLResponse) {
+    func restRaw(_ method: String, _ path: String, body: [String: Any]? = nil, headers: [String: String] = [:]) async throws -> (Data, HTTPURLResponse) {
         var req = request(url(path), method: method)
         if let body {
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        let (data, response) = try await Diagnostics.track(.rest, Diagnostics.restName(method, req.url), url: req.url) { try await session.data(for: req) }
+        for (name, value) in headers { req.setValue(value, forHTTPHeaderField: name) }
+        let (data, response, _) = try await perform(req, .rest, Diagnostics.restName(method, req.url), retry: method == "GET")
         try check(response, data)
         return (data, response as! HTTPURLResponse)
     }
 
+    func restPolled<T: Decodable>(_ path: String, live: Bool) async throws -> T {
+        let cached = lock.withLock { polled[path] }
+        if live, let cached, let value = cached.value as? T, Date() < cached.fetchedAt.addingTimeInterval(cached.pollInterval) {
+            return value
+        }
+        let conditional = cached?.lastModified.map { ["If-Modified-Since": $0] } ?? [:]
+        let (data, http) = try await restRaw("GET", path, headers: conditional)
+        let interval = http.value(forHTTPHeaderField: "X-Poll-Interval").flatMap(TimeInterval.init) ?? 0
+        if http.statusCode == 304, let cached, let value = cached.value as? T {
+            lock.withLock {
+                polled[path]?.fetchedAt = Date()
+                polled[path]?.pollInterval = interval
+            }
+            return value
+        }
+        let value: T
+        do {
+            value = try restDecoder.decode(T.self, from: data)
+        } catch {
+            throw APIError(message: "Failed to parse response: \(error)")
+        }
+        let entry = PolledEntry(value: value, lastModified: http.value(forHTTPHeaderField: "Last-Modified"), fetchedAt: Date(), pollInterval: interval)
+        lock.withLock { polled[path] = entry }
+        return value
+    }
+
+    func forgetPolled(prefix: String) {
+        lock.withLock { polled = polled.filter { !$0.key.hasPrefix(prefix) } }
+    }
+
     func redirectTarget(_ path: String) async throws -> URL {
         let req = request(url(path), method: "GET")
-        let (data, response) = try await Diagnostics.track(.rest, Diagnostics.restName("GET", req.url), url: req.url) { try await session.data(for: req, delegate: NoRedirect()) }
+        let (data, response, _) = try await perform(req, .rest, Diagnostics.restName("GET", req.url), retry: true, delegate: NoRedirect())
         guard let http = response as? HTTPURLResponse else { throw APIError(message: "No response") }
         if (300..<400).contains(http.statusCode), let loc = http.value(forHTTPHeaderField: "Location"), let u = URL(string: loc) {
             return u

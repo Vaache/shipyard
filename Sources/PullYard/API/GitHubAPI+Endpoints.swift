@@ -45,7 +45,7 @@ extension GitHubAPI {
         return r.repository?.pullRequest
     }
 
-    func pullRequestStack(_ ref: ItemRef) async throws -> [StackPR] {
+    func pullRequestStack(_ ref: ItemRef, current: StackPR) async throws -> [StackPR] {
         struct R: Decodable {
             struct Entry: Decodable { let position: Int; let pullRequest: StackPR }
             struct Stack: Decodable { let entries: Nodes<Entry> }
@@ -64,26 +64,35 @@ extension GitHubAPI {
             }
             let repository: Repo?
         }
-        let r: R = try await graphQL(Q.prStack, ["o": ref.repo.owner, "n": ref.repo.name, "num": ref.number])
+        let r: R
+        do {
+            r = try await graphQL(Q.prStack, ["o": ref.repo.owner, "n": ref.repo.name, "num": ref.number])
+        } catch let e as APIError where e.schemaError {
+            let main = try? await repoInfo(ref.repo)?.defaultBranchRef?.name
+            return try await stackWalk(ref.repo, current, main: main)
+        }
         guard let pr = r.repository?.pullRequest else { return [] }
         if let entries = pr.stack?.entries.nodes, entries.count > 1 {
             return entries.sorted { $0.position < $1.position }.map(\.pullRequest)
         }
-        let main = r.repository?.defaultBranchRef?.name
-        let current = StackPR(number: pr.number, title: pr.title, state: pr.state, isDraft: pr.isDraft, headRefName: pr.headRefName, baseRefName: pr.baseRefName)
+        let node = StackPR(number: pr.number, title: pr.title, state: pr.state, isDraft: pr.isDraft, headRefName: pr.headRefName, baseRefName: pr.baseRefName)
+        return try await stackWalk(ref.repo, node, main: r.repository?.defaultBranchRef?.name)
+    }
+
+    private func stackWalk(_ repo: RepoRef, _ current: StackPR, main: String?) async throws -> [StackPR] {
         var below: [StackPR] = []
         var above: [StackPR] = []
         var seen: Set<Int> = [current.number]
         var node = current
         for _ in 0..<8 where node.baseRefName != main {
-            let n = try await stackNeighbors(ref.repo, node)
+            let n = try await stackNeighbors(repo, node)
             guard let parent = (n.parents.first { $0.state == "OPEN" } ?? n.parents.first), seen.insert(parent.number).inserted else { break }
             below.insert(parent, at: 0)
             node = parent
         }
         node = current
         for _ in 0..<8 {
-            let n = try await stackNeighbors(ref.repo, node)
+            let n = try await stackNeighbors(repo, node)
             guard let child = (n.children.first { $0.state == "OPEN" } ?? n.children.first), seen.insert(child.number).inserted else { break }
             above.append(child)
             node = child
@@ -172,25 +181,27 @@ extension GitHubAPI {
         }
     }
 
-    func notifications(all: Bool) async throws -> [NotificationThread] {
+    func notifications(all: Bool, live: Bool = false) async throws -> [NotificationThread] {
         if Demo.isOn { return [] }
-        return try await rest("GET", "/notifications?all=\(all)&per_page=50")
+        return try await restPolled("/notifications?all=\(all)&per_page=50", live: live)
     }
 
-    func unreadNotificationCount() async throws -> Int {
-        let list: [NotificationThread] = try await rest("GET", "/notifications?per_page=50")
-        return list.count
+    func unreadNotificationCount(live: Bool = false) async throws -> Int {
+        try await notifications(all: false, live: live).count
     }
 
     func markNotificationRead(_ id: String) async throws {
+        defer { forgetPolled(prefix: "/notifications") }
         try await send("PATCH", "/notifications/threads/\(id)")
     }
 
     func markNotificationDone(_ id: String) async throws {
+        defer { forgetPolled(prefix: "/notifications") }
         try await send("DELETE", "/notifications/threads/\(id)")
     }
 
     func markAllNotificationsRead() async throws {
+        defer { forgetPolled(prefix: "/notifications") }
         try await send("PUT", "/notifications", body: ["read": true])
     }
 

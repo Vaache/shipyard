@@ -251,7 +251,7 @@ struct SearchListView: View {
             await reload(typing: typing)
         }
         .onChange(of: app.refreshTick) { Task { await reload() } }
-        .onChange(of: app.liveTick) { Diagnostics.liveTask { await reload(silent: true) } }
+        .onLiveTick { await reload(silent: true) }
     }
 
     private func row(_ item: SearchItem) -> some View {
@@ -338,8 +338,8 @@ struct ItemRow: View {
                         reviewBadge
                         if let a = item.additions, let d = item.deletions { DiffStat(additions: a, deletions: d) }
                     }
-                    if item.comments.totalCount > 0 {
-                        Label("\(item.comments.totalCount)", systemImage: "bubble.left").font(.caption).foregroundStyle(Color.syMuted).labelStyle(.titleAndIcon)
+                    if let comments = item.comments?.totalCount, comments > 0 {
+                        Label("\(comments)", systemImage: "bubble.left").font(.caption).foregroundStyle(Color.syMuted).labelStyle(.titleAndIcon)
                     }
                 }
                 if let base = item.stackedOn {
