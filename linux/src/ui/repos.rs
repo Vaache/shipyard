@@ -557,6 +557,7 @@ impl CodeModel {
         if parent != *self.dir.borrow() {
             *self.selected_file.borrow_mut() = Some(path.clone());
             *self.file.borrow_mut() = None;
+            *self.file_error.borrow_mut() = None;
             self.clone().open_dir(parent).await;
         }
         self.open_file(path).await;
