@@ -769,6 +769,7 @@ impl PrPage {
             merge.connect_clicked(move |_| sheets::merge(mm.clone()));
             self.actions.append(&merge);
         }
+        self.actions.append(&super::item_row::short_link_button(&Route::Pr(m.r.clone())));
         let more = self.more_menu(pr);
         self.actions.append(&more.button("view-more-symbolic", "More"));
         let open = icon_button("sy-external-symbolic", "Open on github.com");
@@ -782,6 +783,8 @@ impl PrPage {
         let m = self.model.clone();
         let url = pr.url.clone();
         menu.item("Copy link", move || util::copy(&url));
+        let route = Route::Pr(m.r.clone());
+        menu.item("Copy short link", move || super::item_row::copy_short_link(&route));
         let cmd = format!("gh pr checkout {} -R {}", pr.number, m.r.repo.full());
         menu.item(&format!("Copy “gh pr checkout {}”", pr.number), move || util::copy(&cmd));
         let head = pr.head_ref_name.clone();

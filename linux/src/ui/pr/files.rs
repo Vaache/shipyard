@@ -6,7 +6,7 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use super::model::{Change, FlatRow, PrModel};
-use crate::api::models::{PendingComment, ReviewThread};
+use crate::api::models::{PendingComment, RepoRef, ReviewThread};
 use crate::diff::{DiffAnchor, DiffFile, DiffLine, LineKind};
 use crate::ui::composer::Composer;
 use crate::ui::menu::Menu;
@@ -38,6 +38,14 @@ enum RowKey {
     Header(usize, bool, bool),
     Line(usize, usize),
     Other(String),
+}
+
+fn blame_target(m: &PrModel) -> Option<(RepoRef, String)> {
+    let pr = m.pr.borrow();
+    let pr = pr.as_ref()?;
+    let repo = pr.head_repository.as_ref().and_then(|r| RepoRef::from_full(&r.name_with_owner)).unwrap_or_else(|| m.r.repo.clone());
+    let git_ref = if pr.head_ref.is_some() { pr.head_ref_name.clone() } else { pr.head_ref_oid.clone() };
+    Some((repo, git_ref))
 }
 
 fn status_label(f: &DiffFile) -> gtk::Label {
@@ -430,6 +438,12 @@ impl FilesTab {
         let menu = Menu::new();
         let id = f.id.clone();
         menu.item("Copy path", move || util::copy(&id));
+        if f.status != "removed" {
+            if let Some((repo, git_ref)) = blame_target(m) {
+                let id = f.id.clone();
+                menu.item("Blame", move || crate::ui::repos::open_blame(repo.clone(), git_ref.clone(), id.clone()));
+            }
+        }
         let side = self.side.clone();
         menu.item(if self.side.is_visible() { "Hide file list" } else { "Show file list" }, move || side.set_visible(!side.is_visible()));
         let mm = m.clone();

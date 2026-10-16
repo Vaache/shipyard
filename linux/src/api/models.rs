@@ -69,6 +69,13 @@ impl Route {
             Route::Commit(r, sha) => format!("commit:{}@{}", r.full(), sha),
         }
     }
+
+    pub fn short_link(&self) -> Option<String> {
+        match self {
+            Route::Pr(r) | Route::Issue(r) => Some(r.title()),
+            _ => None,
+        }
+    }
 }
 
 fn lenient_vec<T: DeserializeOwned>(values: Vec<Value>) -> Vec<T> {
@@ -1462,6 +1469,81 @@ pub struct GitObject {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlameUser {
+    pub login: String,
+    #[serde(default)]
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BlameAuthor {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub user: Option<BlameUser>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlameCommit {
+    pub oid: String,
+    pub abbreviated_oid: String,
+    #[serde(default)]
+    pub message_headline: String,
+    #[serde(default)]
+    pub committed_date: Option<Date>,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub author: Option<BlameAuthor>,
+}
+
+impl BlameCommit {
+    pub fn author_name(&self) -> String {
+        let a = self.author.as_ref();
+        a.and_then(|a| a.user.as_ref().map(|u| u.login.clone()))
+            .or_else(|| a.and_then(|a| a.name.clone()))
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| "unknown".into())
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlameRange {
+    pub starting_line: i64,
+    pub ending_line: i64,
+    #[serde(default)]
+    pub age: i64,
+    pub commit: BlameCommit,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BlameRanges {
+    #[serde(default)]
+    pub ranges: Vec<BlameRange>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BlameObject {
+    #[serde(default)]
+    pub blame: Option<BlameRanges>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BlameRepo {
+    #[serde(default)]
+    pub object: Option<BlameObject>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BlameResponse {
+    #[serde(default)]
+    pub repository: Option<BlameRepo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct GitObjectRepo {
     #[serde(default)]
     pub object: Option<GitObject>,
@@ -1510,6 +1592,32 @@ pub struct PendingComment {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn short_links() {
+        let r = ItemRef { repo: RepoRef::new("octo", "hello-world"), number: 123 };
+        assert_eq!(Route::Pr(r.clone()).short_link().as_deref(), Some("octo/hello-world#123"));
+        assert_eq!(Route::Issue(r).short_link().as_deref(), Some("octo/hello-world#123"));
+        assert_eq!(Route::Repo(RepoRef::new("octo", "x")).short_link(), None);
+        assert_eq!(Route::Commit(RepoRef::new("octo", "x"), "abc".into()).short_link(), None);
+        let from_url = crate::util::parse_github_url("https://github.com/Octo/Repo/pull/42/files", false).and_then(|r| r.short_link());
+        assert_eq!(from_url.as_deref(), Some("Octo/Repo#42"));
+        let api = crate::util::parse_github_url("https://api.github.com/repos/octo/repo/issues/7", false).and_then(|r| r.short_link());
+        assert_eq!(api.as_deref(), Some("octo/repo#7"));
+    }
+
+    #[test]
+    fn decodes_blame() {
+        let json = r#"{"repository":{"object":{"__typename":"Commit","blame":{"ranges":[
+            {"startingLine":1,"endingLine":2,"age":10,"commit":{"oid":"aaaa","abbreviatedOid":"aa","messageHeadline":"Init","committedDate":"2020-01-01T00:00:00Z","url":"u","author":{"name":"Ann","user":null}}},
+            {"startingLine":3,"endingLine":3,"age":1,"commit":{"oid":"bbbb","abbreviatedOid":"bb","messageHeadline":"Fix","committedDate":"2026-01-01T00:00:00Z","url":"u","author":{"name":"Bob","user":{"login":"bob","avatarUrl":null}}}}
+        ]}}}}"#;
+        let r: BlameResponse = serde_json::from_str(json).unwrap();
+        let ranges = r.repository.unwrap().object.unwrap().blame.unwrap().ranges;
+        assert_eq!(ranges.len(), 2);
+        assert_eq!(ranges[0].commit.author_name(), "Ann");
+        assert_eq!(ranges[1].commit.author_name(), "bob");
+    }
 
     #[test]
     fn decodes_fixtures() {

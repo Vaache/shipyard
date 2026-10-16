@@ -335,6 +335,22 @@ pub fn open(route: Route, push: bool) {
     a.present();
 }
 
+pub fn visible_route() -> Option<Route> {
+    let a = try_get()?;
+    if a.state.try_borrow().ok()?.section == Section::Claude {
+        return None;
+    }
+    let main = a.main.try_borrow().ok()?.clone()?;
+    main.visible_route()
+}
+
+pub fn sync_actions() {
+    let Some(a) = try_get() else { return };
+    if let Some(action) = a.gtk_app.lookup_action("copy-short-link").and_downcast::<gio::SimpleAction>() {
+        action.set_enabled(visible_route().and_then(|r| r.short_link()).is_some());
+    }
+}
+
 pub fn back() {
     if let Some(m) = try_get().and_then(|a| a.main.borrow().clone()) {
         m.back();
@@ -801,6 +817,18 @@ impl App {
         add("about", &[], Box::new(|| ui::main_view::about()));
         add("donate", &[], Box::new(|| util::open_in_default_browser(brand::DONATE_URL)));
         add("quit", &["<Control>q"], Box::new(quit));
+        add(
+            "copy-short-link",
+            &["<Control><Shift>c"],
+            Box::new(|| {
+                if let Some(r) = visible_route() {
+                    ui::item_row::copy_short_link(&r);
+                }
+            }),
+        );
+        if let Some(action) = app.lookup_action("copy-short-link").and_downcast::<gio::SimpleAction>() {
+            action.set_enabled(false);
+        }
         let me = self.clone();
         add(
             "show-window",

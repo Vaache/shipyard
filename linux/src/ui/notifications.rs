@@ -166,6 +166,9 @@ impl View {
                 });
                 let url = nn.web_url();
                 menu.item("Open in browser", move || util::open_url(&url));
+                if let Some(route) = nn.route().filter(|r| r.short_link().is_some()) {
+                    menu.item("Copy short link", move || super::item_row::copy_short_link(&route));
+                }
                 menu
             });
             self.list.append(&r);

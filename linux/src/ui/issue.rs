@@ -164,6 +164,15 @@ impl IssuePage {
             app::toast("Copied link");
         });
         self.actions.append(&copy);
+        let route = Route::Issue(self.r.clone());
+        self.actions.append(&super::item_row::short_link_button(&route));
+        let menu = super::menu::Menu::new();
+        let url = issue.url.clone();
+        menu.item("Copy link", move || util::copy(&url));
+        menu.item("Copy short link", move || super::item_row::copy_short_link(&route));
+        let url = issue.url.clone();
+        menu.item("Open in browser", move || util::open_url(&url));
+        self.actions.append(&menu.button("view-more-symbolic", "More"));
         let url = issue.url.clone();
         let browser = icon_button("sy-external-symbolic", "Open in Browser");
         browser.connect_clicked(move |_| util::open_url(&url));

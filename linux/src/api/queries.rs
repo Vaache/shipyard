@@ -191,6 +191,8 @@ pub const UNMARK_VIEWED: &str = "mutation($id: ID!, $p: String!) { unmarkFileAsV
 pub const CLOSE_ISSUE: &str = "mutation($id: ID!) { closeIssue(input: {issueId: $id}) { clientMutationId } }";
 pub const REOPEN_ISSUE: &str = "mutation($id: ID!) { reopenIssue(input: {issueId: $id}) { clientMutationId } }";
 
+pub const BLAME: &str = "query Blame($owner: String!, $name: String!, $ref: String!, $path: String!) { repository(owner: $owner, name: $name) { object(expression: $ref) { __typename ... on Commit { blame(path: $path) { ranges { startingLine endingLine age commit { oid abbreviatedOid messageHeadline committedDate url author { name user { login avatarUrl } } } } } } } } }";
+
 pub const GIT_OBJECT: &str = "query($owner: String!, $name: String!, $expr: String!) { repository(owner: $owner, name: $name) { object(expression: $expr) { __typename
   ... on Tree { entries { name path type object { ... on Blob { byteSize isBinary } } } }
   ... on Blob { byteSize isBinary isTruncated text }
