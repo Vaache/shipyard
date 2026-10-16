@@ -2,6 +2,7 @@ pub mod claude;
 pub mod code_view;
 pub mod commit;
 pub mod composer;
+pub mod diagnostics;
 pub mod dialogs;
 pub mod fix_claude;
 pub mod html;

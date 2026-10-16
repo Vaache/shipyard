@@ -135,10 +135,10 @@ pub fn run() -> i32 {
         })
         .await;
         step(&mut failures, "latest release", async {
-            let resp = crate::api::http_client().get(brand::latest_release_api()).send().await?;
-            let status = resp.status().as_u16();
-            let bytes = resp.bytes().await?;
-            if status == 404 {
+            let url = brand::latest_release_api();
+            let mut probe = crate::diagnostics::begin_rest("GET", &url);
+            let (status, bytes) = crate::api::probed_get(&mut probe, crate::api::http_client().get(&url)).await?;
+            if status.as_u16() == 404 {
                 return Ok("none".into());
             }
             let r = crate::updater::parse_release(&bytes)?;

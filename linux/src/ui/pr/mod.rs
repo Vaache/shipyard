@@ -322,6 +322,7 @@ impl PrPage {
     }
 
     fn render(self: &Rc<Self>) {
+        let _span = crate::diagnostics::ui_span("pr.render");
         self.on_change(&Change::Busy);
         if self.model.not_pr.get() {
             if !self.replaced.get() {
@@ -368,6 +369,7 @@ impl PrPage {
     }
 
     fn render_tabs(self: &Rc<Self>) {
+        let _span = crate::diagnostics::ui_span("pr.tabs");
         let pr = self.model.pr.borrow().clone();
         let Some(pr) = pr else { return };
         let unresolved = pr.review_threads.nodes.iter().filter(|t| !t.is_resolved && !t.is_outdated).count();

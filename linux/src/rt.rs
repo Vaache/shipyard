@@ -20,7 +20,9 @@ where
     F: Future<Output = T> + Send + 'static,
     T: Send + 'static,
 {
-    match RUNTIME.spawn(future).await {
+    let tick = crate::diagnostics::current_tick();
+    let handle = if tick == 0 { RUNTIME.spawn(future) } else { RUNTIME.spawn(crate::diagnostics::TICK.scope(tick, future)) };
+    match handle.await {
         Ok(value) => value,
         Err(err) => std::panic::resume_unwind(err.into_panic()),
     }
@@ -46,5 +48,10 @@ pub async fn sleep(duration: Duration) {
 }
 
 pub fn spawn_local<F: Future<Output = ()> + 'static>(future: F) {
-    gtk::glib::spawn_future_local(future);
+    let tick = crate::diagnostics::current_tick();
+    if tick == 0 {
+        gtk::glib::spawn_future_local(future);
+    } else {
+        gtk::glib::spawn_future_local(crate::diagnostics::Scoped::new(tick, future));
+    }
 }

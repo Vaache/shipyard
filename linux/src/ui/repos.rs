@@ -102,6 +102,7 @@ impl ReposList {
     }
 
     fn render(self: &Rc<Self>) {
+        let _span = crate::diagnostics::ui_span("repos.render");
         let items = self.visible();
         self.status.update(self.updated.get(), self.loading.get(), if self.repos.borrow().is_empty() { None } else { self.error.borrow().clone() });
         self.list.remove_all();
@@ -1239,6 +1240,7 @@ impl RepoDetail {
     }
 
     fn render_list(&self) {
+        let _span = crate::diagnostics::ui_span("repo.list");
         let m = &self.list_model;
         let items = m.items.borrow().clone();
         self.status.update(m.last_updated.get(), m.refreshing.get(), if items.is_empty() { None } else { m.error.borrow().clone() });

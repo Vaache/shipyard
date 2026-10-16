@@ -77,6 +77,7 @@ impl IssuePage {
     }
 
     fn render(self: &Rc<Self>) {
+        let _span = crate::diagnostics::ui_span("issue.render");
         self.render_status();
         if self.is_pr.get() {
             if let Some(bin) = self.page.upgrade() {

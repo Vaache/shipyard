@@ -555,10 +555,12 @@ impl App {
     }
 
     fn tick_live(self: &Rc<Self>) {
-        self.state.borrow_mut().last_live = Instant::now();
-        self.live.emit(&());
-        let me = self.clone();
-        crate::rt::spawn_local(async move { me.refresh_badges().await });
+        crate::diagnostics::live_tick(|| {
+            self.state.borrow_mut().last_live = Instant::now();
+            self.live.emit(&());
+            let me = self.clone();
+            crate::rt::spawn_local(async move { me.refresh_badges().await });
+        });
     }
 
     pub async fn refresh_badges(self: Rc<Self>) {
@@ -867,6 +869,7 @@ pub fn run(smoke: bool) -> glib::ExitCode {
 
     let a = app.clone();
     gtk_app.connect_startup(move |_| {
+        crate::diagnostics::set_enabled(settings::read(|s| s.diagnostics_enabled));
         crate::icons::install();
         crate::theme::install();
         a.install_actions();
