@@ -2,6 +2,7 @@ using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using PullYard.Controls;
+using PullYard.Core.Api;
 using PullYard.Services;
 using PullYard.ViewModels;
 
@@ -17,6 +18,7 @@ public abstract class ListPane : Grid
     protected readonly ProgressBar LoadingBar = new() { IsIndeterminate = true, Visibility = Visibility.Collapsed, Height = 3, MinHeight = 3 };
     protected readonly RefreshContainer Refresh = new();
     protected readonly ListView List;
+    protected readonly RowAppear Appear;
     protected readonly ContentControl Overlay = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch, IsTabStop = false, IsHitTestVisible = true };
     protected readonly RefreshFooter Footer = new();
     private readonly LiveRefresh live;
@@ -27,6 +29,7 @@ public abstract class ListPane : Grid
         TitleText = Ui.Text(title, 15, "text", FontWeights.SemiBold);
         live = new LiveRefresh(this, OnLiveTick);
         List = ListSupport.Create(template);
+        Appear = new RowAppear(List, RowKey);
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -82,6 +85,16 @@ public abstract class ListPane : Grid
             Model.LiveTick -= live.Tick;
         };
     }
+
+    private static string? RowKey(object item) => item switch
+    {
+        SearchItem s => s.Id,
+        GroupedSearchItem g => g.Item.Id,
+        NotificationThread n => n.Id,
+        RepoSummary r => r.Id,
+        ProjectSummary p => p.Id,
+        _ => null
+    };
 
     protected virtual void OnAttached()
     {

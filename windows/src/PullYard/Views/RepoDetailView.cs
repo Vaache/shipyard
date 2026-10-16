@@ -29,6 +29,7 @@ public sealed class RepoDetailView : LiveDetail
     private readonly ContentControl stateHost = new() { IsTabStop = false };
     private RepoCodeView? codeView;
     private ListView? itemsList;
+    private RowAppear? itemsAppear;
     private readonly RefreshFooter footer = new();
 
     public RepoDetailView(RepoRef repo)
@@ -171,6 +172,7 @@ public sealed class RepoDetailView : LiveDetail
         if (itemsList is null)
         {
             itemsList = ListSupport.Create("FeedRowTemplate", ListViewSelectionMode.None);
+            itemsAppear = new RowAppear(itemsList, i => (i as SearchItem)?.Id);
             itemsList.ItemClick += (_, e) =>
             {
                 if (e.ClickedItem is SearchItem s) App.Open(s.Route, true);
@@ -204,7 +206,11 @@ public sealed class RepoDetailView : LiveDetail
     private void OnList(object? sender, PropertyChangedEventArgs e)
     {
         if (itemsList is null) return;
-        if (e.PropertyName == nameof(SearchListViewModel.Items)) itemsList.ItemsSource = listModel.Items;
+        if (e.PropertyName == nameof(SearchListViewModel.Items))
+        {
+            itemsAppear?.Ingest(listModel.Items.Select(i => i.Id), listModel.AppearMode);
+            itemsList.ItemsSource = listModel.Items;
+        }
         footer.Update(listModel.LastUpdated, listModel.Refreshing, listModel.Error);
     }
 }

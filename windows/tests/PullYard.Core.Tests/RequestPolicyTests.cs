@@ -241,6 +241,19 @@ public class RequestPolicyTests : IDisposable
     }
 
     [Fact]
+    public async Task EmptyListWithoutLastModifiedIsValidatedByETag()
+    {
+        var (api, h) = Make();
+        h.Then(HttpStatusCode.OK, "[]", r => r.Headers.TryAddWithoutValidation("ETag", "W/\"abc\""))
+            .Then(_ => new HttpResponseMessage(HttpStatusCode.NotModified));
+        Assert.Equal(0, await api.UnreadNotificationCount());
+        Assert.Null(await api.UnreadNotificationCount(live: true));
+        Assert.False(h.Seen[0].Request.Headers.Contains("If-None-Match"));
+        Assert.Equal("W/\"abc\"", h.Seen[1].Request.Headers.GetValues("If-None-Match").Single());
+        Assert.False(h.Seen[1].Request.Headers.Contains("If-Modified-Since"));
+    }
+
+    [Fact]
     public async Task NotModifiedListComesFromCache()
     {
         var (api, h) = Make();

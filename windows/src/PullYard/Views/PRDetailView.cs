@@ -61,7 +61,7 @@ public sealed class PRDetailView : Grid
         model.PropertyChanged -= OnModel;
         model.PropertyChanged += OnModel;
         Update();
-        model.Load().Forget();
+        model.Open().Forget();
     }
 
     private void OnModel(object? sender, PropertyChangedEventArgs e)

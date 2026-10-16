@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using PullYard.Core.Api;
 using PullYard.Core.Util;
+using PullYard.Controls;
 
 namespace PullYard.ViewModels;
 
@@ -17,6 +18,7 @@ public sealed partial class SearchListViewModel : ObservableObject
     [ObservableProperty] private bool refreshing;
     [ObservableProperty] private DateTimeOffset? lastUpdated;
     [ObservableProperty] private string? error;
+    [ObservableProperty] private bool checkingCache;
 
     private string? cursor;
     private bool hasMore;
@@ -26,7 +28,7 @@ public sealed partial class SearchListViewModel : ObservableObject
     private int generation;
     private bool fetched;
 
-    public HashSet<string> Fresh { get; } = new();
+    public RowAppearMode AppearMode { get; private set; }
 
     private static string? Account => Demo.IsOn ? null : AppViewModel.Shared.Account;
 
@@ -47,13 +49,18 @@ public sealed partial class SearchListViewModel : ObservableObject
             currentQuery = query;
             fetched = false;
             Error = null;
-            if (Cache.TryGetValue(key, out var snap)) Apply(snap, false);
+            if (Cache.TryGetValue(key, out var snap)) Apply(snap, RowAppearMode.Silent);
             else
             {
+                AppearMode = RowAppearMode.Silent;
                 Items = new();
                 Total = 0;
                 LastUpdated = null;
-                if (account is not null) ShowStored(account, query, key).Forget();
+                if (account is not null)
+                {
+                    CheckingCache = true;
+                    ShowStored(account, query, key).Forget();
+                }
             }
         }
         var gen = ++generation;
@@ -76,7 +83,7 @@ public sealed partial class SearchListViewModel : ObservableObject
             var snapshot = new Snapshot(merged, r.IssueCount, nextCursor, more, DateTimeOffset.Now);
             Cache[key] = snapshot;
             fetched = true;
-            Apply(snapshot, !switched);
+            Apply(snapshot, Items.Count == 0 ? RowAppearMode.Cascade : RowAppearMode.Refresh);
             Error = null;
             if (account is not null && account == Account) ListSnapshotStore.Shared.Save(account, query, new ListSnapshot(r.Nodes, r.IssueCount, snapshot.Updated)).Forget();
         }
@@ -91,6 +98,7 @@ public sealed partial class SearchListViewModel : ObservableObject
             {
                 Loading = false;
                 Refreshing = false;
+                CheckingCache = false;
             }
         }
     }
@@ -98,25 +106,32 @@ public sealed partial class SearchListViewModel : ObservableObject
     private async Task ShowStored(string? account, string query, string key)
     {
         var stored = await ListSnapshotStore.Shared.LoadAsync(account, query);
-        if (stored is null || fetched || key != currentKey || Items.Count > 0) return;
-        Apply(new Snapshot(stored.Items, stored.Total, null, false, stored.Updated), false);
+        if (key != currentKey) return;
+        CheckingCache = false;
+        if (stored is null || fetched || Items.Count > 0) return;
+        Apply(new Snapshot(stored.Items, stored.Total, null, false, stored.Updated), RowAppearMode.Silent);
         Loading = false;
     }
 
-    private void Apply(Snapshot snap, bool markFresh)
+    private void Apply(Snapshot snap, RowAppearMode mode)
     {
-        Fresh.Clear();
-        if (markFresh)
-        {
-            var known = Items.Select(i => i.Id).ToHashSet();
-            foreach (var i in snap.Items.Where(i => !known.Contains(i.Id))) Fresh.Add(i.Id);
-        }
-        Items = snap.Items;
-        Total = snap.Total;
+        var same = SameContent(Items, snap.Items);
         cursor = snap.Cursor;
         hasMore = snap.HasMore;
+        if (!same)
+        {
+            AppearMode = mode;
+            Items = snap.Items;
+        }
+        Total = snap.Total;
         LastUpdated = snap.Updated;
     }
+
+    private static string Signature(SearchItem i) =>
+        $"{i.Id}|{i.UpdatedAt:O}|{i.Title}|{i.PrState}|{i.IssueState}|{i.IsDraft}|{i.ReviewDecision}|{i.CiState}|{i.Comments.TotalCount}|{i.Additions}|{i.Deletions}";
+
+    private static bool SameContent(List<SearchItem> a, List<SearchItem> b) =>
+        a.Count == b.Count && a.Select(Signature).SequenceEqual(b.Select(Signature));
 
     public bool HasMore => hasMore;
 
@@ -131,6 +146,7 @@ public sealed partial class SearchListViewModel : ObservableObject
             if (query != currentQuery) return;
             var known = Items.Select(i => i.Id).ToHashSet();
             var added = r.Nodes.Where(n => !known.Contains(n.Id)).ToList();
+            AppearMode = RowAppearMode.Silent;
             Items = Items.Concat(added).ToList();
             cursor = r.PageInfo?.EndCursor;
             hasMore = r.PageInfo?.HasNextPage ?? false;

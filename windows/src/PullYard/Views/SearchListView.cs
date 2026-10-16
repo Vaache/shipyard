@@ -76,8 +76,10 @@ public sealed class SearchListView : ListPane
         switch (e.PropertyName)
         {
             case nameof(SearchListViewModel.Items):
+                Appear.Ingest(vm.Items.Select(i => i.Id), vm.AppearMode);
                 Render();
                 break;
+            case nameof(SearchListViewModel.CheckingCache):
             case nameof(SearchListViewModel.Loading):
             case nameof(SearchListViewModel.Refreshing):
             case nameof(SearchListViewModel.Error):
@@ -95,7 +97,8 @@ public sealed class SearchListView : ListPane
         Footer.Update(vm.LastUpdated, vm.Refreshing && !vm.Loading, vm.Items.Count == 0 ? null : vm.Error);
         if (vm.Items.Count == 0)
         {
-            if (vm.Loading) ShowOverlay(Ui.Loading());
+            if (vm.CheckingCache) ShowOverlay(null);
+            else if (vm.Loading) ShowOverlay(Ui.Loading());
             else if (vm.Error is { } e) ShowOverlay(Ui.Error(e, () => Reload().Forget()));
             else ShowOverlay(Ui.Empty("", "green", L.T("Common_NothingHere", "Nothing here")));
         }
@@ -203,6 +206,7 @@ public sealed class NotificationsView : ListPane
 {
     private List<NotificationThread> items = new();
     private bool loading;
+    private bool quiet;
     private string? error;
     private bool showAll;
     private bool? loadedMode;
@@ -253,8 +257,10 @@ public sealed class NotificationsView : ListPane
     {
         if (Model.Api is not { } api) return;
         loading = true;
+        quiet = live;
         Update();
         var changed = true;
+        var appear = RowAppearMode.Refresh;
         try
         {
             var mode = showAll;
@@ -268,6 +274,7 @@ public sealed class NotificationsView : ListPane
                 changed = false;
                 return;
             }
+            if (items.Count == 0 || loadedMode != mode) appear = RowAppearMode.Cascade;
             items = fetched;
             loadedMode = mode;
             if (!showAll) Model.UnreadCount = items.Count;
@@ -279,14 +286,15 @@ public sealed class NotificationsView : ListPane
         finally
         {
             loading = false;
-            if (changed) Render();
+            if (changed) Render(appear);
             else Update();
         }
     }
 
-    private void Render()
+    private void Render(RowAppearMode appear = RowAppearMode.Silent)
     {
         syncing = true;
+        Appear.Ingest(items.Select(i => i.Id), appear);
         List.ItemsSource = items.ToList();
         syncing = false;
         Update();
@@ -294,7 +302,7 @@ public sealed class NotificationsView : ListPane
 
     private void Update()
     {
-        SetLoading(loading, items.Count > 0);
+        SetLoading(loading && !quiet, items.Count > 0);
         Footer.Update(lastUpdated, loading, items.Count == 0 ? null : error);
         if (items.Count == 0)
         {
@@ -416,6 +424,7 @@ public sealed class ReposView : ListPane
         loading = true;
         refreshing = true;
         Update();
+        var appear = repos.Count == 0 ? RowAppearMode.Cascade : RowAppearMode.Refresh;
         try
         {
             var r = await api.Repos(null);
@@ -433,12 +442,13 @@ public sealed class ReposView : ListPane
         catch (Exception e)
         {
             error = e.Message;
+            appear = RowAppearMode.Silent;
         }
         finally
         {
             loading = false;
             refreshing = false;
-            Render();
+            Render(appear);
         }
     }
 
@@ -469,9 +479,10 @@ public sealed class ReposView : ListPane
         for (var i = 0; i < 20 && hasMore; i++) await LoadMore();
     }
 
-    private void Render()
+    private void Render(RowAppearMode appear = RowAppearMode.Silent)
     {
         syncing = true;
+        Appear.Ingest(repos.Select(r => r.Id), appear);
         var visible = Visible.ToList();
         List.ItemsSource = visible;
         if (Model.DetailRoot is { Kind: RouteKind.Repo } route) List.SelectedItem = visible.FirstOrDefault(r => r.Ref == route.Repo);
@@ -500,6 +511,7 @@ public sealed class ProjectsView : ListPane
 {
     private List<ProjectSummary> projects = new();
     private bool loading;
+    private bool quiet;
     private string? error;
     private bool showClosed;
     private DateTimeOffset? lastUpdated;
@@ -529,15 +541,17 @@ public sealed class ProjectsView : ListPane
 
     protected override void OnAttached() => Load().Forget();
 
-    protected override void OnLiveTick() => Load().Forget();
+    protected override void OnLiveTick() => Load(true).Forget();
 
     protected override Task OnPullRefresh() => Load();
 
-    private async Task Load()
+    private async Task Load(bool live = false)
     {
         if (Model.Api is not { } api) return;
         loading = true;
+        quiet = live;
         Update();
+        var appear = projects.Count == 0 ? RowAppearMode.Cascade : RowAppearMode.Refresh;
         try
         {
             projects = await api.Projects();
@@ -547,17 +561,19 @@ public sealed class ProjectsView : ListPane
         catch (Exception e)
         {
             error = e.Message;
+            appear = RowAppearMode.Silent;
         }
         finally
         {
             loading = false;
-            Render();
+            Render(appear);
         }
     }
 
-    private void Render()
+    private void Render(RowAppearMode appear = RowAppearMode.Silent)
     {
         syncing = true;
+        Appear.Ingest(projects.Select(p => p.Id), appear);
         var visible = projects.Where(p => showClosed || !p.Closed).ToList();
         List.ItemsSource = visible;
         if (Model.DetailRoot is { Kind: RouteKind.Project } route) List.SelectedItem = visible.FirstOrDefault(p => p.Id == route.Project!.Id);
@@ -569,7 +585,7 @@ public sealed class ProjectsView : ListPane
     {
         var scopeProblem = !Model.HasProjectScope || (error?.Contains("scope", StringComparison.OrdinalIgnoreCase) ?? false);
         hint.Content = scopeProblem ? ScopeHint() : null;
-        SetLoading(loading, projects.Count > 0);
+        SetLoading(loading && !quiet, projects.Count > 0);
         Footer.Update(lastUpdated, loading, projects.Count == 0 ? null : error);
         if (projects.Count == 0)
         {

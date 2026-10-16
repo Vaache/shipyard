@@ -134,13 +134,15 @@ public readonly struct RequestProbe
     private readonly DateTimeOffset startedAt;
     private readonly LiveTick? tick;
     private readonly bool liveTick;
+    private readonly string? context;
 
-    private RequestProbe(long started, DateTimeOffset startedAt, LiveTick? tick, bool liveTick)
+    private RequestProbe(long started, DateTimeOffset startedAt, LiveTick? tick, bool liveTick, string? context)
     {
         this.started = started;
         this.startedAt = startedAt;
         this.tick = tick;
         this.liveTick = liveTick;
+        this.context = context;
     }
 
     public bool Active => started != 0;
@@ -152,7 +154,7 @@ public readonly struct RequestProbe
         if (!Diagnostics.Enabled) return default;
         var current = Diagnostics.CurrentTick;
         var counted = current is not null && current.Enter() ? current : null;
-        return new RequestProbe(Stopwatch.GetTimestamp(), DateTimeOffset.Now, counted, current is not null);
+        return new RequestProbe(Stopwatch.GetTimestamp(), DateTimeOffset.Now, counted, current is not null, Diagnostics.CurrentNote);
     }
 
     public void Finish(string kind, string name, string path, HttpResponseMessage? response, long bytes, Exception? exception, string? note = null, double? durationMs = null, string? error = null)
@@ -168,7 +170,7 @@ public readonly struct RequestProbe
             bytes,
             response is null ? 0 : (int)response.StatusCode,
             error ?? (exception is null ? null : Diagnostics.Describe(exception)),
-            note,
+            context is null ? note : note is null ? context : $"{context}; {note}",
             response is null ? null : Diagnostics.IntHeader(response, "X-RateLimit-Remaining"),
             response is null ? null : Diagnostics.LongHeader(response, "X-RateLimit-Reset"),
             response is null ? null : Diagnostics.Header(response, "X-RateLimit-Resource"));
@@ -191,6 +193,7 @@ public sealed class Diagnostics
 
     private static volatile bool enabled;
     private static readonly AsyncLocal<LiveTick?> currentTick = new();
+    private static readonly AsyncLocal<string?> currentNote = new();
     private static readonly Regex OperationRx = new(@"^\s*(?:query|mutation|subscription)\s+([A-Za-z_][A-Za-z0-9_]*)", RegexOptions.Compiled);
     private static readonly Regex QueryRx = new(@"\?[^\s)'""]*", RegexOptions.Compiled);
     private static readonly Regex HexRx = new(@"^[0-9a-fA-F]{7,64}$", RegexOptions.Compiled);
@@ -203,6 +206,14 @@ public sealed class Diagnostics
     }
 
     internal static LiveTick? CurrentTick => currentTick.Value;
+
+    internal static string? CurrentNote => currentNote.Value;
+
+    public static async Task<T> WithNote<T>(string note, Func<Task<T>> action)
+    {
+        currentNote.Value = note;
+        return await action();
+    }
 
     private readonly object gate = new();
     private readonly Ring<RequestEntry> requests = new(RequestCapacity);
