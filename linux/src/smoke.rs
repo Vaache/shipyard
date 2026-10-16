@@ -99,17 +99,25 @@ pub fn run(_app: Rc<App>) {
     });
     step(next(800), "large diff update", move || {
         let Some(m) = app::pr_model(&large()) else { return };
+        let started = Instant::now();
         let rows = m.flat_rows("").len();
+        let flat_ms = started.elapsed().as_secs_f64() * 1000.0;
         let changed: i64 = m.files.borrow().iter().map(|f| f.additions + f.deletions).sum();
+        let middle = m.files.borrow().get(25).map(|f| f.id.clone()).unwrap_or_default();
         let mut times = vec![];
-        for _ in 0..5 {
+        for i in 0..6 {
+            if i % 2 == 0 {
+                m.collapsed.borrow_mut().insert(middle.clone());
+            } else {
+                m.collapsed.borrow_mut().remove(&middle);
+            }
             let started = Instant::now();
             m.emit(crate::ui::pr::model::Change::Diff);
             times.push(started.elapsed().as_secs_f64() * 1000.0);
         }
         let max = times.iter().cloned().fold(0.0, f64::max);
         let avg = times.iter().sum::<f64>() / times.len() as f64;
-        println!("smoke: large diff {changed} changed lines, {rows} rows, update avg {avg:.1} ms, max {max:.1} ms");
+        println!("smoke: large diff {changed} changed lines, {rows} rows, collapse/expand one file avg {avg:.1} ms, max {max:.1} ms, flat rows {flat_ms:.1} ms");
     });
     step(next(300), "fixture pr page again", || app::select(Some(Route::Pr(ItemRef { repo: RepoRef::new("octocat", "Hello-World"), number: 1 }))));
     step(next(400), "commits tab", move || pr().set_tab(crate::ui::pr::model::PrTab::Commits));
