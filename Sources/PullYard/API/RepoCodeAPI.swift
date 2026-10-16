@@ -48,7 +48,54 @@ struct GitTreeREST: Decodable {
     let truncated: Bool
 }
 
+struct BlameCommit: Decodable, Equatable {
+    struct User: Decodable, Equatable {
+        let login: String
+        let avatarUrl: String?
+    }
+    struct Author: Decodable, Equatable {
+        let name: String?
+        let user: User?
+    }
+    let oid: String
+    let abbreviatedOid: String
+    let messageHeadline: String
+    let committedDate: Date
+    let url: String
+    let author: Author?
+
+    var authorLabel: String {
+        author?.user?.login ?? author?.name ?? "unknown"
+    }
+}
+
+struct BlameRange: Decodable, Equatable {
+    let startingLine: Int
+    let endingLine: Int
+    let age: Int
+    let commit: BlameCommit
+}
+
+struct BlameResponse: Decodable {
+    struct Ranges: Decodable { let ranges: [BlameRange] }
+    struct Target: Decodable { let blame: Ranges? }
+    struct R: Decodable { let object: Target? }
+    let repository: R?
+}
+
 extension GitHubAPI {
+    static let blameQuery = """
+    query Blame($owner: String!, $name: String!, $ref: String!, $path: String!) { repository(owner: $owner, name: $name) { object(expression: $ref) {
+      ... on Commit { blame(path: $path) { ranges { startingLine endingLine age commit { oid abbreviatedOid messageHeadline committedDate url author { name user { login avatarUrl } } } } } }
+    } } }
+    """
+
+    func blame(_ repo: RepoRef, ref: String, path: String) async throws -> [BlameRange] {
+        let r: BlameResponse = try await graphQL(GitHubAPI.blameQuery, ["owner": repo.owner, "name": repo.name, "ref": ref, "path": path], strict: true)
+        guard let ranges = r.repository?.object?.blame?.ranges else { throw APIError(message: "No blame for this file") }
+        return ranges
+    }
+
     static let gitObjectQuery = """
     query GitObject($owner: String!, $name: String!, $expr: String!) { repository(owner: $owner, name: $name) { object(expression: $expr) { __typename
       ... on Tree { entries { name path type object { ... on Blob { byteSize isBinary } } } }

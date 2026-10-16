@@ -899,6 +899,7 @@ struct BranchPRPanel: View {
             Button("Open in PR section") { app.section = .prs(.mine); app.open(item.route) }
             Button("Open in browser") { openInBrowser(item.url) }
             Button("Copy link") { copyToPasteboard(item.url) }
+            Button("Copy short link") { app.copyShortLink(item.ref) }
         }
     }
 

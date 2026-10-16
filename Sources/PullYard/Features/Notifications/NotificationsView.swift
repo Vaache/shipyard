@@ -33,6 +33,9 @@ struct NotificationsView: View {
                             if n.unread { Button("Mark as read") { Task { await markRead(n) } } }
                             Button("Done (remove from inbox)") { Task { await markDone(n) } }
                             Button("Open in browser") { openInBrowser(n.webURL) }
+                            if let ref = ShortLink.ref(route: n.route) {
+                                Button("Copy short link") { app.copyShortLink(ref) }
+                            }
                         }
                 }
                 if items.isEmpty, !loading, error == nil {

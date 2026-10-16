@@ -46,6 +46,11 @@ struct PullYardApp: App {
                 Button("Projects") { app.section = .projects }.keyboardShortcut("5")
                 Button("Claude Code") { app.section = .claude }.keyboardShortcut("6")
                 Divider()
+                Button("Copy Short Link") { if let ref = app.frontItem { app.copyShortLink(ref) } }
+                    .keyboardShortcut("c", modifiers: [.command, .shift])
+                    .disabled(app.frontItem == nil)
+                BlameCommand()
+                Divider()
                 Button("Back") { if !app.detailPath.isEmpty { app.detailPath.removeLast() } }
                     .keyboardShortcut("[")
             }
@@ -72,5 +77,26 @@ struct PullYardApp: App {
         Settings {
             ThemedRoot { SettingsView().environment(app) }
         }
+    }
+}
+
+struct BlameFocusKey: FocusedValueKey {
+    typealias Value = Binding<Bool>
+}
+
+extension FocusedValues {
+    var blame: Binding<Bool>? {
+        get { self[BlameFocusKey.self] }
+        set { self[BlameFocusKey.self] = newValue }
+    }
+}
+
+struct BlameCommand: View {
+    @FocusedBinding(\.blame) private var blame
+
+    var body: some View {
+        Toggle("Blame", isOn: Binding(get: { blame ?? false }, set: { blame = $0 }))
+            .keyboardShortcut("b", modifiers: [.command, .option])
+            .disabled(blame == nil)
     }
 }

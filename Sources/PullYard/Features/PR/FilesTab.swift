@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FilesTab: View {
     @Bindable var model: PRDetailModel
+    @Environment(AppModel.self) private var app
     @State private var showList = true
     @State private var filter = ""
 
@@ -23,6 +24,13 @@ struct FilesTab: View {
             }
         }
         .task { await model.loadFiles() }
+    }
+
+    private var blameAction: ((DiffFile) -> Void)? {
+        guard let head = model.pr?.headRefOid else { return nil }
+        let app = app
+        let repo = model.ref.repo
+        return { file in app.openCode(repo, ref: head, path: file.id, blame: true) }
     }
 
     private var visibleFiles: [DiffFile] {
@@ -69,7 +77,7 @@ struct FilesTab: View {
         let rows: [DiffTableRow] = flat.map { row in
             switch row {
             case .header(let file):
-                return .view(id: row.id, group: true) { AnyView(FileHeader(model: model, file: file, showList: $showList)) }
+                return .view(id: row.id, group: true) { AnyView(FileHeader(model: model, file: file, showList: $showList, onBlame: blameAction)) }
             case .row(let file, let r):
                 if case .line(let line) = r {
                     fileOf[row.id] = file.id
@@ -118,6 +126,7 @@ struct FileHeader: View {
     @Bindable var model: PRDetailModel
     let file: DiffFile
     @Binding var showList: Bool
+    var onBlame: ((DiffFile) -> Void)?
 
     var body: some View {
         let collapsed = model.collapsed.contains(file.id)
@@ -146,6 +155,9 @@ struct FileHeader: View {
                 .controlSize(.small)
             Menu {
                 Button("Copy path") { copyToPasteboard(file.id) }
+                if file.status != "removed", let onBlame {
+                    Button("Blame") { onBlame(file) }
+                }
                 Button(showList ? "Hide file list" : "Show file list") { showList.toggle() }
                 Button("Collapse all") { model.collapsed = Set(model.files.map(\.id)) }
                 Button("Expand all") { model.collapsed = [] }

@@ -314,6 +314,7 @@ func projectColor(_ name: String) -> Color {
 }
 
 struct ProjectColumn: View {
+    @Environment(AppModel.self) private var app
     let model: ProjectBoardModel
     let column: ProjectBoardView.Column
     let items: [ProjectItem]
@@ -350,6 +351,9 @@ struct ProjectColumn: View {
                                 if let url = item.content?.url {
                                     Button("Open in Browser") { openInBrowser(url) }
                                     Button("Copy Link") { copyToPasteboard(url) }
+                                    if let ref = ShortLink.ref(url: url) {
+                                        Button("Copy Short Link") { app.copyShortLink(ref) }
+                                    }
                                 }
                             }
                     }

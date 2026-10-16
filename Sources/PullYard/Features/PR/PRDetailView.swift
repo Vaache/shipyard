@@ -209,6 +209,7 @@ struct PRDetailContent: View {
     @ViewBuilder
     private var moreMenu: some View {
         Button("Copy link") { copyToPasteboard(pr.url) }
+        Button("Copy short link") { app.copyShortLink(ShortLink.ref(url: pr.url) ?? model.ref) }
         Button("Copy “gh pr checkout \(pr.number)”") { copyToPasteboard("gh pr checkout \(pr.number) -R \(model.ref.repo.full)") }
         Button("Copy branch name") { copyToPasteboard(pr.headRefName) }
         Divider()
@@ -256,6 +257,7 @@ struct PRHeaderView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(pr.title).font(.title2.weight(.bold)).textSelection(.enabled)
                 Text("#\(pr.number)").font(.title2).foregroundStyle(Color.syDim)
+                ShortLinkButton(ref: ShortLink.ref(url: pr.url) ?? model.ref)
             }
             HStack(spacing: 8) {
                 StateBadge(state: pr.visualState)
