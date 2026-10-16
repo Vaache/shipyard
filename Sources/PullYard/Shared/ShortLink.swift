@@ -39,6 +39,7 @@ struct ShortLinkButton: View {
 }
 
 struct ToastBanner: View {
+    var bottomInset: CGFloat?
     @Environment(AppModel.self) private var app
 
     var body: some View {
@@ -53,7 +54,7 @@ struct ToastBanner: View {
             .background(.regularMaterial, in: Capsule())
             .overlay(Capsule().stroke(Color(nsColor: .separatorColor)))
             .shadow(radius: 6, y: 2)
-            .padding(.bottom, app.clipboardRoute == nil && app.rateLimitedUntil == nil ? 16 : 0)
+            .padding(.bottom, bottomInset ?? (app.clipboardRoute == nil && app.rateLimitedUntil == nil ? 16 : 0))
             .allowsHitTesting(false)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .id(text)

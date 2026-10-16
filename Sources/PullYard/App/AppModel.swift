@@ -116,6 +116,7 @@ final class AppModel {
 
     private var lastClipboard: String?
     private var toastTask: Task<Void, Never>?
+    @ObservationIgnored private var canonicalItems: [ItemRef: ItemRef] = [:]
     private var pollTask: Task<Void, Never>?
     private var prModels: [ItemRef: PRDetailModel] = [:]
     private var prOrder: [ItemRef] = []
@@ -353,7 +354,13 @@ final class AppModel {
     }
 
     var frontItem: ItemRef? {
-        ShortLink.ref(route: frontRoute)
+        guard let ref = ShortLink.ref(route: frontRoute) else { return nil }
+        return canonicalItems[ref] ?? ref
+    }
+
+    func noteCanonical(_ ref: ItemRef, url: String) {
+        guard let canonical = ShortLink.ref(url: url), canonical.number == ref.number else { return }
+        canonicalItems[ref] = canonical
     }
 
     func copyShortLink(_ ref: ItemRef) {

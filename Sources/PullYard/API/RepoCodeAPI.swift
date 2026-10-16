@@ -76,6 +76,24 @@ struct BlameRange: Decodable, Equatable {
     let commit: BlameCommit
 }
 
+final class ResolvedObject: Decodable {
+    let typename: String
+    let oid: String
+    let target: ResolvedObject?
+
+    enum CodingKeys: String, CodingKey { case typename = "__typename", oid, target }
+
+    var commitOid: String? {
+        if typename == "Commit" { return oid }
+        return target?.commitOid
+    }
+}
+
+struct ResolveRefResponse: Decodable {
+    struct R: Decodable { let object: ResolvedObject? }
+    let repository: R?
+}
+
 struct BlameResponse: Decodable {
     struct Ranges: Decodable { let ranges: [BlameRange] }
     struct Target: Decodable { let blame: Ranges? }
@@ -89,6 +107,17 @@ extension GitHubAPI {
       ... on Commit { blame(path: $path) { ranges { startingLine endingLine age commit { oid abbreviatedOid messageHeadline committedDate url author { name user { login avatarUrl } } } } } }
     } } }
     """
+
+    static let resolveCommitQuery = """
+    query ResolveCommit($owner: String!, $name: String!, $ref: String!) { repository(owner: $owner, name: $name) { object(expression: $ref) {
+      __typename oid ... on Tag { target { __typename oid ... on Tag { target { __typename oid ... on Tag { target { __typename oid } } } } } }
+    } } }
+    """
+
+    func resolveCommit(_ repo: RepoRef, ref: String) async throws -> String? {
+        let r: ResolveRefResponse = try await graphQL(GitHubAPI.resolveCommitQuery, ["owner": repo.owner, "name": repo.name, "ref": ref])
+        return r.repository?.object?.commitOid
+    }
 
     func blame(_ repo: RepoRef, ref: String, path: String) async throws -> [BlameRange] {
         let r: BlameResponse = try await graphQL(GitHubAPI.blameQuery, ["owner": repo.owner, "name": repo.name, "ref": ref, "path": path], strict: true)

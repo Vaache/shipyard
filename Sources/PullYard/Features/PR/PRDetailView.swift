@@ -79,6 +79,7 @@ struct PRDetailContent: View {
         }
         .navigationTitle(pr.title)
         .navigationSubtitle("\(model.ref.repo.full) #\(pr.number)")
+        .task(id: pr.url) { app.noteCanonical(model.ref, url: pr.url) }
         .toolbar { toolbar }
         .sheet(isPresented: $showReview) { ReviewSheet(model: model, pr: pr) }
         .sheet(isPresented: $showMerge) { MergeSheet(model: model, pr: pr) }

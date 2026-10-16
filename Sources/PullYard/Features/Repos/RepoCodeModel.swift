@@ -33,6 +33,9 @@ final class RepoCodeModel {
     var blame: BlameMap?
     var blameError: String?
     var blameLoadingKey: String?
+    var commit: String?
+    var fileCommit: String?
+    @ObservationIgnored private var commitRef: String?
     @ObservationIgnored private var blameCache: [String: BlameMap] = [:]
     @ObservationIgnored private var dirCache: [String: (entries: [TreeEntry], readme: String?)] = [:]
 
@@ -79,7 +82,43 @@ final class RepoCodeModel {
     }
 
     private var blameKey: String? {
-        selectedFile.map { "\(repo.full)|\(ref)|\($0)" }
+        guard let path = selectedFile, let sha = fileCommit else { return nil }
+        return "\(repo.full)|\(sha)|\(path)"
+    }
+
+    func resolveCommit(force: Bool = false) async throws -> String {
+        let r = ref
+        if !force, let commit, commitRef == r { return commit }
+        let sha: String?
+        if r.count == 40, r.allSatisfy(\.isHexDigit) {
+            sha = r.lowercased()
+        } else if !force, let known = branches.first(where: { $0.name == r })?.commit.sha {
+            sha = known
+        } else {
+            sha = try await api.resolveCommit(repo, ref: r)
+        }
+        guard let sha else { throw APIError(message: "Branch not found") }
+        if r == ref {
+            commit = sha
+            commitRef = r
+        }
+        return sha
+    }
+
+    func refresh() async {
+        let before = fileCommit
+        let sha = try? await resolveCommit(force: true)
+        await openDir(dir)
+        if let path = selectedFile, let sha, sha != before { await openFile(path) }
+    }
+
+    func retryBlame() async {
+        guard let path = selectedFile else { return }
+        if let sha = try? await resolveCommit(force: true), sha != fileCommit {
+            await openFile(path)
+        } else {
+            await loadBlame()
+        }
     }
 
     func setBlame(_ on: Bool) {
@@ -88,7 +127,7 @@ final class RepoCodeModel {
     }
 
     func loadBlame() async {
-        guard blameOn, let path = selectedFile, let key = blameKey else { return }
+        guard blameOn, let path = selectedFile, let sha = fileCommit, let key = blameKey else { return }
         guard blame?.id != key, blameLoadingKey != key else { return }
         switch file {
         case .text, .markdown:
@@ -109,7 +148,7 @@ final class RepoCodeModel {
         blameError = nil
         defer { if blameLoadingKey == key { blameLoadingKey = nil } }
         do {
-            let ranges = try await api.blame(repo, ref: ref, path: path)
+            let ranges = try await api.blame(repo, ref: sha, path: path)
             let map = await Task.detached { BlameMap(id: key, ranges: ranges) }.value
             if blameCache.count >= 40 { blameCache.removeAll() }
             blameCache[key] = map
@@ -120,6 +159,11 @@ final class RepoCodeModel {
             guard key == blameKey else { return }
             blameError = Self.blameUnavailable
         }
+    }
+
+    var showsMarkdown: Bool {
+        if case .markdown = file { return true }
+        return false
     }
 
     var canRetryBlame: Bool {
@@ -150,6 +194,8 @@ final class RepoCodeModel {
         blame = nil
         blameError = nil
         blameOn = false
+        commit = nil
+        fileCommit = nil
         let keepDir = dir
         await openDir(keepDir)
         if dirError != nil, !keepDir.isEmpty { await openDir("") }
@@ -219,6 +265,7 @@ final class RepoCodeModel {
         selectedFile = path
         file = nil
         fileError = nil
+        fileCommit = nil
         blame = nil
         blameError = nil
         loadingFile = true
@@ -226,19 +273,23 @@ final class RepoCodeModel {
         defer { if blameOn, selectedFile == path { Task { await loadBlame() } } }
         let ext = (path as NSString).pathExtension.lowercased()
         do {
+            let sha = try await resolveCommit()
+            guard selectedFile == path else { return }
             if Self.imageExts.contains(ext) {
-                guard let data = try await api.rawFile(repo, ref: ref, path: path) else { throw APIError(message: "File not found") }
+                guard let data = try await api.rawFile(repo, ref: sha, path: path) else { throw APIError(message: "File not found") }
                 guard selectedFile == path else { return }
+                fileCommit = sha
                 fileSize = data.count
                 if let img = NSImage(data: data) { file = .image(img) } else { file = .binary(data.count) }
                 return
             }
-            guard let obj = try await api.gitObject(repo, ref: ref, path: path) else { throw APIError(message: "File not found") }
+            guard let obj = try await api.gitObject(repo, ref: sha, path: path) else { throw APIError(message: "File not found") }
             guard selectedFile == path else { return }
+            fileCommit = sha
             fileSize = obj.byteSize
             if obj.isBinary == true {
                 file = .binary(obj.byteSize ?? 0)
-            } else if Self.markdownExts.contains(ext), let html = try? await api.renderedFile(repo, ref: ref, path: path) {
+            } else if Self.markdownExts.contains(ext), let html = try? await api.renderedFile(repo, ref: sha, path: path) {
                 file = .markdown(html: html, source: obj.text ?? "")
             } else {
                 file = .text(obj.text ?? "", truncated: obj.isTruncated ?? false)

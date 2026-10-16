@@ -70,7 +70,7 @@ final class PRDetailModel {
     @ObservationIgnored private var stackKey: String?
     private static var stackCache: [String: (stack: [StackPR], at: Date)] = [:]
     private static let stackTTL: TimeInterval = 600
-    @ObservationIgnored private var filesOid: String?
+    @ObservationIgnored private(set) var filesOid: String?
     @ObservationIgnored private var filesStale = false
     @ObservationIgnored private var filesStaleMark = 0
     @ObservationIgnored private var filesPending = false

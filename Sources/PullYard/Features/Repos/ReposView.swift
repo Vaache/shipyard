@@ -229,7 +229,7 @@ struct RepoDetailView: View {
         .onChange(of: app.refreshTick) {
             Task {
                 if tab != .code { await model.load(api: app.api, account: app.cacheAccount, query: query) }
-                else if let code { await code.openDir(code.dir) }
+                else if let code { await code.refresh() }
             }
         }
         .onLiveTick {

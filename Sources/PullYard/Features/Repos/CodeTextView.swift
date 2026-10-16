@@ -61,6 +61,7 @@ final class LineNumberRuler: NSRulerView, NSViewToolTipOwner {
     private var numberWidth: CGFloat = 44
     private(set) var blame: BlameMap?
     private var hoverOid: String?
+    private var hoverArea: NSTrackingArea?
     private var dateLabels: [String: String] = [:]
     var onOpenCommit: ((BlameCommit) -> Void)?
 
@@ -78,18 +79,21 @@ final class LineNumberRuler: NSRulerView, NSViewToolTipOwner {
     private var blameWidth: CGFloat { blame == nil ? 0 : Self.blameColumnWidth }
 
     func reindex() {
-        guard let s = textView?.string as NSString? else { return }
-        var starts = [0]
-        var idx = 0
-        while idx < s.length {
-            let r = s.lineRange(for: NSRange(location: idx, length: 0))
-            idx = NSMaxRange(r)
-            if idx < s.length || (idx == s.length && s.length > 0 && s.character(at: s.length - 1) == 10) { starts.append(idx) }
-        }
-        lineStarts = starts
-        let digits = max(3, String(starts.count).count)
+        guard let text = textView?.string else { return }
+        lineStarts = Self.lineStarts(text)
+        let digits = max(3, String(lineStarts.count).count)
         numberWidth = CGFloat(digits) * 7.5 + 14
         updateThickness()
+    }
+
+    static func lineStarts(_ text: String) -> [Int] {
+        var starts = [0]
+        var offset = 0
+        for unit in text.utf16 {
+            offset += 1
+            if unit == 10 { starts.append(offset) }
+        }
+        return starts
     }
 
     func setBlame(_ map: BlameMap?) {
@@ -252,8 +256,10 @@ final class LineNumberRuler: NSRulerView, NSViewToolTipOwner {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        guard hoverArea == nil else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverArea = area
     }
 
     override func mouseMoved(with event: NSEvent) {

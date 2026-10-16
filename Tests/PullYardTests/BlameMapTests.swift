@@ -66,4 +66,26 @@ final class BlameMapTests: XCTestCase {
     func testAuthorLabelPrefersLogin() {
         XCTAssertEqual(commit("a").authorLabel, "login")
     }
+
+    func testLineStartsCountOnlyNewlines() {
+        XCTAssertEqual(LineNumberRuler.lineStarts("a\nb\n"), [0, 2, 4])
+        XCTAssertEqual(LineNumberRuler.lineStarts("a\r\nb"), [0, 3])
+        XCTAssertEqual(LineNumberRuler.lineStarts("a\rb\u{2028}c\u{85}d\ne"), [0, 8])
+        XCTAssertEqual(LineNumberRuler.lineStarts(""), [0])
+    }
+
+    func testResolvesAnnotatedTagToCommit() throws {
+        let json = """
+        {"repository":{"object":{"__typename":"Tag","oid":"t1","target":{"__typename":"Tag","oid":"t2","target":{"__typename":"Commit","oid":"c1"}}}}}
+        """
+        let r = try JSONDecoder().decode(ResolveRefResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(r.repository?.object?.commitOid, "c1")
+    }
+
+    func testResolvesCommitAndRejectsTree() throws {
+        let commit = try JSONDecoder().decode(ResolvedObject.self, from: Data(#"{"__typename":"Commit","oid":"c2"}"#.utf8))
+        XCTAssertEqual(commit.commitOid, "c2")
+        let tree = try JSONDecoder().decode(ResolvedObject.self, from: Data(#"{"__typename":"Tree","oid":"x"}"#.utf8))
+        XCTAssertNil(tree.commitOid)
+    }
 }

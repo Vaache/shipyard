@@ -27,7 +27,7 @@ struct FilesTab: View {
     }
 
     private var blameAction: ((DiffFile) -> Void)? {
-        guard let head = model.pr?.headRefOid else { return nil }
+        guard let head = model.filesOid ?? model.pr?.headRefOid else { return nil }
         let app = app
         let repo = model.ref.repo
         return { file in app.openCode(repo, ref: head, path: file.id, blame: true) }

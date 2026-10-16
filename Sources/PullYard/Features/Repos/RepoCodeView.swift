@@ -19,8 +19,8 @@ struct RepoCodeView: View {
         }
         .sheet(isPresented: $showQuickOpen) { QuickOpenSheet(model: model) }
         .focusedSceneValue(\.blame, model.selectedFile != nil && model.file != nil ? blameBinding : nil)
-        .onChange(of: model.blameOn) { _, on in
-            if on, case .markdown = model.file { markdownSource = true }
+        .onChange(of: model.blameOn && model.showsMarkdown, initial: true) { _, needsSource in
+            if needsSource { markdownSource = true }
         }
         .background {
             Button("") { showQuickOpen = true }
@@ -191,7 +191,7 @@ struct RepoCodeView: View {
                         .foregroundStyle(Color.syAmber)
                         .lineLimit(1)
                     if model.canRetryBlame {
-                        Button("Retry") { Task { await model.loadBlame() } }
+                        Button("Retry") { Task { await model.retryBlame() } }
                             .buttonStyle(.link)
                             .font(.caption)
                     }
