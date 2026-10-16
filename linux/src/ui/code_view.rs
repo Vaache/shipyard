@@ -133,7 +133,7 @@ impl CodeView {
         if show {
             let r = self.blame_renderer();
             if !self.blame_inserted.get() {
-                self.view.gutter(gtk::TextWindowType::Left).insert(&r, -40);
+                sourceview5::prelude::ViewExt::gutter(&self.view, gtk::TextWindowType::Left).insert(&r, -40);
                 self.blame_inserted.set(true);
                 self.size_blame(&r);
             }
@@ -142,7 +142,7 @@ impl CodeView {
             }
         } else if self.blame_inserted.get() {
             if let Some(r) = self.blame_renderer.borrow().as_ref() {
-                self.view.gutter(gtk::TextWindowType::Left).remove(r);
+                sourceview5::prelude::ViewExt::gutter(&self.view, gtk::TextWindowType::Left).remove(r);
             }
             self.blame_inserted.set(false);
         }
