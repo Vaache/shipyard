@@ -396,7 +396,7 @@ impl FuzzyIndex {
 
     pub fn search(&self, query: &str, candidates: Option<&[u32]>, limit: usize) -> (Vec<u32>, Vec<u32>) {
         let q: Vec<char> = query.chars().collect();
-        let all: Box<dyn Iterator<Item = u32>> = match candidates {
+        let all: Box<dyn Iterator<Item = u32> + '_> = match candidates {
             Some(c) => Box::new(c.iter().copied()),
             None => Box::new(0..self.paths.len() as u32),
         };
