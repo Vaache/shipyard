@@ -58,7 +58,8 @@ public sealed class RefreshFooter : Grid
         icon.Foreground = Palette.Brush(error is not null ? "amber" : "muted");
         retry.Visibility = error is not null && !refreshing && Retry is not null ? Visibility.Visible : Visibility.Collapsed;
         string text;
-        if (refreshing) text = L.T("Refresh_Updating", "Updating…");
+        if (refreshing && !compact && updated is { } since && DateTimeOffset.Now - since >= TimeSpan.FromMinutes(1)) text = L.F("Refresh_UpdatedUpdating", "Updated {0} · updating…", Fmt.Ago(since, DateTimeOffset.Now));
+        else if (refreshing) text = L.T("Refresh_Updating", "Updating…");
         else if (error is not null) text = compact ? L.T("Refresh_Offline", "Offline") : L.T("Refresh_Failed", "Couldn't refresh");
         else if (updated is not { } u) text = compact ? "" : L.T("Refresh_NotYet", "Not updated yet");
         else

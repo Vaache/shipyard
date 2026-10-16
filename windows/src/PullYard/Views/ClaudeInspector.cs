@@ -565,7 +565,7 @@ public sealed class InspectorPRDetail : Grid
             app.LiveTick += live.Tick;
             model.FilesInInspector = showFiles;
             status.Retry = () => model.Load(true).Forget();
-            model.Load().Forget();
+            model.Open().Forget();
             Render();
         };
         Unloaded += (_, _) =>

@@ -179,6 +179,20 @@ public class DiagnosticsTests : IDisposable
     }
 
     [Fact]
+    public async Task ScopedNoteIsRecordedWithRequest()
+    {
+        Diagnostics.Enabled = true;
+        await Assert.ThrowsAnyAsync<Exception>(() => Diagnostics.WithNote("full: first", () => GitHubApi.Plain(Closed)));
+        await Assert.ThrowsAnyAsync<Exception>(() => GitHubApi.Plain(Closed));
+        var all = Diagnostics.Shared.Requests();
+        Assert.Equal(4, all.Count);
+        Assert.Equal("retry", all[0].Note);
+        Assert.Null(all[1].Note);
+        Assert.Equal("full: first; retry", all[2].Note);
+        Assert.Equal("full: first", all[3].Note);
+    }
+
+    [Fact]
     public async Task RecordsFailedRequestWithoutQueryString()
     {
         Diagnostics.Enabled = true;

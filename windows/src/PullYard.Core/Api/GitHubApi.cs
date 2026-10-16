@@ -274,7 +274,7 @@ public sealed partial class GitHubApi
         return data;
     }
 
-    private sealed record Validated(string? LastModified, byte[] Data, DateTimeOffset FetchedAt, TimeSpan PollInterval);
+    private sealed record Validated(string? LastModified, string? ETag, byte[] Data, DateTimeOffset FetchedAt, TimeSpan PollInterval);
 
     private readonly ConcurrentDictionary<string, Validated> validated = new();
     private readonly object validatedGate = new();
@@ -291,24 +291,26 @@ public sealed partial class GitHubApi
             validated.TryGetValue(url, out prior);
         }
         if (live && prior is not null && DateTimeOffset.Now - prior.FetchedAt < prior.PollInterval) return (prior.Data, false);
-        var since = live ? prior?.LastModified : null;
+        var conditional = live ? prior : null;
         HttpRequestMessage Make()
         {
             var req = Request(HttpMethod.Get, url, noCache: false);
-            if (since is not null) req.Headers.TryAddWithoutValidation("If-Modified-Since", since);
+            if (conditional?.ETag is { } etag) req.Headers.TryAddWithoutValidation("If-None-Match", etag);
+            if (conditional?.LastModified is { } since) req.Headers.TryAddWithoutValidation("If-Modified-Since", since);
             return req;
         }
         var (response, data) = await Send(http, Make, ct).ConfigureAwait(false);
         using var _ = response;
         var poll = PollInterval(response) ?? prior?.PollInterval ?? TimeSpan.Zero;
-        if (response.StatusCode == HttpStatusCode.NotModified && since is not null && prior is not null)
+        if (response.StatusCode == HttpStatusCode.NotModified && conditional is not null)
         {
-            Store(url, generation, prior with { FetchedAt = DateTimeOffset.Now, PollInterval = poll });
-            return (prior.Data, false);
+            Store(url, generation, conditional with { FetchedAt = DateTimeOffset.Now, PollInterval = poll });
+            return (conditional.Data, false);
         }
         await Check(response, data);
         var lastModified = response.Content.Headers.TryGetValues("Last-Modified", out var values) ? values.FirstOrDefault() : null;
-        if (!Store(url, generation, new Validated(lastModified, data, DateTimeOffset.Now, poll)) && live) return (data, false);
+        var etag = response.Headers.ETag?.ToString();
+        if (!Store(url, generation, new Validated(lastModified, etag, data, DateTimeOffset.Now, poll)) && live) return (data, false);
         return (data, true);
     }
 

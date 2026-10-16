@@ -353,6 +353,7 @@
   <data name="Refresh_NotYet" xml:space="preserve"><value>Not updated yet</value></data>
   <data name="Refresh_Offline" xml:space="preserve"><value>Offline</value></data>
   <data name="Refresh_Updated" xml:space="preserve"><value>Updated {0}</value></data>
+  <data name="Refresh_UpdatedUpdating" xml:space="preserve"><value>Updated {0} · updating…</value></data>
   <data name="Refresh_Updating" xml:space="preserve"><value>Updating…</value></data>
   <data name="Reply_AndResolve" xml:space="preserve"><value>Reply and resolve</value></data>
   <data name="Reply_Placeholder" xml:space="preserve"><value>Reply (Markdown)</value></data>

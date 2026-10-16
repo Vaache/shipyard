@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using PullYard.Core.Api;
 using PullYard.Core.Html;
+using PullYard.Core.Util;
 
 namespace PullYard.ViewModels;
 
@@ -46,7 +47,7 @@ public sealed partial class PRDetailViewModel : ObservableObject
     private Task? activeLoad;
     private Task? queuedLoad;
     private bool reloadFiles;
-    private bool userLoad;
+    private string? forcedReason;
     private bool reloadStack;
     private string? filesOid;
     private bool filesOutdated;
@@ -116,8 +117,9 @@ public sealed partial class PRDetailViewModel : ObservableObject
         {
             reloadFiles = true;
             reloadStack = true;
+            forcedReason = "refresh";
         }
-        if (!live) userLoad = true;
+        else if (!live) forcedReason ??= "load";
         if (queuedLoad is not null) return queuedLoad;
         if (activeLoad is not null)
         {
@@ -127,6 +129,8 @@ public sealed partial class PRDetailViewModel : ObservableObject
         }
         return StartLoad();
     }
+
+    public Task Open() => Load(live: Pr is not null);
 
     private async Task Chain(Task current)
     {
@@ -157,18 +161,25 @@ public sealed partial class PRDetailViewModel : ObservableObject
 
     private async Task Fetch()
     {
-        var live = !userLoad;
-        userLoad = false;
-        var fullDue = DateTimeOffset.Now - lastFullFetch >= FullFetchInterval;
-        if (live && !fullDue && !reloadFiles && !reloadStack && Pr is not null && signature is not null && !pulseUnsupported && await Unchanged())
+        var forced = forcedReason;
+        forcedReason = null;
+        var live = forced is null;
+        string reason;
+        if (Pr is null) reason = "first";
+        else if (forced is not null) reason = forced;
+        else if (DateTimeOffset.Now - lastFullFetch >= FullFetchInterval) reason = "stale";
+        else if (signature is null) reason = "no baseline";
+        else if (pulseUnsupported) reason = "pulse unsupported";
+        else if (await Unchanged())
         {
             if (FilesVisible && (!FilesLoaded || filesOutdated || FilesError is not null)) LoadFiles().Forget();
             return;
         }
+        else reason = pulseUnsupported ? "pulse unsupported" : "changed";
         Loading = true;
         try
         {
-            var r = await Api.PullRequest(Ref);
+            var r = await Diagnostics.WithNote($"full: {reason}", () => Api.PullRequest(Ref));
             ViewerLogin = r.Viewer.Login;
             if (r.Repository?.PullRequest is not { } pr)
             {
@@ -372,6 +383,7 @@ public sealed partial class PRDetailViewModel : ObservableObject
             if (reload)
             {
                 reloadStack = true;
+                forcedReason = "mutation";
                 await Load();
             }
             return true;
