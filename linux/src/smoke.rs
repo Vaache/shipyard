@@ -1,16 +1,45 @@
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gtk::glib;
 
 use crate::api::models::*;
 use crate::api::GitHubApi;
 use crate::app::{self, App, IssueFilter, PrFilter, Section};
+use crate::ui::pr::model::{Change, PrModel};
 
 fn step(delay_ms: u64, name: &'static str, f: impl FnOnce() + 'static) {
     glib::timeout_add_local_once(Duration::from_millis(delay_ms), move || {
         println!("smoke: {name}");
         f();
+    });
+}
+
+const DIFF_ROUNDS: usize = 12;
+
+fn diff_round(m: Rc<PrModel>, middle: String, i: usize, mut sync: Vec<f64>, mut frame: Vec<f64>) {
+    if i == DIFF_ROUNDS {
+        let half = DIFF_ROUNDS / 2;
+        let avg = |v: &[f64]| v.iter().sum::<f64>() / v.len().max(1) as f64;
+        let max = |v: &[f64]| v.iter().cloned().fold(0.0, f64::max);
+        for (label, range) in [("full rebuild", 0..half), ("splice", half..DIFF_ROUNDS)] {
+            let (s, f) = (&sync[range.clone()], &frame[range]);
+            println!("smoke: large diff {label}: sync avg {:.1} ms max {:.1} ms, to painted frame avg {:.1} ms max {:.1} ms", avg(s), max(s), avg(f), max(f));
+        }
+        return;
+    }
+    if i % 2 == 0 {
+        m.collapsed.borrow_mut().insert(middle.clone());
+    } else {
+        m.collapsed.borrow_mut().remove(&middle);
+    }
+    let started = Instant::now();
+    m.emit(if i < DIFF_ROUNDS / 2 { Change::Files } else { Change::Diff });
+    sync.push(started.elapsed().as_secs_f64() * 1000.0);
+    let Some(win) = app::main_window() else { return };
+    crate::ui::widgets::after_next_paint(&win, move || {
+        frame.push(started.elapsed().as_secs_f64() * 1000.0);
+        glib::idle_add_local_once(move || diff_round(m, middle, i + 1, sync, frame));
     });
 }
 
@@ -86,6 +115,26 @@ pub fn run(_app: Rc<App>) {
         m.emit(crate::ui::pr::model::Change::Diff);
         m.reveal_file("README.md");
     });
+    let large = || ItemRef { repo: RepoRef::new("octocat", "Hello-World"), number: 4 };
+    step(next(400), "large diff", move || {
+        if let Some(api) = app::api() {
+            let m = crate::ui::pr::model::PrModel::new(large(), api);
+            let resp: PrDetailResponse = serde_json::from_str(crate::fixtures::PR_DETAIL).expect("fixture");
+            m.inject(resp, crate::fixtures::large_diff(50));
+            app::insert_pr_model(m.clone());
+            app::select(Some(Route::Pr(large())));
+            m.set_tab(crate::ui::pr::model::PrTab::Files);
+        }
+    });
+    step(next(800), "large diff update", move || {
+        let Some(m) = app::pr_model(&large()) else { return };
+        let rows = m.flat_rows("").len();
+        let changed: i64 = m.files.borrow().iter().map(|f| f.additions + f.deletions).sum();
+        println!("smoke: large diff {changed} changed lines, {rows} rows");
+        let middle = m.files.borrow().get(25).map(|f| f.id.clone()).unwrap_or_default();
+        diff_round(m, middle, 0, vec![], vec![]);
+    });
+    step(next(3000), "fixture pr page again", || app::select(Some(Route::Pr(ItemRef { repo: RepoRef::new("octocat", "Hello-World"), number: 1 }))));
     step(next(400), "commits tab", move || pr().set_tab(crate::ui::pr::model::PrTab::Commits));
     step(next(300), "checks tab", move || pr().set_tab(crate::ui::pr::model::PrTab::Checks));
     step(next(300), "conversation tab", move || pr().set_tab(crate::ui::pr::model::PrTab::Conversation));

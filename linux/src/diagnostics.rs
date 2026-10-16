@@ -471,15 +471,23 @@ pub fn ui_span(name: &'static str) -> UiSpan {
     UiSpan(Some((name, Instant::now())))
 }
 
+pub fn ui_elapsed(name: &'static str, started: Instant) {
+    if !enabled() {
+        return;
+    }
+    let ms = round_ms(started.elapsed());
+    if ms <= SLOW_UI_MS {
+        return;
+    }
+    push_capped(&mut store().slow_ui, SlowUiEntry { ts: Utc::now(), name, duration_ms: ms }, SLOW_UI_CAPACITY);
+    bump();
+}
+
 impl Drop for UiSpan {
     fn drop(&mut self) {
-        let Some((name, started)) = self.0.take() else { return };
-        let ms = round_ms(started.elapsed());
-        if ms <= SLOW_UI_MS {
-            return;
+        if let Some((name, started)) = self.0.take() {
+            ui_elapsed(name, started);
         }
-        push_capped(&mut store().slow_ui, SlowUiEntry { ts: Utc::now(), name, duration_ms: ms }, SLOW_UI_CAPACITY);
-        bump();
     }
 }
 

@@ -1,3 +1,5 @@
+use crate::api::models::PrFile;
+
 pub const PR_DETAIL: &str = r##"{
   "viewer": { "login": "smoke" },
   "repository": {
@@ -68,3 +70,20 @@ pub const CHAT_STREAM: &[&str] = &[
     r##"{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.01}"##,
     r##"{"type":"control_response","response":{"request_id":"gl-2-get_context_usage","subtype":"success","response":{"totalTokens":12000,"maxTokens":200000,"percentage":6,"categories":[{"name":"Messages","tokens":9000,"color":"blue","kind":"used"}]}}}"##,
 ];
+
+pub fn large_diff(files: usize) -> Vec<PrFile> {
+    (0..files)
+        .map(|f| {
+            let mut patch = String::from("@@ -1,40 +1,80 @@ fn generated");
+            for i in 0..100 {
+                patch.push('\n');
+                patch.push_str(&match i % 5 {
+                    0 => format!(" let context_{i} = {f};"),
+                    1 => format!("-    let old_{i} = compute({i}, {f});"),
+                    _ => format!("+    let new_{i} = compute_faster({i}, {f}).unwrap_or_default();"),
+                });
+            }
+            PrFile { filename: format!("src/generated/module_{f}.rs"), status: "modified".into(), additions: 60, deletions: 20, patch: Some(patch), previous_filename: None }
+        })
+        .collect()
+}

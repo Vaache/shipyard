@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -17,6 +18,10 @@ pub struct FilesTab {
     model: Rc<PrModel>,
     store: gio::ListStore,
     rows: RefCell<Vec<FlatRow>>,
+    row_keys: RefCell<Vec<RowKey>>,
+    rows_open: Cell<Option<bool>>,
+    rows_filter: RefCell<String>,
+    file_list_sig: Cell<Option<u64>>,
     view: gtk::ListView,
     file_list: gtk::ListBox,
     file_keys: RefCell<Vec<String>>,
@@ -26,6 +31,13 @@ pub struct FilesTab {
     expanded_threads: RefCell<std::collections::HashMap<String, bool>>,
     pending_reveal: RefCell<Option<String>>,
     suppress_select: Cell<bool>,
+}
+
+#[derive(PartialEq)]
+enum RowKey {
+    Header(usize, bool, bool),
+    Line(usize, usize),
+    Other(String),
 }
 
 fn status_label(f: &DiffFile) -> gtk::Label {
@@ -124,6 +136,10 @@ impl FilesTab {
             model: model.clone(),
             store,
             rows: RefCell::new(vec![]),
+            row_keys: RefCell::new(vec![]),
+            rows_open: Cell::new(None),
+            rows_filter: RefCell::new(String::new()),
+            file_list_sig: Cell::new(None),
             view,
             file_list: file_list.clone(),
             file_keys: RefCell::new(vec![]),
@@ -186,7 +202,12 @@ impl FilesTab {
         model.changed.connect(move |c| match w.upgrade() {
             Some(me) => {
                 match c {
-                    Change::Files | Change::Diff | Change::Pr => me.rebuild(),
+                    Change::Files => {
+                        me.rows_open.set(None);
+                        me.file_list_sig.set(None);
+                        me.rebuild();
+                    }
+                    Change::Diff | Change::Pr => me.rebuild(),
                     Change::Reveal(p) => me.reveal(p),
                     _ => {}
                 }
@@ -199,6 +220,8 @@ impl FilesTab {
     }
 
     fn rebuild(self: &Rc<Self>) {
+        let _span = crate::diagnostics::ui_span("pr.diff");
+        let started = std::time::Instant::now();
         let m = &self.model;
         if !m.files_loaded.get() {
             if let Some(e) = m.files_error.borrow().clone() {
@@ -223,9 +246,30 @@ impl FilesTab {
         self.widget.set_visible_child_name("files");
         let filter = self.filter.borrow().clone();
         let rows = m.flat_rows(&filter);
-        let objs: Vec<glib::BoxedAnyObject> = rows.iter().map(|r| glib::BoxedAnyObject::new(r.clone())).collect();
-        let n = self.store.n_items();
-        self.store.splice(0, n, &objs);
+        let keys: Vec<RowKey> = rows.iter().map(|r| self.row_key(r)).collect();
+        let open = Some(m.pr.borrow().as_ref().map(|p| p.is_open()).unwrap_or(false));
+        let old = self.row_keys.replace(vec![]);
+        let n = self.store.n_items() as usize;
+        let full = self.rows_open.get() != open || old.len() != n || self.rows_filter.borrow().as_str() != filter;
+        let (prefix, suffix) = if full {
+            (0, 0)
+        } else {
+            let prefix = old.iter().zip(&keys).take_while(|(a, b)| a == b).count();
+            let room = old.len().min(keys.len()) - prefix;
+            let suffix = old.iter().rev().zip(keys.iter().rev()).take(room).take_while(|(a, b)| a == b).count();
+            (prefix, suffix)
+        };
+        let removed = n - prefix - suffix;
+        let objs: Vec<glib::BoxedAnyObject> = rows[prefix..rows.len() - suffix].iter().map(|r| glib::BoxedAnyObject::new(r.clone())).collect();
+        if removed > 0 || !objs.is_empty() {
+            self.store.splice(prefix as u32, removed as u32, &objs);
+            if crate::diagnostics::enabled() {
+                after_next_paint(&self.view, move || crate::diagnostics::ui_elapsed("pr.diff.frame", started));
+            }
+        }
+        self.rows_open.set(open);
+        *self.rows_filter.borrow_mut() = filter;
+        *self.row_keys.borrow_mut() = keys;
         *self.rows.borrow_mut() = rows;
         self.rebuild_file_list();
         if let Some(p) = self.pending_reveal.borrow_mut().take() {
@@ -234,11 +278,36 @@ impl FilesTab {
         }
     }
 
+    fn row_key(&self, row: &FlatRow) -> RowKey {
+        match row {
+            FlatRow::Header(fi) => {
+                let files = self.model.files.borrow();
+                let id = files.get(*fi).map(|f| f.id.as_str()).unwrap_or("");
+                RowKey::Header(*fi, self.model.collapsed.borrow().contains(id), self.model.viewed.borrow().contains(id))
+            }
+            FlatRow::Line(fi, li) => RowKey::Line(*fi, *li),
+            FlatRow::Thread(t) => RowKey::Other(format!("t{:?}{:?}", self.expanded_threads.borrow().get(&t.id), t)),
+            FlatRow::Pending(p) => RowKey::Other(format!("p{p:?}")),
+            FlatRow::Composer(a) => RowKey::Other(format!("c{a:?}")),
+            FlatRow::Note(text) => RowKey::Other(format!("n{text}")),
+        }
+    }
+
     fn rebuild_file_list(&self) {
         let m = &self.model;
         let files = m.files.borrow();
         let viewed = m.viewed.borrow();
         let filter = self.filter.borrow().clone();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        filter.hash(&mut hasher);
+        for f in files.iter() {
+            (&f.id, f.status_letter(), viewed.contains(&f.id), m.thread_count(&f.id) > 0).hash(&mut hasher);
+        }
+        let sig = Some(hasher.finish());
+        if self.file_list_sig.get() == sig {
+            return;
+        }
+        self.file_list_sig.set(sig);
         let viewed_count = files.iter().filter(|f| viewed.contains(&f.id)).count();
         self.viewed_label.set_text(&format!("{viewed_count}/{}", files.len()));
         self.suppress_select.set(true);

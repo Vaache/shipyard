@@ -60,7 +60,9 @@ jobs:
           key: ${{ matrix.arch }}
 
       - name: Unit tests
-        run: cargo test --release
+        env:
+          CARGO_PROFILE_DEV_DEBUG: '0'
+        run: cargo test
 
       - name: Build
         run: cargo build --release
