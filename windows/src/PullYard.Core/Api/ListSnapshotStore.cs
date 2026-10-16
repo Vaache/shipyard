@@ -12,8 +12,8 @@ public sealed class ListSnapshotStore
 {
     public const int Version = 1;
     public const int MaxItems = 40;
-    public const int MaxEntries = 48;
-    public static readonly TimeSpan MaxAge = TimeSpan.FromDays(14);
+    public const int MaxEntries = 60;
+    public static readonly TimeSpan MaxAge = TimeSpan.FromDays(7);
 
     public static ListSnapshotStore Shared { get; } = new(Path.Combine(AppInfo.DataDirectory, "Cache", "Lists"));
 
