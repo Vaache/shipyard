@@ -421,6 +421,7 @@ public static class Dialogs
         var boxes = new List<(CheckBox, string)>();
         var charCount = Ui.Text("", 11, "dim");
         var updating = false;
+        var shownText = "";
 
         string Generated()
         {
@@ -437,7 +438,8 @@ public static class Dialogs
         void Regenerate()
         {
             updating = true;
-            promptBox.Text = custom ?? Generated();
+            shownText = custom ?? Generated();
+            promptBox.Text = shownText;
             updating = false;
             editedChip.Visibility = custom is not null ? Visibility.Visible : Visibility.Collapsed;
             reset.Visibility = editedChip.Visibility;
@@ -452,7 +454,7 @@ public static class Dialogs
 
         promptBox.TextChanged += (_, _) =>
         {
-            if (updating) return;
+            if (updating || promptBox.Text.ReplaceLineEndings("\n") == shownText.ReplaceLineEndings("\n")) return;
             custom = promptBox.Text;
             editedChip.Visibility = Visibility.Visible;
             reset.Visibility = Visibility.Visible;
