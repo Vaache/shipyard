@@ -68,12 +68,21 @@ enum Q {
     ... on ReviewRequestedEvent { actor \(actor) createdAt requestedReviewer { __typename ... on User { login avatarUrl } ... on Team { name } } }
     """
 
+    static let prPulseFragment = """
+    fragment PRPulse on PullRequest { updatedAt headRefOid state isDraft merged mergeable mergeStateStatus reviewDecision baseRef { target { oid } } autoMergeRequest { enabledAt } pulseComments: comments { totalCount } pulseReviews: reviews { totalCount } pulseRequests: reviewRequests { totalCount } pulseThreads: reviewThreads(first: 100) { totalCount nodes { isResolved } } pulseCommit: commits(last: 1) { totalCount nodes { commit { oid statusCheckRollup { state contexts(first: 1) { checkRunCountsByState { state count } statusContextCountsByState { state count } } } } } } }
+    """
+
+    static let prPulse = """
+    query PullRequestPulse($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { ...PRPulse } } }
+    """ + prPulseFragment
+
     static let pullRequest = """
     query PullRequest($owner: String!, $name: String!, $number: Int!) {
       viewer { login }
       repository(owner: $owner, name: $name) {
         viewerPermission mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed deleteBranchOnMerge autoMergeAllowed viewerDefaultMergeMethod
         pullRequest(number: $number) {
+          ...PRPulse
           id number title url state isDraft merged mergeable mergeStateStatus body bodyHTML createdAt
           author \(actor)
           headRefName baseRefName headRefOid
@@ -101,7 +110,7 @@ enum Q {
         }
       }
     }
-    """
+    """ + prPulseFragment
 
     static let issue = """
     query Issue($owner: String!, $name: String!, $number: Int!) {

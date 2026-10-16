@@ -51,6 +51,13 @@ struct ReposView: View {
 
     private func load(first: Bool = false) async {
         guard let api = app.api else { return }
+        var cached = false
+        if first, repos.isEmpty, let snap = ListCache.load([RepoSummary].self, account: app.cacheAccount, key: "repos") {
+            cached = true
+            rows.ingest(snap.value.map(\.id), mode: .cascade)
+            repos = snap.value
+            lastUpdated = snap.saved
+        }
         loading = true
         refreshing = true
         defer {
@@ -60,8 +67,9 @@ struct ReposView: View {
         do {
             let r = try await api.repos(after: nil)
             let keep = repos.count > r.nodes.count ? Array(repos.dropFirst(r.nodes.count)).filter { n in !r.nodes.contains { $0.id == n.id } } : []
-            rows.ingest(r.nodes.map(\.id), mode: first ? .cascade : .refresh)
+            rows.ingest(r.nodes.map(\.id), mode: first && !cached ? .cascade : .refresh)
             repos = r.nodes + keep
+            ListCache.save(r.nodes, account: app.cacheAccount, key: "repos")
             if keep.isEmpty {
                 cursor = r.pageInfo.endCursor
                 hasMore = r.pageInfo.hasNextPage
@@ -186,16 +194,16 @@ struct RepoDetailView: View {
             if info == nil { info = nil }
         }
         .task(id: query) {
-            if tab != .code { await model.load(api: app.api, query: query) }
+            if tab != .code { await model.load(api: app.api, account: app.cacheAccount, query: query) }
         }
         .onChange(of: app.refreshTick) {
             Task {
-                if tab != .code { await model.load(api: app.api, query: query) }
+                if tab != .code { await model.load(api: app.api, account: app.cacheAccount, query: query) }
                 else if let code { await code.openDir(code.dir) }
             }
         }
         .onLiveTick {
-            if tab != .code { await model.load(api: app.api, query: query, silent: true) }
+            if tab != .code { await model.load(api: app.api, account: app.cacheAccount, query: query, silent: true) }
         }
     }
 
@@ -256,7 +264,7 @@ struct RepoDetailView: View {
         }
         .overlay { if model.loading && model.items.isEmpty { ProgressView().controlSize(.small) } }
         .liveRefresh(updated: model.lastUpdated, refreshing: model.refreshing, error: model.items.isEmpty ? nil : model.error) {
-            await model.load(api: app.api, query: query, silent: true)
+            await model.load(api: app.api, account: app.cacheAccount, query: query, silent: true)
         }
     }
 }

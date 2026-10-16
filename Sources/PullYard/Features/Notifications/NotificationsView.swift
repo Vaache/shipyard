@@ -66,16 +66,24 @@ struct NotificationsView: View {
 
     private func load(live: Bool = false) async {
         guard let api = app.api else { return }
+        let all = showAll
+        let key = "notifications|\(all ? "all" : "unread")"
+        if loadedAll != all, let snap = ListCache.load([NotificationThread].self, account: app.cacheAccount, key: key) {
+            rows.ingest(snap.value.map(\.id), mode: .cascade)
+            loadedAll = all
+            items = snap.value
+            lastUpdated = snap.saved
+        }
         loading = true
         defer { loading = false }
         do {
-            let all = showAll
             let fetched = try await api.notifications(all: all, live: live)
             guard all == showAll else { return }
             rows.ingest(fetched.map(\.id), mode: loadedAll == all ? .refresh : .cascade)
             loadedAll = all
             items = fetched
             lastUpdated = Date()
+            ListCache.save(fetched, account: app.cacheAccount, key: key)
             if !showAll { app.unreadCount = items.count }
             error = nil
         } catch {

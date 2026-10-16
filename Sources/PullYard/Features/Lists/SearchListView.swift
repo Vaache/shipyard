@@ -24,7 +24,7 @@ enum StateFilter: String, CaseIterable, Identifiable {
 @Observable
 @MainActor
 final class SearchListModel {
-    private struct Snapshot {
+    private struct Snapshot: Codable {
         let items: [SearchItem]
         let total: Int
         let cursor: String?
@@ -34,16 +34,22 @@ final class SearchListModel {
 
     private static var cache: [String: Snapshot] = [:]
 
+    static func resetCache() {
+        cache = [:]
+    }
+
     var items: [SearchItem] = []
     var total = 0
     var loading = false
     var refreshing = false
+    var showingCached = false
     var lastUpdated: Date?
     var error: String?
     private var cursor: String?
     private var hasMore = false
     private var loadingMore = false
     private var currentQuery = ""
+    private var currentKey = ""
     private var generation = 0
     let rows: RowAppearTracker
 
@@ -51,15 +57,18 @@ final class SearchListModel {
         self.rows = rows
     }
 
-    func load(api: GitHubAPI?, query: String, silent: Bool = false, typing: Bool = false) async {
+    func load(api: GitHubAPI?, account: String?, query: String, silent: Bool = false, typing: Bool = false, persist: Bool = false) async {
         guard let api else { return }
         var switched = false
         var cached = false
+        let key = "\(account ?? "")|\(query)"
+        let diskKey = "search|\(query)"
         if query != currentQuery {
             switched = true
             currentQuery = query
+            currentKey = key
             error = nil
-            if let snap = Self.cache[query] {
+            if let snap = Self.cache[key] ?? (persist ? ListCache.load(Snapshot.self, account: account, key: diskKey)?.value : nil) {
                 cached = true
                 apply(snap, mode: typing ? .silent : .cascade)
             } else {
@@ -68,6 +77,7 @@ final class SearchListModel {
                 lastUpdated = nil
             }
         }
+        showingCached = cached
         generation += 1
         let gen = generation
         if !silent || switched { loading = true }
@@ -85,15 +95,21 @@ final class SearchListModel {
                 more = hasMore
             }
             let snap = Snapshot(items: merged, total: r.issueCount, cursor: nextCursor, hasMore: more, updated: Date())
-            Self.cache[query] = snap
+            Self.cache[key] = snap
+            if persist {
+                let first = Snapshot(items: r.nodes, total: r.issueCount, cursor: r.pageInfo?.endCursor, hasMore: r.pageInfo?.hasNextPage ?? false, updated: snap.updated)
+                ListCache.save(first, account: account, key: diskKey)
+            }
             apply(snap, mode: typing ? .silent : (switched && !cached ? .cascade : .refresh))
             error = nil
             loading = false
             refreshing = false
+            showingCached = false
         } catch {
             guard gen == generation else { return }
             loading = false
             refreshing = false
+            showingCached = false
             if isCancellation(error) { return }
             self.error = error.localizedDescription
         }
@@ -120,7 +136,7 @@ final class SearchListModel {
             items += added
             self.cursor = r.pageInfo?.endCursor
             hasMore = r.pageInfo?.hasNextPage ?? false
-            Self.cache[query] = Snapshot(items: items, total: total, cursor: self.cursor, hasMore: hasMore, updated: lastUpdated ?? Date())
+            Self.cache[currentKey] = Snapshot(items: items, total: total, cursor: self.cursor, hasMore: hasMore, updated: lastUpdated ?? Date())
         }
     }
 
@@ -231,7 +247,7 @@ struct SearchListView: View {
                     Text("Nothing here").foregroundStyle(Color.syMuted)
                 }
             }
-            .opacity(model.loading && !model.items.isEmpty ? 0.55 : 1)
+            .opacity(model.loading && !model.showingCached && !model.items.isEmpty ? 0.55 : 1)
             .animation(.easeOut(duration: 0.15), value: model.loading)
             .overlay {
                 if model.loading && model.items.isEmpty { ProgressView().controlSize(.small) }
@@ -267,7 +283,7 @@ struct SearchListView: View {
     }
 
     private func reload(silent: Bool = false, typing: Bool = false) async {
-        await model.load(api: app.api, query: query, silent: silent, typing: typing)
+        await model.load(api: app.api, account: app.cacheAccount, query: query, silent: silent, typing: typing, persist: text.isEmpty)
         if grouped { await model.loadAll(api: app.api) }
     }
 }

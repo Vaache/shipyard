@@ -121,6 +121,11 @@ extension GitHubAPI {
         try await graphQL(Q.pullRequest, ["owner": ref.repo.owner, "name": ref.repo.name, "number": ref.number])
     }
 
+    func pullRequestPulse(_ ref: ItemRef) async throws -> PRPulse? {
+        let r: PRPulseResponse = try await graphQL(Q.prPulse, ["owner": ref.repo.owner, "name": ref.repo.name, "number": ref.number])
+        return r.repository?.pullRequest
+    }
+
     func issue(_ ref: ItemRef) async throws -> IssueDetailResponse {
         try await graphQL(Q.issue, ["owner": ref.repo.owner, "name": ref.repo.name, "number": ref.number])
     }
@@ -154,7 +159,7 @@ extension GitHubAPI {
     func projects() async throws -> [ProjectSummary] {
         let r: ProjectsResponse = try await graphQL(Q.projects)
         var seen = Set<String>()
-        let all = r.viewer.projectsV2.nodes + r.viewer.organizations.nodes.flatMap { $0.projectsV2.nodes }
+        let all = r.viewer.projectsV2.nodes + r.viewer.organizations.nodes.flatMap { $0.projectsV2?.nodes ?? [] }
         return all.filter { seen.insert($0.id).inserted }
     }
 

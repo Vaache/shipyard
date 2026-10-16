@@ -126,6 +126,16 @@ final class AppModel {
             phase = .loggedOut
             return
         }
+        if !Demo.isOn, let cached = ListCache.account(for: token) {
+            let api = makeAPI(token)
+            self.api = api
+            user = cached
+            ListCache.activate(cached.login)
+            phase = .loggedIn
+            startPolling()
+            await verify(api, token: token)
+            return
+        }
         do {
             try await login(token: token, persist: false)
         } catch let e as APIError where e.status == 401 {
@@ -145,10 +155,28 @@ final class AppModel {
         self.api = api
         self.user = Demo.isOn ? Demo.user : user
         self.scopes = scopes
+        if !Demo.isOn { ListCache.remember(user, token: token) }
         prModels = [:]
         prOrder = []
         phase = .loggedIn
         startPolling()
+    }
+
+    private func verify(_ api: GitHubAPI, token: String) async {
+        do {
+            let (user, scopes) = try await api.currentUser()
+            guard self.api === api else { return }
+            self.user = user
+            self.scopes = scopes
+            ListCache.remember(user, token: token)
+        } catch let e as APIError where e.status == 401 {
+            guard self.api === api else { return }
+            logout()
+        } catch {}
+    }
+
+    var cacheAccount: String? {
+        Demo.isOn ? nil : user?.login
     }
 
     private func makeAPI(_ token: String) -> GitHubAPI {
@@ -197,6 +225,8 @@ final class AppModel {
         resumeTask?.cancel()
         rateLimitedUntil = nil
         Keychain.delete()
+        ListCache.forget(user?.login)
+        SearchListModel.resetCache()
         api = nil
         user = nil
         scopes = []

@@ -53,7 +53,10 @@ final class PRDetailModel {
     var actionError: String?
     var busy = false
     var tab: PRTab = .conversation {
-        didSet { visitedTabs.insert(tab) }
+        didSet {
+            visitedTabs.insert(tab)
+            if tab == .files, filesStale, !filesLoading { Task { await loadFiles(force: true) } }
+        }
     }
     var visitedTabs: Set<PRTab> = [.conversation]
     let commitRows = RowAppearTracker()
@@ -68,6 +71,9 @@ final class PRDetailModel {
     private static var stackCache: [String: (stack: [StackPR], at: Date)] = [:]
     private static let stackTTL: TimeInterval = 600
     @ObservationIgnored private var filesOid: String?
+    @ObservationIgnored private var filesStale = false
+    @ObservationIgnored private var pulse: PRPulse?
+    @ObservationIgnored private var needsFull = false
     @ObservationIgnored private var mergeRecheck: Task<Void, Never>?
     @ObservationIgnored private var mergeRechecks = 0
     var html = ""
@@ -134,7 +140,10 @@ final class PRDetailModel {
 
     func load(full: Bool = false, live: Bool = false) async {
         if full { reloadFiles = true }
-        if !live { stackRequest = (stackRequest ?? false) || full }
+        if !live {
+            needsFull = true
+            stackRequest = (stackRequest ?? false) || full
+        }
         if let queuedLoad {
             await queuedLoad.value
             return
@@ -162,6 +171,9 @@ final class PRDetailModel {
     private func fetch() async {
         loading = true
         defer { loading = false }
+        let light = !needsFull && pr != nil && pulse != nil
+        needsFull = false
+        if light, await unchanged() { return }
         do {
             let r = try await api.pullRequest(ref)
             viewerLogin = r.viewer.login
@@ -170,6 +182,7 @@ final class PRDetailModel {
                 return
             }
             self.repo = repo
+            pulse = r.pulse
             commitRows.seed(pr.allCommits.nodes.map(\.commit.oid))
             checkRows.seed(pr.checks.map(\.id))
             self.pr = pr
@@ -187,16 +200,31 @@ final class PRDetailModel {
                 Task(priority: .utility) { await self.loadStack() }
             }
             scheduleMergeRecheck(pr)
-            let filesStale = reloadFiles || (filesOid != nil && filesOid != pr.headRefOid)
+            let outdated = reloadFiles || (filesOid != nil && filesOid != pr.headRefOid)
             reloadFiles = false
-            if filesLoaded, filesStale {
-                Task(priority: .utility) { await self.loadFiles(force: true) }
-            } else if !filesLoaded, !filesLoading {
-                Task(priority: .utility) { await self.loadFiles() }
+            if filesLoaded, outdated {
+                if tab == .files {
+                    Task(priority: .utility) { await self.loadFiles(force: true) }
+                } else {
+                    filesStale = true
+                }
             }
         } catch {
             if isCancellation(error) { return }
             if pr == nil { self.error = error.localizedDescription } else { refreshError = error.localizedDescription }
+        }
+    }
+
+    private func unchanged() async -> Bool {
+        guard let known = pulse else { return false }
+        do {
+            guard let current = try await api.pullRequestPulse(ref), current == known else { return false }
+            refreshError = nil
+            lastUpdated = Date()
+            if let pr { scheduleMergeRecheck(pr) }
+            return true
+        } catch {
+            return isCancellation(error)
         }
     }
 
@@ -262,7 +290,7 @@ final class PRDetailModel {
         mergeRecheck = Task { [weak self] in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
-            await self?.load()
+            await self?.load(live: true)
         }
     }
 
@@ -311,6 +339,7 @@ final class PRDetailModel {
             fileRows.seed(parsed.map(\.id))
             files = parsed
             filesOid = oid
+            filesStale = false
             filesVersion += 1
             filesLoaded = true
             filesError = nil

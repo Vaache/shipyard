@@ -52,6 +52,12 @@ enum SelfTest {
                     }
                     return "state=\(p.state) timeline=\(p.timelineItems.nodes.count) threads=\(p.reviewThreads.nodes.count) unresolved=\(unresolved.count) html=\(html.count) fixPrompt=\(fix.map { "@\($0.author) \($0.text.count)ch \(Fmt.rel($0.date))" } ?? "none") composed=\(composed.count)ch folder=\(folder)"
                 }
+                await step("pulse") {
+                    let full = try await api.pullRequest(pr)
+                    let light = try await api.pullRequestPulse(pr)
+                    guard let known = full.pulse, let light else { return "missing pulse" }
+                    return "head=\(light.headRefOid.prefix(7)) unchanged=\(known == light)"
+                }
                 await step("conflicts") {
                     let r = try await api.pullRequest(pr)
                     guard let p = r.repository?.pullRequest else { return "not a PR" }
@@ -84,7 +90,17 @@ enum SelfTest {
                     return "type=\(r.repository?.issueOrPullRequest?.typename ?? "-") timeline=\(r.repository?.issueOrPullRequest?.issue?.timelineItems.nodes.count ?? -1)"
                 }
             }
-            await step("repos") { let r = try await api.repos(after: nil); return "total=\(r.totalCount) first=\(r.nodes.first?.nameWithOwner ?? "-")" }
+            await step("repos") {
+                let r = try await api.repos(after: nil)
+                let back = try JSONDecoder().decode(ListSnapshot<[RepoSummary]>.self, from: JSONEncoder().encode(ListSnapshot(saved: Date(), value: r.nodes)))
+                return "total=\(r.totalCount) first=\(r.nodes.first?.nameWithOwner ?? "-") cached=\(back.value.count)"
+            }
+            await step("list cache") {
+                let r = try await api.search("is:pr involves:@me sort:updated-desc")
+                let back = try JSONDecoder().decode(ListSnapshot<[SearchItem]>.self, from: JSONEncoder().encode(ListSnapshot(saved: Date(), value: r.nodes)))
+                let same = zip(r.nodes, back.value).allSatisfy { $0.id == $1.id && $0.updatedAt == $1.updatedAt && $0.ciState == $1.ciState }
+                return "items=\(back.value.count) roundTrip=\(same && back.value.count == r.nodes.count)"
+            }
             await step("projects") {
                 let p = try await api.projects()
                 if let first = p.first {
@@ -93,7 +109,11 @@ enum SelfTest {
                 }
                 return "count=0"
             }
-            await step("notifications") { let n = try await api.notifications(all: false); return "unread=\(n.count)" }
+            await step("notifications") {
+                let n = try await api.notifications(all: true)
+                let back = try JSONDecoder().decode(ListSnapshot<[NotificationThread]>.self, from: JSONEncoder().encode(ListSnapshot(saved: Date(), value: n)))
+                return "all=\(n.count) cached=\(back.value.count)"
+            }
             done.signal()
         }
         done.wait()
