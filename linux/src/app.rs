@@ -376,6 +376,7 @@ pub fn on_live_visible(widget: &impl IsA<gtk::Widget>, f: impl Fn(&()) -> bool +
 fn reset_session_caches() {
     crate::api::reset_rate_limit();
     crate::api::endpoints::reset_caches();
+    ui::lists::reset_cache();
 }
 
 pub fn on_badges(f: impl Fn(&()) -> bool + 'static) {
@@ -468,12 +469,20 @@ impl App {
             self.set_phase(Phase::LoggedOut);
             return;
         };
+        let known = settings::read(|s| s.last_account.clone()).filter(|a| !demo::is_on() && a.fingerprint == crate::list_cache::fingerprint(&token));
+        if let Some(account) = &known {
+            {
+                let mut s = self.state.borrow_mut();
+                s.api = Some(GitHubApi::new(&token));
+                s.user = Some(RestUser { login: account.login.clone(), name: account.name.clone(), avatar_url: account.avatar_url.clone() });
+            }
+            self.set_phase(Phase::LoggedIn);
+            self.start_polling();
+        }
         match self.clone().login(token.clone(), false).await {
             Ok(()) => {}
-            Err(e) if e.status == 401 => {
-                crate::rt::run(secret::delete(settings::config_dir())).await;
-                self.set_phase(Phase::LoggedOut);
-            }
+            Err(e) if e.status == 401 => self.logout(),
+            Err(_) if known.is_some() => {}
             Err(_) => {
                 {
                     let mut s = self.state.borrow_mut();
@@ -489,10 +498,20 @@ impl App {
     }
 
     pub async fn login(self: Rc<Self>, token: String, persist: bool) -> Result<(), crate::api::ApiError> {
-        reset_session_caches();
         let api = GitHubApi::new(&token);
         let a2 = api.clone();
         let (user, scopes) = crate::rt::run(async move { a2.current_user().await }).await?;
+        let was_logged_in = self.state.borrow().phase == Phase::LoggedIn;
+        let same = was_logged_in && self.state.borrow().user.as_ref().is_some_and(|u| u.login == user.login);
+        if !same {
+            reset_session_caches();
+        }
+        if !demo::is_on() {
+            let account = settings::LastAccount { login: user.login.clone(), name: user.name.clone(), avatar_url: user.avatar_url.clone(), fingerprint: crate::list_cache::fingerprint(&token) };
+            if settings::read(|s| s.last_account.as_ref() != Some(&account)) {
+                settings::update(|s| s.last_account = Some(account));
+            }
+        }
         if persist {
             match crate::rt::run(secret::save(settings::config_dir(), token.clone())).await {
                 secret::Saved::Keyring => {}
@@ -507,8 +526,10 @@ impl App {
             s.scopes = scopes;
             s.known_review_requests = None;
         }
+        if same {
+            return Ok(());
+        }
         self.pr_models.borrow_mut().clear();
-        let was_logged_in = self.state.borrow().phase == Phase::LoggedIn;
         if was_logged_in {
             if let Some(root) = self.root.borrow().clone() {
                 if let Some(old) = root.child_by_name("main") {
@@ -525,6 +546,13 @@ impl App {
     pub fn logout(self: &Rc<Self>) {
         if let Some(id) = self.poll.borrow_mut().take() {
             id.remove();
+        }
+        let login = self.state.borrow().user.as_ref().map(|u| u.login.clone()).or_else(|| settings::read(|s| s.last_account.as_ref().map(|a| a.login.clone())));
+        if let Some(login) = login {
+            crate::list_cache::clear(&login);
+        }
+        if settings::read(|s| s.last_account.is_some()) {
+            settings::update(|s| s.last_account = None);
         }
         reset_session_caches();
         {

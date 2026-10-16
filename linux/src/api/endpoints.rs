@@ -237,6 +237,20 @@ impl GitHubApi {
         self.graphql("pullRequest", &q::pull_request(), json!({ "owner": r.repo.owner, "name": r.repo.name, "number": r.number }), false).await
     }
 
+    pub async fn pull_request_light(&self, r: &ItemRef) -> ApiResult<Option<PrLight>> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Repo {
+            pull_request: Option<PrLight>,
+        }
+        #[derive(Deserialize)]
+        struct R {
+            repository: Option<Repo>,
+        }
+        let r: R = self.graphql("pullRequestLight", &q::pull_request_light(), json!({ "owner": r.repo.owner, "name": r.repo.name, "number": r.number }), false).await?;
+        Ok(r.repository.and_then(|r| r.pull_request))
+    }
+
     pub async fn issue(&self, r: &ItemRef) -> ApiResult<IssueDetailResponse> {
         self.graphql("issue", &q::issue(), json!({ "owner": r.repo.owner, "name": r.repo.name, "number": r.number }), false).await
     }

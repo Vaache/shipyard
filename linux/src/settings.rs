@@ -29,6 +29,16 @@ impl ClaudeProfile {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LastAccount {
+    pub login: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub avatar_url: Option<String>,
+    pub fingerprint: String,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(default)]
 pub struct Settings {
@@ -54,6 +64,7 @@ pub struct Settings {
     pub run_in_background: bool,
     pub notify_review_requests: bool,
     pub diagnostics_enabled: bool,
+    pub last_account: Option<LastAccount>,
     pub window_width: i32,
     pub window_height: i32,
     pub window_maximized: bool,
@@ -84,6 +95,7 @@ impl Default for Settings {
             run_in_background: false,
             notify_review_requests: true,
             diagnostics_enabled: false,
+            last_account: None,
             window_width: 1380,
             window_height: 860,
             window_maximized: false,

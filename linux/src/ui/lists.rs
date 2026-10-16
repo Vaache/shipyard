@@ -52,6 +52,32 @@ thread_local! {
     static CACHE: RefCell<HashMap<String, Snapshot>> = RefCell::new(HashMap::new());
 }
 
+pub fn reset_cache() {
+    CACHE.with(|c| c.borrow_mut().clear());
+}
+
+fn account() -> String {
+    app::try_get().and_then(|a| a.state.borrow().user.as_ref().map(|u| u.login.clone())).unwrap_or_default()
+}
+
+fn cache_key(account: &str, query: &str) -> String {
+    format!("{account}\n{query}")
+}
+
+async fn cached(account: &str, query: &str, disk: bool) -> Option<Snapshot> {
+    let key = cache_key(account, query);
+    if let Some(snap) = CACHE.with(|c| c.borrow().get(&key).cloned()) {
+        return Some(snap);
+    }
+    if !disk {
+        return None;
+    }
+    let entry = crate::list_cache::load(account, query).await?;
+    let snap = Snapshot { items: entry.items, total: entry.total, cursor: entry.cursor, has_more: entry.has_more, updated: entry.saved_at };
+    CACHE.with(|c| c.borrow_mut().insert(key, snap.clone()));
+    Some(snap)
+}
+
 pub struct SearchModel {
     pub items: RefCell<Vec<SearchItem>>,
     pub total: Cell<i64>,
@@ -62,6 +88,7 @@ pub struct SearchModel {
     cursor: RefCell<Option<String>>,
     has_more: Cell<bool>,
     loading_more: Cell<bool>,
+    unconfirmed: Cell<bool>,
     current_query: RefCell<String>,
     generation: Cell<u64>,
     pub changed: crate::signal::Signal<()>,
@@ -79,6 +106,7 @@ impl SearchModel {
             cursor: RefCell::new(None),
             has_more: Cell::new(false),
             loading_more: Cell::new(false),
+            unconfirmed: Cell::new(false),
             current_query: RefCell::new(String::new()),
             generation: Cell::new(0),
             changed: crate::signal::Signal::new(),
@@ -93,15 +121,26 @@ impl SearchModel {
         self.last_updated.set(Some(snap.updated));
     }
 
-    pub async fn load(self: Rc<Self>, query: String, silent: bool) {
+    pub async fn load(self: Rc<Self>, query: String, silent: bool, persist: bool) {
         let Some(api) = app::api() else { return };
-        let mut switched = false;
-        if *self.current_query.borrow() != query {
-            switched = true;
+        let account = account();
+        let mut from_cache = false;
+        let gen = self.generation.get() + 1;
+        self.generation.set(gen);
+        let switching = *self.current_query.borrow() != query;
+        let snap = if switching { cached(&account, &query, persist).await } else { None };
+        if gen != self.generation.get() {
+            return;
+        }
+        if switching {
             *self.current_query.borrow_mut() = query.clone();
             *self.error.borrow_mut() = None;
-            match CACHE.with(|c| c.borrow().get(&query).cloned()) {
-                Some(snap) => self.apply(&snap),
+            self.unconfirmed.set(snap.is_some());
+            match snap {
+                Some(snap) => {
+                    self.apply(&snap);
+                    from_cache = true;
+                }
                 None => {
                     self.items.borrow_mut().clear();
                     self.total.set(0);
@@ -109,9 +148,8 @@ impl SearchModel {
                 }
             }
         }
-        let gen = self.generation.get() + 1;
-        self.generation.set(gen);
-        if !silent || switched {
+        let show_loading = if switching { !from_cache } else { !silent };
+        if show_loading {
             self.loading.set(true);
         }
         self.refreshing.set(true);
@@ -126,8 +164,13 @@ impl SearchModel {
                 let mut merged = r.nodes.clone();
                 let mut next_cursor = r.page_info.as_ref().and_then(|p| p.end_cursor.clone());
                 let mut more = r.page_info.as_ref().map(|p| p.has_next_page).unwrap_or(false);
+                if persist && account == self::account() {
+                    let entry = crate::list_cache::Entry { query: query.clone(), saved_at: Utc::now(), total: r.issue_count, cursor: next_cursor.clone(), has_more: more, items: r.nodes.clone() };
+                    crate::list_cache::store(&account, entry);
+                }
                 let current_len = self.items.borrow().len();
-                if !switched && current_len > r.nodes.len() {
+                let confirmed = !self.unconfirmed.replace(false);
+                if !switching && confirmed && current_len > r.nodes.len() {
                     let fresh: HashSet<String> = r.nodes.iter().map(|n| n.url.clone()).collect();
                     let rest: Vec<SearchItem> = self.items.borrow().iter().skip(r.nodes.len()).filter(|i| !fresh.contains(&i.url)).cloned().collect();
                     merged.extend(rest);
@@ -135,7 +178,7 @@ impl SearchModel {
                     more = self.has_more.get();
                 }
                 let snap = Snapshot { items: merged, total: r.issue_count, cursor: next_cursor, has_more: more, updated: Utc::now() };
-                CACHE.with(|c| c.borrow_mut().insert(query, snap.clone()));
+                CACHE.with(|c| c.borrow_mut().insert(cache_key(&account, &query), snap.clone()));
                 self.apply(&snap);
                 *self.error.borrow_mut() = None;
             }
@@ -176,7 +219,7 @@ impl SearchModel {
             has_more: self.has_more.get(),
             updated: self.last_updated.get().unwrap_or_else(Utc::now),
         };
-        CACHE.with(|c| c.borrow_mut().insert(query, snap));
+        CACHE.with(|c| c.borrow_mut().insert(cache_key(&account(), &query), snap));
         self.changed.emit(&());
         any
     }
@@ -427,10 +470,11 @@ impl SearchList {
 
     fn reload(self: &Rc<Self>, silent: bool) {
         let q = self.query();
+        let persist = self.text.borrow().is_empty();
         let m = self.model.clone();
         let grouped = self.grouped;
         crate::rt::spawn_local(async move {
-            m.clone().load(q, silent).await;
+            m.clone().load(q, silent, persist).await;
             if grouped {
                 m.load_all(400).await;
             }
