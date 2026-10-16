@@ -356,6 +356,7 @@ public sealed partial class PRDetailViewModel : ObservableObject
     {
         Commentable = Pr?.IsOpen ?? false,
         ShowViewed = true,
+        ShowBlame = Pr is not null,
         Viewed = ViewedPaths,
         Collapsed = Collapsed,
         Threads = threadIndex,

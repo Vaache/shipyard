@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using PullYard.Core.Api;
+using PullYard.Core.Util;
 
 namespace PullYard.ViewModels;
 
@@ -27,8 +28,14 @@ public sealed partial class RepoCodeViewModel : ObservableObject
     [ObservableProperty] private List<string>? allPaths;
     [ObservableProperty] private bool pathsTruncated;
     [ObservableProperty] private bool loadingPaths;
+    [ObservableProperty] private bool blameOn;
+    [ObservableProperty] private List<BlameRange>? blame;
+    [ObservableProperty] private bool loadingBlame;
+    [ObservableProperty] private bool blameFailed;
 
     private readonly Dictionary<string, (List<TreeEntry> Entries, string? Readme)> dirCache = new();
+    private readonly Dictionary<string, List<BlameRange>> blameCache = new();
+    private string? blameKey;
 
     private static readonly HashSet<string> ImageExts = new(StringComparer.OrdinalIgnoreCase) { "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tiff", "svg" };
     private static readonly HashSet<string> MarkdownExts = new(StringComparer.OrdinalIgnoreCase) { "md", "markdown", "mdx" };
@@ -78,6 +85,24 @@ public sealed partial class RepoCodeViewModel : ObservableObject
         }
     }
 
+    public async Task OpenAt(string @ref, string path, bool blame)
+    {
+        var first = CurrentRef.Length == 0;
+        if (@ref != CurrentRef)
+        {
+            CurrentRef = @ref;
+            AllPaths = null;
+            ResetBlame();
+        }
+        if (first) LoadBranches().Forget();
+        BlameOn = blame;
+        await Reveal(path);
+    }
+
+    public string RefLabel => CurrentRef.Length == 40 && CurrentRef.All(Uri.IsHexDigit) ? CurrentRef[..7] : CurrentRef;
+
+    partial void OnCurrentRefChanged(string value) => OnPropertyChanged(nameof(RefLabel));
+
     public async Task SwitchRef(string name)
     {
         if (name == CurrentRef) return;
@@ -85,6 +110,8 @@ public sealed partial class RepoCodeViewModel : ObservableObject
         AllPaths = null;
         SelectedFile = null;
         File = null;
+        ResetBlame();
+        BlameOn = false;
         var keep = Dir;
         await OpenDir(keep);
         if (DirError is not null && keep.Length > 0) await OpenDir("");
@@ -181,6 +208,7 @@ public sealed partial class RepoCodeViewModel : ObservableObject
         SelectedFile = path;
         File = null;
         FileError = null;
+        ResetBlame();
         LoadingFile = true;
         var ext = Extension(path);
         try
@@ -226,6 +254,71 @@ public sealed partial class RepoCodeViewModel : ObservableObject
         finally
         {
             LoadingFile = false;
+        }
+        if (SelectedFile == path && BlameOn) LoadBlame().Forget();
+    }
+
+    public bool CanBlame => File is { Kind: FileContentKind.Text or FileContentKind.Markdown };
+
+    partial void OnFileChanged(FileContent? value) => OnPropertyChanged(nameof(CanBlame));
+
+    public void ToggleBlame() => SetBlame(!BlameOn);
+
+    public void SetBlame(bool on)
+    {
+        if (BlameOn == on) return;
+        BlameOn = on;
+        if (on) LoadBlame().Forget();
+    }
+
+    public void RetryBlame()
+    {
+        ResetBlame();
+        LoadBlame().Forget();
+    }
+
+    private void ResetBlame()
+    {
+        blameKey = null;
+        Blame = null;
+        BlameFailed = false;
+        LoadingBlame = false;
+    }
+
+    public async Task LoadBlame()
+    {
+        if (!BlameOn || SelectedFile is not { } path || File is not { } file || !CanBlame) return;
+        var key = $"{CurrentRef}|{path}";
+        if (blameKey == key && (Blame is not null || LoadingBlame)) return;
+        blameKey = key;
+        BlameFailed = false;
+        if (blameCache.TryGetValue(key, out var cached))
+        {
+            Blame = cached;
+            return;
+        }
+        LoadingBlame = true;
+        var @ref = CurrentRef;
+        try
+        {
+            var lines = PullYard.Core.Api.Blame.LineCount(file.Text);
+            var ranges = await Task.Run(async () => PullYard.Core.Api.Blame.Map(await Api.BlameRanges(Repo, @ref, path).ConfigureAwait(false), lines));
+            if (blameKey != key) return;
+            if (ranges.Count == 0)
+            {
+                BlameFailed = true;
+                return;
+            }
+            blameCache[key] = ranges;
+            Blame = ranges;
+        }
+        catch
+        {
+            if (blameKey == key) BlameFailed = true;
+        }
+        finally
+        {
+            if (blameKey == key) LoadingBlame = false;
         }
     }
 

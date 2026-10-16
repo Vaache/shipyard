@@ -112,6 +112,10 @@
   <data name="Claude_WakeUp" xml:space="preserve"><value>Wake up</value></data>
   <data name="Clipboard_InClipboard" xml:space="preserve"><value>In clipboard: {0}</value></data>
   <data name="Code_Binary" xml:space="preserve"><value>Binary file</value></data>
+  <data name="Code_Blame" xml:space="preserve"><value>Blame</value></data>
+  <data name="Code_BlameHint" xml:space="preserve"><value>Show who last changed each line (Ctrl+Alt+B)</value></data>
+  <data name="Code_BlameLoading" xml:space="preserve"><value>Loading blame…</value></data>
+  <data name="Code_BlameUnavailable" xml:space="preserve"><value>Blame unavailable for this file</value></data>
   <data name="Code_CopyContents" xml:space="preserve"><value>Copy contents</value></data>
   <data name="Code_CopyPath" xml:space="preserve"><value>Copy path</value></data>
   <data name="Code_GoToFile" xml:space="preserve"><value>Go to file (Ctrl+P)</value></data>
@@ -254,6 +258,8 @@
   <data name="Menu_CheckForUpdates" xml:space="preserve"><value>Check for Updates…</value></data>
   <data name="Menu_CopyCheckout" xml:space="preserve"><value>Copy “gh pr checkout”</value></data>
   <data name="Menu_CopyLink" xml:space="preserve"><value>Copy Link</value></data>
+  <data name="Menu_CopyShortLink" xml:space="preserve"><value>Copy Short Link</value></data>
+  <data name="Menu_CopyShortLinkHint" xml:space="preserve"><value>Copy short link (Ctrl+Shift+C)</value></data>
   <data name="Menu_OpenInBrowser" xml:space="preserve"><value>Open in Browser</value></data>
   <data name="Merge_AutoEnabled" xml:space="preserve"><value>auto-merge enabled</value></data>
   <data name="Merge_Behind" xml:space="preserve"><value>Branch is behind {0}</value></data>
@@ -433,6 +439,7 @@
   <data name="Terminal_Ended" xml:space="preserve"><value>Session ended</value></data>
   <data name="Terminal_Resume" xml:space="preserve"><value>Resume session</value></data>
   <data name="Terminal_Sleeping" xml:space="preserve"><value>Session is sleeping — memory freed</value></data>
+  <data name="Toast_CopiedShortLink" xml:space="preserve"><value>Copied {0}</value></data>
   <data name="Tray_MyOpenPRs" xml:space="preserve"><value>My open PRs</value></data>
   <data name="Tray_Open" xml:space="preserve"><value>Open {0}</value></data>
   <data name="Tray_Pizza" xml:space="preserve"><value>Buy Me a Pizza…</value></data>

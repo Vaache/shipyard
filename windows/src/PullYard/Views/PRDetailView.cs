@@ -90,7 +90,7 @@ public sealed class PRDetailView : Grid
     }
 }
 
-public sealed class PRContent : Grid
+public sealed class PRContent : Grid, IShortcutHost
 {
     private readonly AppViewModel app = AppViewModel.Shared;
     private readonly PRDetailViewModel model;
@@ -145,6 +145,7 @@ public sealed class PRContent : Grid
         Children.Add(tabRow);
         SetRow(tabArea, 3);
         Children.Add(tabArea);
+        Shortcuts.ShortLinkKey(this);
 
         tabs.SelectionChanged += id => model.Tab = Enum.Parse<PRTab>(id);
         status.Retry = () => model.Load(true).Forget();
@@ -527,7 +528,17 @@ public sealed class PRContent : Grid
         var more = Ui.IconButton("", L.T("Common_More", "More"), () => { }, "text");
         more.Flyout = MoreMenu();
         toolbar.Children.Add(more);
+        toolbar.Children.Add(Ui.IconButton("\uE8C8", L.T("Menu_CopyShortLinkHint", "Copy short link (Ctrl+Shift+C)"), CopyShortLink, "text"));
         toolbar.Children.Add(Ui.IconButton("", L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(pr.Url), "text"));
+    }
+
+    private void CopyShortLink() => ShellView.CopyShortLink(ShortLink.Of(model.Ref));
+
+    public bool HandleShortcut(string id)
+    {
+        if (id != Shortcuts.ShortLink) return false;
+        CopyShortLink();
+        return true;
     }
 
     private MenuFlyout MoreMenu()
@@ -535,6 +546,7 @@ public sealed class PRContent : Grid
         var pr = Pr;
         var menu = Ui.Menu(
             Ui.MenuItem(L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(pr.Url), ""),
+            Ui.MenuItem(L.T("Menu_CopyShortLink", "Copy Short Link"), CopyShortLink, "\uE8C8"),
             Ui.MenuItem(L.F("PR_CopyCheckout", "Copy “gh pr checkout {0}”", pr.Number), () => WindowInterop.Copy($"gh pr checkout {pr.Number} -R {model.Ref.Repo.Full}"), ""),
             Ui.MenuItem(L.T("PR_CopyBranch", "Copy branch name"), () => WindowInterop.Copy(pr.HeadRefName), ""),
             Ui.Separator());
@@ -843,6 +855,9 @@ public sealed class PRContent : Grid
                 break;
             case "copy":
                 WindowInterop.Copy(id);
+                break;
+            case "blame":
+                if (model.Pr is { } pr) RepoDetailView.OpenFile(model.Ref.Repo, pr.HeadRefOid.Length > 0 ? pr.HeadRefOid : pr.HeadRefName, id, true);
                 break;
             case "collapse":
                 model.Collapsed.Add(id);

@@ -26,6 +26,8 @@ public sealed class ShellView : Grid
     private readonly Grid detailArea = new();
     private readonly ContentControl detailHost = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch, IsTabStop = false };
     private readonly Border clipboardBanner = new();
+    private readonly Border toast = new();
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? toastTimer;
     private readonly StackPanel footer = Ui.V(0);
     private readonly ColumnDefinition listColumn = new() { Width = new GridLength(380) };
     private readonly Dictionary<string, NavigationViewItem> navItems = new();
@@ -242,6 +244,12 @@ public sealed class ShellView : Grid
         clipboardBanner.Margin = new Thickness(0, 0, 0, 16);
         clipboardBanner.Visibility = Visibility.Collapsed;
         detailArea.Children.Add(clipboardBanner);
+        toast.VerticalAlignment = VerticalAlignment.Bottom;
+        toast.HorizontalAlignment = HorizontalAlignment.Center;
+        toast.IsHitTestVisible = false;
+        toast.Opacity = 0;
+        toast.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(160) };
+        detailArea.Children.Add(toast);
         body.Children.Add(detailArea);
     }
 
@@ -367,6 +375,38 @@ public sealed class ShellView : Grid
         };
         return new DetailFrame(content, this);
     }
+
+    public static void CopyShortLink(string? link)
+    {
+        if (string.IsNullOrEmpty(link)) return;
+        WindowInterop.Copy(link);
+        Toast(L.F("Toast_CopiedShortLink", "Copied {0}", link));
+    }
+
+    public static void Toast(string text) => Current?.ShowToast(text);
+
+    private void ShowToast(string text)
+    {
+        toast.Child = Ui.H(8, Ui.Glyph("\uE73E", 13, "green"), Ui.Text(text, 13));
+        toast.Padding = new Thickness(14, 7, 16, 7);
+        toast.CornerRadius = new CornerRadius(20);
+        toast.Background = Palette.Brush("raised");
+        toast.BorderBrush = Palette.Brush("text", 0.12);
+        toast.BorderThickness = new Thickness(1);
+        toast.Shadow = new ThemeShadow();
+        toast.Translation = new System.Numerics.Vector3(0, 0, 16);
+        toast.Margin = new Thickness(0, 0, 0, clipboardBanner.Visibility == Visibility.Visible ? 64 : 16);
+        toast.Opacity = 1;
+        toastTimer ??= DispatcherQueue.CreateTimer();
+        toastTimer.Stop();
+        toastTimer.Interval = TimeSpan.FromMilliseconds(1800);
+        toastTimer.IsRepeating = false;
+        toastTimer.Tick -= HideToast;
+        toastTimer.Tick += HideToast;
+        toastTimer.Start();
+    }
+
+    private void HideToast(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args) => toast.Opacity = 0;
 
     private void RenderClipboard()
     {

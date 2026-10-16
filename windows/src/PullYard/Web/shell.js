@@ -106,6 +106,14 @@
       e.preventDefault();
       send({ type: "refresh", id: "" });
     }
+    if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === "c" || e.key === "C")) {
+      e.preventDefault();
+      send({ type: "key", id: "shortLink" });
+    }
+    if (e.ctrlKey && e.altKey && !e.shiftKey && (e.key === "b" || e.key === "B")) {
+      e.preventDefault();
+      send({ type: "key", id: "blame" });
+    }
   });
 
   function scrollToFile(path) {

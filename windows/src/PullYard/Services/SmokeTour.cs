@@ -48,12 +48,23 @@ public static class SmokeTour
             Log($"detail {pr?.Key ?? "none"}");
             await Step("pr conversation", 9000);
             await Shot("03-pr-conversation");
+            if (ShortLink.Of(pr) is { } shortLink)
+            {
+                ShellView.CopyShortLink(shortLink);
+                await Step("short link", 300);
+                await Shot("03b-pr-short-link");
+                await Step("short link toast", 1500);
+            }
             var root = window.Content.XamlRoot;
+            string? blameRef = null;
+            string? blamePath = null;
             if (pr is { Kind: RouteKind.PullRequest, Item: { } item } && app.PrModel(item) is { } model)
             {
                 model.Tab = PRTab.Files;
                 await Step("pr files", 12000);
                 await Shot("04-pr-files");
+                blameRef = model.Pr?.HeadRefOid;
+                blamePath = model.Files.Where(f => f.Status == "modified").OrderByDescending(f => f.Additions + f.Deletions).FirstOrDefault()?.Id;
                 model.Tab = PRTab.Commits;
                 await Step("pr commits", 3000);
                 await Shot("05-pr-commits");
@@ -93,6 +104,13 @@ public static class SmokeTour
                 app.Select(Route.ForRepo(repo));
                 await Step("repo code", 8000);
                 await Shot("14-repo");
+                if (blameRef is { Length: > 0 } && blamePath is not null)
+                {
+                    Log($"blame {blamePath}");
+                    RepoDetailView.OpenFile(repo, blameRef, blamePath, true);
+                    await Step("repo blame", 10000);
+                    await Shot("14b-repo-blame");
+                }
             }
             app.Section = Section.Projects;
             await Step("projects", 3000);
