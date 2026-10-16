@@ -281,7 +281,7 @@ public static class Dialogs
         await ShowAsync(d);
     }
 
-    public static async Task JobLog(XamlRoot? root, GitHubApi api, RepoRef repo, CheckContext check, Action? fix = null)
+    public static async Task JobLog(XamlRoot? root, GitHubApi api, RepoRef repo, CheckContext check, Action<string?>? fix = null)
     {
         if (root is null || check.DatabaseId is not { } id) return;
         var html = new HtmlView { Height = 560 };
@@ -300,7 +300,7 @@ public static class Dialogs
         ContentDialog? dialog = null;
         var top = new Grid();
         top.Children.Add(toolbar);
-        if (fix is not null && check.Outcome == CheckOutcome.Failure)
+        if (fix is not null && CiFailures.IsFixable(check))
         {
             var fixButton = Ui.Button(L.T("Fix_Button", "Fix with Claude Code"), () =>
             {
@@ -351,7 +351,7 @@ public static class Dialogs
             Render();
         }), TaskScheduler.Default).Forget();
         await ShowAsync(d);
-        if (fixRequested) fix?.Invoke();
+        if (fixRequested) fix?.Invoke(log);
     }
 
     public static string FilterErrors(string s)
@@ -382,16 +382,18 @@ public static class Dialogs
         return sb.ToString();
     }
 
-    public static Task FixWithClaude(XamlRoot? root, PRDetailViewModel model) => ShowFix(root, model, null, null);
+    public static Task FixWithClaude(XamlRoot? root, PRDetailViewModel model) => ShowFix(root, model, null, null, 0, null);
 
-    public static Task FixCi(XamlRoot? root, PRDetailViewModel model, CheckContext? only = null)
+    public static Task FixCi(XamlRoot? root, PRDetailViewModel model, CheckContext? only = null, string? knownLog = null)
     {
         var failing = model.FailingChecks;
-        if (only is not null && failing.All(c => c.Id != only.Id)) failing.Insert(0, only);
-        return failing.Count == 0 ? Task.CompletedTask : ShowFix(root, model, failing, only);
+        var shown = CiFailures.Limit(failing, only);
+        var total = Math.Max(failing.Count, shown.Count);
+        var known = only?.DatabaseId is { } id && knownLog is { Length: > 0 } ? new Dictionary<long, string> { [id] = knownLog } : null;
+        return shown.Count == 0 ? Task.CompletedTask : ShowFix(root, model, shown, only, total, known);
     }
 
-    private static async Task ShowFix(XamlRoot? root, PRDetailViewModel model, List<CheckContext>? ciChecks, CheckContext? ciOnly)
+    private static async Task ShowFix(XamlRoot? root, PRDetailViewModel model, List<CheckContext>? ciChecks, CheckContext? ciOnly, int ciTotal, IReadOnlyDictionary<long, string>? knownLogs)
     {
         if (root is null || model.Pr is not { } pr) return;
         var ci = ciChecks is not null;
@@ -464,7 +466,11 @@ public static class Dialogs
         var composedBox = Ui.V(4);
         if (ciChecks is not null)
         {
-            panel.Children.Add(Ui.H(6, Ui.Glyph("\uEA39", 12, "red"), Ui.Text(L.F("CiFix_Intro", "{0} failing on {1} — job logs, annotations and check output go into the prompt", Fmt.Plural(ciChecks.Count, "check", "checks"), pr.HeadRefOid.Length > 7 ? pr.HeadRefOid[..7] : pr.HeadRefOid), 13, "muted")));
+            var sha = pr.HeadRefOid.Length > 7 ? pr.HeadRefOid[..7] : pr.HeadRefOid;
+            var intro = ciTotal == 1
+                ? L.F("CiFix_IntroOne", "1 check failing on {0} — its job log, annotations and check output go into the prompt", sha)
+                : L.F("CiFix_IntroMany", "{0} checks failing on {1} — job logs, annotations and check output go into the prompt", ciTotal, sha);
+            panel.Children.Add(Ui.H(6, Ui.Glyph("\uEA39", 12, "red"), Ui.Text(intro, 13, "muted")));
         }
         else if (found is not null)
         {
@@ -539,6 +545,7 @@ public static class Dialogs
             ciBox.Children.Add(Ui.Columns((Ui.H(6, Ui.Text(L.T("CiFix_FailingChecks", "Failing checks"), 12, "muted", FontWeights.SemiBold), ciSpinner), Ui.Star),
                 (Ui.H(8, Ui.Link(L.T("Fix_All", "All"), () => SetAllCi(true)), Ui.Link(L.T("Fix_None", "None"), () => SetAllCi(false))), Ui.Auto)));
             ciBox.Children.Add(new ScrollViewer { Content = ciPanel, MaxHeight = 150 });
+            if (ciTotal > ciChecks.Count) ciBox.Children.Add(Ui.Text(L.F("CiFix_Showing", "Showing {0} of {1} failing checks", ciChecks.Count, ciTotal), 12, "amber"));
             ciBox.Children.Add(Ui.Text(L.T("CiFix_Untrusted", "Log excerpts are marked as untrusted data in the prompt, so the agent treats them as information, not instructions."), 12, "dim", wrap: true));
             ciBox.Children.Add(ciError);
             panel.Children.Add(ciBox);
@@ -620,7 +627,16 @@ public static class Dialogs
             if (!ciResults.TryGetValue(c.Id, out var f)) return ciSelected.Contains(c.Id) && ciCollecting ? L.T("CiFix_Loading", "loading…") : "";
             var parts = new List<string>();
             if (f.Log is { } log) parts.Add(L.F("CiFix_LogSize", "log {0} KB", Math.Max(1, log.Text.Length / 1024)));
-            if (f.LogError is { } err) parts.Add(L.F("CiFix_NoLog", "no log: {0}", err));
+            if (f.LogError is { } err)
+            {
+                parts.Add(f.LogErrorKind switch
+                {
+                    CiLogError.Expired => L.T("CiFix_LogExpired", "log expired"),
+                    CiLogError.NotFound => L.T("CiFix_LogNotFound", "log not found"),
+                    CiLogError.Forbidden => L.T("CiFix_LogForbidden", "no access to the log"),
+                    _ => L.F("CiFix_NoLog", "no log: {0}", err)
+                });
+            }
             if (f.Annotations.Count > 0) parts.Add(L.F("CiFix_Annotations", "{0} annotations", f.Annotations.Count));
             if (f.Output is not null) parts.Add(L.T("CiFix_Summary", "check summary"));
             if (parts.Count == 0) parts.Add(L.T("CiFix_LinkOnly", "link only"));
@@ -631,6 +647,7 @@ public static class Dialogs
         {
             if (ciChecks is null) return;
             ciSpinner.Visibility = ciCollecting ? Visibility.Visible : Visibility.Collapsed;
+            promptBox.IsReadOnly = ciCollecting;
             foreach (var c in ciChecks) ciCaptions[c.Id].Text = CiCaption(c);
             Regenerate();
             Validate();
@@ -651,7 +668,7 @@ public static class Dialogs
                 while (ciChecks.Where(c => ciSelected.Contains(c.Id) && !ciResults.ContainsKey(c.Id)).ToList() is { Count: > 0 } need)
                 {
                     UpdateCi();
-                    foreach (var f in await model.CollectCiFailures(need, cts.Token)) ciResults[f.Check.Id] = f;
+                    foreach (var f in await model.CollectCiFailures(need, knownLogs, cts.Token)) ciResults[f.Check.Id] = f;
                     if (!need.All(c => ciResults.ContainsKey(c.Id))) break;
                 }
             }
@@ -701,7 +718,7 @@ public static class Dialogs
             if (t == ClaudeTarget.App && folder is not null)
             {
                 var tab = app.Claude.NewSession(folder, prompt, name);
-                if (ci) model.CiFixTab = tab;
+                if (ci) model.CiFix = new CiFixLaunch(t, tab, pr.HeadRefOid, DateTimeOffset.Now);
                 app.Section = Section.Claude;
                 return;
             }
@@ -709,6 +726,7 @@ public static class Dialogs
             {
                 var mode = (modes.SelectedItem as ComboBoxItem)?.Tag is ClaudePermissionMode m ? m : ClaudePermissionMode.Standard;
                 ClaudeLauncher.Launch(prompt, folder ?? "", t, mode, name, null, ClaudeProfiles.Shared.ActiveOverride, WindowInterop.Copy);
+                if (ci && t is ClaudeTarget.Terminal or ClaudeTarget.Desktop) model.CiFix = new CiFixLaunch(t, null, pr.HeadRefOid, DateTimeOffset.Now);
             }
             catch (Exception e)
             {

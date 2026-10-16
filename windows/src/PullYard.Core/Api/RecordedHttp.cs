@@ -31,6 +31,26 @@ internal static class RecordedHttp
         }
     }
 
+    public static async Task<(HttpResponseMessage Response, byte[] Data, bool Truncated)> SendTail(HttpClient client, HttpRequestMessage req, int maxBytes, CancellationToken ct)
+    {
+        var probe = RequestProbe.Start();
+        HttpResponseMessage? response = null;
+        try
+        {
+            response = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            var (data, total, truncated) = await TailReader.Read(stream, maxBytes, ct).ConfigureAwait(false);
+            if (probe.Active) probe.Finish(Diagnostics.KindRest, Diagnostics.RestName(req.Method, req.RequestUri), Diagnostics.RawPath(req.RequestUri), response, total, null, truncated ? "tail" : null, probe.ElapsedMs);
+            return (response, data, truncated);
+        }
+        catch (Exception e)
+        {
+            if (probe.Active) probe.Finish(Diagnostics.KindRest, Diagnostics.RestName(req.Method, req.RequestUri), Diagnostics.RawPath(req.RequestUri), response, 0, e);
+            response?.Dispose();
+            throw;
+        }
+    }
+
     private static string Kind(string? query) => query is null ? Diagnostics.KindRest : Diagnostics.KindGraphQL;
 
     private static string Name(HttpRequestMessage req, string? query, string caller) =>

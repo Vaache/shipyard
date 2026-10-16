@@ -13,6 +13,8 @@ public sealed record ReviewerInfo(string Login, string? Avatar, string State);
 
 public sealed record StaleReview(string Login, int? Commits);
 
+public sealed record CiFixLaunch(ClaudeTarget Target, ClaudeTab? Tab, string HeadOid, DateTimeOffset At);
+
 public sealed partial class PRDetailViewModel : ObservableObject
 {
     public ItemRef Ref { get; }
@@ -38,7 +40,7 @@ public sealed partial class PRDetailViewModel : ObservableObject
     [ObservableProperty] private string? filesError;
     [ObservableProperty] private string? scrollTarget;
     [ObservableProperty] private int diffVersion;
-    [ObservableProperty] private ClaudeTab? ciFixTab;
+    [ObservableProperty] private CiFixLaunch? ciFix;
 
     public HashSet<string> ViewedPaths { get; private set; } = new();
     public HashSet<string> Collapsed { get; private set; } = new();
@@ -518,26 +520,33 @@ public sealed partial class PRDetailViewModel : ObservableObject
 
     public int FailedRuns => FailingChecks.Where(c => c.RunId is not null).Select(c => c.RunId).Distinct().Count();
 
-    private static string CiKey(CheckContext c) => $"{c.Id}|{c.Conclusion ?? c.State}|{c.CompletedAt?.ToUnixTimeSeconds()}";
+    private string CiKey(CheckContext c) => $"{Pr?.HeadRefOid}|{c.Id}|{c.Conclusion ?? c.State}|{c.CompletedAt?.ToUnixTimeSeconds()}";
 
     public CiFailure? CachedCiFailure(CheckContext c)
     {
         lock (ciFailures) return ciFailures.TryGetValue(CiKey(c), out var f) ? f : null;
     }
 
-    public async Task<List<CiFailure>> CollectCiFailures(IReadOnlyList<CheckContext> checks, CancellationToken ct)
+    public async Task<List<CiFailure>> CollectCiFailures(IReadOnlyList<CheckContext> checks, IReadOnlyDictionary<long, string>? knownLogs, CancellationToken ct)
     {
-        var missing = checks.Where(c => CachedCiFailure(c) is null).ToList();
+        var found = new Dictionary<string, CiFailure>();
+        foreach (var c in checks)
+            if (CachedCiFailure(c) is { } hit) found[c.Id] = hit;
+        var missing = checks.Where(c => !found.ContainsKey(c.Id)).ToList();
         if (missing.Count > 0)
         {
-            var fetched = await Task.Run(() => CiFailures.Collect(Api, Ref.Repo, missing, ct), ct);
+            var fetched = await Task.Run(() => CiFailures.Collect(Api, Ref.Repo, missing, knownLogs, ct), ct);
             lock (ciFailures)
             {
                 if (ciFailures.Count > 60) ciFailures.Clear();
-                foreach (var f in fetched) ciFailures[CiKey(f.Check)] = f;
+                foreach (var f in fetched)
+                {
+                    found[f.Check.Id] = f;
+                    if (f.LogError is null) ciFailures[CiKey(f.Check)] = f;
+                }
             }
         }
-        return checks.Select(CachedCiFailure).OfType<CiFailure>().ToList();
+        return checks.Where(c => found.ContainsKey(c.Id)).Select(c => found[c.Id]).ToList();
     }
 
     public Task<bool> RerunFailed()

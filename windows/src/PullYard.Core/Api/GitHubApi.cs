@@ -264,6 +264,16 @@ public sealed partial class GitHubApi
         return Encoding.UTF8.GetString(data);
     }
 
+    public static async Task<(string Text, bool Truncated)> PlainTail(Uri url, int maxBytes, CancellationToken ct = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.UserAgent.ParseAdd(AppInfo.UserAgent);
+        var (response, data, truncated) = await RecordedHttp.SendTail(SharedHttp, req, maxBytes, ct).ConfigureAwait(false);
+        using var _ = response;
+        await Check(response, data);
+        return (Encoding.UTF8.GetString(data), truncated);
+    }
+
     public async Task<byte[]?> Fetch(string path, string accept, CancellationToken ct = default)
     {
         var (response, data) = await Send(http, () => Request(HttpMethod.Get, Url(path), accept), ct).ConfigureAwait(false);

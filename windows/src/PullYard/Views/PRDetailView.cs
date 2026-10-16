@@ -241,7 +241,7 @@ public sealed class PRContent : Grid, IShortcutHost
             case nameof(PRDetailViewModel.PendingCount):
                 RenderToolbar();
                 break;
-            case nameof(PRDetailViewModel.CiFixTab):
+            case nameof(PRDetailViewModel.CiFix):
                 RenderBanners();
                 break;
         }
@@ -454,9 +454,10 @@ public sealed class PRContent : Grid, IShortcutHost
         if (model.Pr is null) return;
         if (ReReviewBanner(model, () => Dialogs.Reviewers(XamlRoot, model).Forget()) is { } rr) banners.Children.Add(rr);
         if (FixBanner(Pr, () => Dialogs.FixWithClaude(XamlRoot, model).Forget()) is { } fix) banners.Children.Add(fix);
-        var fixTab = model.CiFixTab is { } t && app.Claude.Tabs.Contains(t) ? t : null;
+        var launch = model.CiFix is { } l && l.HeadOid == Pr.HeadRefOid ? l : null;
+        var fixTab = launch?.Tab is { } t && app.Claude.Tabs.Contains(t) ? t : null;
         WatchFixTab(fixTab);
-        if (CiBanner(model, fixTab, () => Dialogs.FixCi(XamlRoot, model).Forget(), () => ConfirmRerun().Forget(), () => OpenFixTab(fixTab)) is { } ciBanner) banners.Children.Add(ciBanner);
+        if (CiBanner(model, launch, fixTab, () => Dialogs.FixCi(XamlRoot, model).Forget(), () => ConfirmRerun().Forget(), () => OpenFixTab(fixTab)) is { } ciBanner) banners.Children.Add(ciBanner);
         banners.Visibility = banners.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -492,7 +493,7 @@ public sealed class PRContent : Grid, IShortcutHost
             await model.RerunFailed();
     }
 
-    public static FrameworkElement? CiBanner(PRDetailViewModel model, ClaudeTab? fixTab, Action fix, Action rerun, Action openTab)
+    public static FrameworkElement? CiBanner(PRDetailViewModel model, CiFixLaunch? launch, ClaudeTab? fixTab, Action fix, Action rerun, Action openTab)
     {
         if (model.Pr is not { IsOpen: true }) return null;
         var failing = model.FailingChecks;
@@ -503,11 +504,12 @@ public sealed class PRContent : Grid, IShortcutHost
         names.TextTrimming = TextTrimming.CharacterEllipsis;
         names.MaxWidth = 520;
         row.Children.Add(names);
-        if (fixTab is { Running: true } tab)
+        if (fixTab is { } tab)
         {
+            var label = tab.Running ? L.T("CiFix_Running", "Fix running") : L.T("CiFix_Session", "Fix session");
             var running = new Button
             {
-                Content = Ui.Chip(L.T("CiFix_Running", "Fix running") + " · " + tab.State.Title(), tab.State.ColorKey(), "\uE945"),
+                Content = Ui.Chip(label + " · " + tab.State.Title(), tab.State.ColorKey(), "\uE945"),
                 Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                 BorderThickness = new Thickness(0),
                 Padding = new Thickness(0)
@@ -515,6 +517,14 @@ public sealed class PRContent : Grid, IShortcutHost
             Ui.Tip(running, L.T("CiFix_OpenSession", "Open the Claude Code session"));
             running.Click += (_, _) => openTab();
             row.Children.Add(running);
+        }
+        else if (launch is { Tab: null } external)
+        {
+            row.Children.Add(Ui.Chip(L.F("CiFix_Launched", "Fix launched in {0} · {1}", external.Target.Title(), Fmt.Rel(external.At)), "slate", "\uE945"));
+        }
+        else if (launch is { Tab: not null })
+        {
+            row.Children.Add(Ui.Chip(L.T("CiFix_SessionClosed", "Fix session closed"), "dim", "\uE945"));
         }
         var actions = Ui.H(6);
         if (model.CanWrite && model.FailedRuns > 0) actions.Children.Add(Ui.Button(L.T("Checks_RerunShort", "Re-run failed"), rerun));
@@ -827,14 +837,14 @@ public sealed class PRContent : Grid, IShortcutHost
         if (model.Pr is { } pr)
         {
             var checks = pr.Checks.OrderBy(c => (int)c.Outcome).ThenBy(c => c.Title).ToList();
-            var failedRuns = checks.Where(c => c.Outcome == CheckOutcome.Failure && c.RunId is not null).Select(c => c.RunId).Distinct().Count();
+            var failedRuns = model.FailedRuns;
             var items = new List<object>();
             if (checks.Count == 0) items.Add(new TextRowItem(L.T("Checks_None", "No checks for the latest commit")));
             if (failedRuns > 0 && model.CanWrite) items.Add(new ActionRowItem(L.F("Checks_Rerun", "Re-run failed jobs ({0} workflow)", failedRuns), () => ConfirmRerun().Forget(), ""));
             foreach (var c in checks)
             {
                 void Fix() => Dialogs.FixCi(XamlRoot, model, c).Forget();
-                items.Add(new CheckRowItem(c, () => Dialogs.JobLog(XamlRoot, model.Api, model.Ref.Repo, c, Fix).Forget(), c.Outcome == CheckOutcome.Failure ? new Action(Fix) : null));
+                items.Add(new CheckRowItem(c, () => Dialogs.JobLog(XamlRoot, model.Api, model.Ref.Repo, c, log => Dialogs.FixCi(XamlRoot, model, c, log).Forget()).Forget(), CiFailures.IsFixable(c) ? new Action(Fix) : null));
             }
             list.ItemsSource = items;
         }

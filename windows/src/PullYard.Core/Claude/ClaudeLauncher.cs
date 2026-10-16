@@ -245,11 +245,11 @@ public static class ClaudeLauncher
         Process.Start(shell);
     }
 
-    public const int MaxCommandLinePrompt = 24_000;
+    public const int MaxCommandLinePrompt = 28_000;
 
     public static string FitCommandLine(string prompt, string? directory = null)
     {
-        if (prompt.Length <= MaxCommandLinePrompt) return prompt;
+        if (Proc.QuoteArg(prompt).Length <= MaxCommandLinePrompt) return prompt;
         var dir = directory ?? Path.Combine(Path.GetTempPath(), "PullYard", "prompts");
         System.IO.Directory.CreateDirectory(dir);
         PruneOld(dir, TimeSpan.FromDays(7));
