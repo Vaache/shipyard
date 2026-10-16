@@ -64,6 +64,7 @@ final class PRDetailModel {
     @ObservationIgnored private var queuedLoad: Task<Void, Never>?
     @ObservationIgnored private var reloadFiles = false
     @ObservationIgnored private var stackRequest: Bool?
+    @ObservationIgnored private var stackKey: String?
     private static var stackCache: [String: (stack: [StackPR], at: Date)] = [:]
     private static let stackTTL: TimeInterval = 600
     @ObservationIgnored private var filesOid: String?
@@ -182,6 +183,8 @@ final class PRDetailModel {
             if let force = stackRequest {
                 stackRequest = nil
                 Task(priority: .utility) { await self.loadStack(force: force) }
+            } else if stackKey != stackCacheKey(pr) {
+                Task(priority: .utility) { await self.loadStack() }
             }
             scheduleMergeRecheck(pr)
             let filesStale = reloadFiles || (filesOid != nil && filesOid != pr.headRefOid)
@@ -263,11 +266,26 @@ final class PRDetailModel {
         }
     }
 
+    private var stackRepoPrefix: String {
+        "\(viewerLogin)|\(ref.repo.full)|"
+    }
+
+    private func stackCacheKey(_ pr: PullRequestDetail) -> String {
+        stackRepoPrefix + "\(pr.number)|\(pr.headRepository?.nameWithOwner ?? "")|\(pr.headRefName)|\(pr.baseRefName)"
+    }
+
+    private func invalidateStack() {
+        let prefix = stackRepoPrefix
+        Self.stackCache = Self.stackCache.filter { !$0.key.hasPrefix(prefix) }
+        stackRequest = true
+    }
+
     func loadStack(force: Bool = false) async {
         guard let pr else { return }
-        let key = "\(ref.repo.full)|\(pr.headRefName)|\(pr.baseRefName)"
+        let key = stackCacheKey(pr)
         let now = Date()
         if !force, let hit = Self.stackCache[key], now.timeIntervalSince(hit.at) < Self.stackTTL {
+            stackKey = key
             if hit.stack != stack { stack = hit.stack }
             return
         }
@@ -275,6 +293,7 @@ final class PRDetailModel {
         guard let s = try? await api.pullRequestStack(ref, current: current) else { return }
         Self.stackCache = Self.stackCache.filter { now.timeIntervalSince($0.value.at) < Self.stackTTL }
         Self.stackCache[key] = (s, Date())
+        stackKey = key
         if s != stack { stack = s }
     }
 
@@ -419,6 +438,7 @@ final class PRDetailModel {
 
     func merge(method: String, title: String?, body: String?, deleteBranch: Bool) async -> Bool {
         guard let pr else { return false }
+        invalidateStack()
         return await run {
             try await api.mutate(Q.merge, ["id": pr.id, "m": method, "t": title, "b": body])
             if deleteBranch, let head = pr.headRepository?.nameWithOwner {
@@ -434,6 +454,7 @@ final class PRDetailModel {
 
     func simple(_ mutation: String) async {
         guard let pr else { return }
+        invalidateStack()
         await run { try await api.mutate(mutation, ["id": pr.id]) }
     }
 

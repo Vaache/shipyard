@@ -52,13 +52,14 @@ struct ChatView: View {
                 }
                 .modifier(InitialBottomAnchor())
                 .onPreferenceChange(ChatViewportKey.self) { follow.viewportHeight = $0 }
-                .onPreferenceChange(ChatContentFrameKey.self) { follow.track($0) }
+                .onPreferenceChange(ChatContentFrameKey.self) { if follow.track($0) { scrollDown(proxy) } }
                 .onChange(of: chat.items.count) {
                     if case .user? = chat.items.last { follow.stick = true }
                     scrollDown(proxy)
                 }
                 .onChange(of: lastTextLength) { scrollDown(proxy) }
                 .onChange(of: chat.busy) { scrollDown(proxy) }
+                .onChange(of: chat.lastError) { scrollDown(proxy) }
                 .onChange(of: chat.pendingCount) {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrollDown(proxy) }
                 }
@@ -108,13 +109,15 @@ private final class ChatFollow {
     var viewportHeight: CGFloat = 0
     private var contentFrame: CGRect = .zero
 
-    func track(_ frame: CGRect) {
+    func track(_ frame: CGRect) -> Bool {
+        let grew = frame.height > contentFrame.height + 1
         if frame.maxY - viewportHeight <= 40 {
             stick = true
         } else if frame.minY > contentFrame.minY + 1 {
             stick = false
         }
         contentFrame = frame
+        return grew && stick
     }
 }
 

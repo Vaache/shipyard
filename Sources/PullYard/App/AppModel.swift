@@ -187,6 +187,7 @@ final class AppModel {
     func windowVisibilityChanged() {
         guard phase == .loggedIn, liveStale, !liveRefreshPaused, mainWindowVisible else { return }
         liveStale = false
+        lastLiveRefresh = Date()
         Diagnostics.shared.beginTick()
         liveTick += 1
     }

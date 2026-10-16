@@ -424,7 +424,7 @@ struct LiveTickModifier: ViewModifier {
         content
             .onAppear {
                 shown = true
-                catchUp()
+                stale = false
             }
             .onDisappear { shown = false }
             .onChange(of: front) { catchUp() }
@@ -440,7 +440,7 @@ struct LiveTickModifier: ViewModifier {
     private func catchUp() {
         guard stale, shown, front else { return }
         stale = false
-        Task { await action() }
+        Diagnostics.liveTask { await action() }
     }
 }
 
