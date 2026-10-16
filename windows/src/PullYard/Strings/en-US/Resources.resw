@@ -116,6 +116,7 @@
   <data name="Code_BlameHint" xml:space="preserve"><value>Show who last changed each line (Ctrl+Alt+B)</value></data>
   <data name="Code_BlameLoading" xml:space="preserve"><value>Loading blame…</value></data>
   <data name="Code_BlameUnavailable" xml:space="preserve"><value>Blame unavailable for this file</value></data>
+  <data name="Code_BlameUnknownAuthor" xml:space="preserve"><value>unknown</value></data>
   <data name="Code_CopyContents" xml:space="preserve"><value>Copy contents</value></data>
   <data name="Code_CopyPath" xml:space="preserve"><value>Copy path</value></data>
   <data name="Code_GoToFile" xml:space="preserve"><value>Go to file (Ctrl+P)</value></data>
@@ -303,6 +304,7 @@
   <data name="PR_Approve" xml:space="preserve"><value>Approve</value></data>
   <data name="PR_ApproveQ" xml:space="preserve"><value>Approve this pull request?</value></data>
   <data name="PR_Assignees" xml:space="preserve"><value>Assignees:</value></data>
+  <data name="PR_BlameAtHead" xml:space="preserve"><value>Blame this file at the pull request head</value></data>
   <data name="PR_Checks" xml:space="preserve"><value>Checks</value></data>
   <data name="PR_Close" xml:space="preserve"><value>Close pull request…</value></data>
   <data name="PR_CloseButton" xml:space="preserve"><value>Close pull request</value></data>

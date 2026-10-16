@@ -205,6 +205,7 @@ public sealed partial class AppViewModel : ObservableObject
         ListSnapshotStore.Shared.ForgetAccount();
         ListSnapshotStore.Shared.Clear(Account);
         SearchListViewModel.ClearCache();
+        BlameCache.Shared.Clear();
         Account = null;
         Api = null;
         User = null;

@@ -110,6 +110,35 @@ public class BlameTests
     }
 
     [Fact]
+    public void PeelsAnnotatedTagsToTheirCommit()
+    {
+        const string tag = """
+        {"repository":{"object":{"__typename":"Tag","target":{"__typename":"Commit","oid":"abc","blame":{"ranges":[{"startingLine":1,"endingLine":2,"age":3,"commit":{"oid":"abc","abbreviatedOid":"abc","messageHeadline":"m","url":"","author":{"name":"N"}}}]}}}}}
+        """;
+        var r = JsonSerializer.Deserialize<BlameResponse>(tag, Json.GraphQL)!;
+        Assert.Single(r.Repository!.Object!.Ranges!);
+        Assert.Null(JsonSerializer.Deserialize<BlameResponse>("""{"repository":{"object":{"__typename":"Blob"}}}""", Json.GraphQL)!.Repository!.Object!.Ranges);
+    }
+
+    [Fact]
+    public void UsesTheGivenLabelForUnknownAuthors() =>
+        Assert.Equal("inconnu", Blame.Map(new[] { Node(1, 1, login: null, name: null) }, unknown: "inconnu")[0].Author);
+
+    [Fact]
+    public void DiffBlameButtonUsesLabelsAndSkipsRemovedFiles()
+    {
+        var files = new[]
+        {
+            new DiffFile(new PRFile { Filename = "a.txt", Status = "modified", Patch = "@@ -1 +1 @@\n-a\n+b" }),
+            new DiffFile(new PRFile { Filename = "gone.txt", Status = "removed", Patch = "@@ -1 +0,0 @@\n-a" })
+        };
+        var html = DiffHtml.Render(files, new DiffRenderOptions { ShowBlame = true, BlameLabel = "Auteur", BlameTitle = "T<x>" });
+        Assert.Single(Regex.Matches(html, "postFile\\(this,'blame'\\)"));
+        Assert.Contains("title=\"T&lt;x&gt;\">Auteur</button>", html);
+        Assert.DoesNotContain("'blame'", DiffHtml.Render(files, new DiffRenderOptions()));
+    }
+
+    [Fact]
     public void BlameQueryIsNamedForDiagnostics() => Assert.StartsWith("query Blame(", GitHubApi.BlameQuery);
 }
 
@@ -143,4 +172,55 @@ public class ShortLinkTests
         Assert.Null(ShortLink.Of(Route.Commit(repo, "abc")));
         Assert.Null(ShortLink.Of((Route?)null));
     }
+}
+
+public class BlameCacheTests
+{
+    private static readonly RepoRef Repo = new("Octo", "Repo");
+    private static readonly List<BlameRange> Ranges = new() { new BlameRange(1, 1, 1, "a", "a", "m", null, "", "x", null, null) };
+    private const string Sha = "0123456789abcdef0123456789abcdef01234567";
+
+    [Fact]
+    public void KeysIncludeAccountRepoRefAndPath()
+    {
+        Assert.Equal("me|octo/repo|main|src/a.cs", BlameCache.Key("Me", Repo, "main", "src/a.cs"));
+        Assert.NotEqual(BlameCache.Key("me", Repo, "main", "a"), BlameCache.Key("other", Repo, "main", "a"));
+    }
+
+    [Fact]
+    public void BranchEntriesExpireButCommitEntriesDoNot()
+    {
+        var cache = new BlameCache(10, TimeSpan.FromMinutes(10));
+        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        cache.Set("b", Ranges, t0);
+        cache.Set("c", Ranges, t0);
+        Assert.Same(Ranges, cache.Get("b", "main", t0.AddMinutes(9)));
+        Assert.Null(cache.Get("b", "main", t0.AddMinutes(11)));
+        Assert.Same(Ranges, cache.Get("c", Sha, t0.AddDays(30)));
+        Assert.Equal(1, cache.Count);
+    }
+
+    [Fact]
+    public void EvictsLeastRecentlyUsedAndInvalidates()
+    {
+        var cache = new BlameCache(2);
+        cache.Set("1", Ranges);
+        cache.Set("2", Ranges);
+        Assert.NotNull(cache.Get("1", Sha));
+        cache.Set("3", Ranges);
+        Assert.Null(cache.Get("2", Sha));
+        Assert.NotNull(cache.Get("1", Sha));
+        cache.Invalidate("1");
+        Assert.Null(cache.Get("1", Sha));
+        cache.Clear();
+        Assert.Equal(0, cache.Count);
+    }
+
+    [Theory]
+    [InlineData("0123456789abcdef0123456789abcdef01234567", true)]
+    [InlineData("0123456789ABCDEF0123456789abcdef01234567", true)]
+    [InlineData("main", false)]
+    [InlineData("0123456", false)]
+    [InlineData("refs/pull/27/head", false)]
+    public void RecognisesCommitIds(string @ref, bool expected) => Assert.Equal(expected, BlameCache.IsCommitId(@ref));
 }

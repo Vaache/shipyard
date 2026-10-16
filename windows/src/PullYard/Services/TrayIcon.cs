@@ -10,6 +10,7 @@ public sealed class TrayMenuItem
     public bool Disabled { get; init; }
     public bool Bold { get; init; }
     public Action? Action { get; init; }
+    public List<TrayMenuItem>? Children { get; init; }
 }
 
 public sealed class TrayIcon : IDisposable
@@ -231,27 +232,36 @@ public sealed class TrayIcon : IDisposable
     private void ShowMenu()
     {
         var items = MenuProvider?.Invoke() ?? new List<TrayMenuItem>();
-        var menu = CreatePopupMenu();
         var actions = new Dictionary<uint, Action>();
         uint id = 100;
-        uint position = 0;
-        foreach (var item in items)
+        IntPtr Fill(List<TrayMenuItem> list)
         {
-            if (item.Separator)
+            var popup = CreatePopupMenu();
+            uint position = 0;
+            foreach (var item in list)
             {
-                AppendMenuW(menu, 0x800, UIntPtr.Zero, null);
+                if (item.Separator)
+                {
+                    AppendMenuW(popup, 0x800, UIntPtr.Zero, null);
+                }
+                else if (item.Children is { Count: > 0 } children)
+                {
+                    var sub = Fill(children);
+                    AppendMenuW(popup, 0x10u | (item.Disabled ? 0x1u | 0x2u : 0u), (UIntPtr)(nuint)sub, item.Text.Replace("&", "&&"));
+                }
+                else
+                {
+                    var flags = item.Disabled ? 0x1u | 0x2u : 0u;
+                    AppendMenuW(popup, flags, new UIntPtr(id), item.Text.Replace("&", "&&"));
+                    if (item.Bold) SetMenuDefaultItem(popup, position, 1);
+                    if (item.Action is { } a) actions[id] = a;
+                    id++;
+                }
+                position++;
             }
-            else
-            {
-                var flags = item.Disabled ? 0x1u | 0x2u : 0u;
-                var text = item.Text.Replace("&", "&&");
-                AppendMenuW(menu, flags, new UIntPtr(id), text);
-                if (item.Bold) SetMenuDefaultItem(menu, position, 1);
-                if (item.Action is { } a) actions[id] = a;
-                id++;
-            }
-            position++;
+            return popup;
         }
+        var menu = Fill(items);
         GetCursorPos(out var pt);
         SetForegroundWindow(hwnd);
         uint chosen;

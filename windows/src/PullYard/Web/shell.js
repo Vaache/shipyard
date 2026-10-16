@@ -106,11 +106,13 @@
       e.preventDefault();
       send({ type: "refresh", id: "" });
     }
-    if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === "c" || e.key === "C")) {
+    var altGraph = e.getModifierState && e.getModifierState("AltGraph");
+    var typing = e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]");
+    if (e.ctrlKey && e.shiftKey && !e.altKey && !altGraph && e.code === "KeyC") {
       e.preventDefault();
       send({ type: "key", id: "shortLink" });
     }
-    if (e.ctrlKey && e.altKey && !e.shiftKey && (e.key === "b" || e.key === "B")) {
+    if (e.ctrlKey && e.altKey && !e.shiftKey && !altGraph && !typing && e.code === "KeyB") {
       e.preventDefault();
       send({ type: "key", id: "blame" });
     }

@@ -359,13 +359,15 @@ public sealed partial class GitHubApi
     }
 
     public const string BlameQuery = @"query Blame($owner: String!, $name: String!, $ref: String!, $path: String!) { repository(owner: $owner, name: $name) { object(expression: $ref) { __typename
-  ... on Commit { blame(path: $path) { ranges { startingLine endingLine age commit { oid abbreviatedOid messageHeadline committedDate url author { name user { login avatarUrl } } } } } }
-} } }";
+  ... on Commit { ...BlameRanges }
+  ... on Tag { target { __typename ... on Commit { ...BlameRanges } } }
+} } }
+fragment BlameRanges on Commit { oid blame(path: $path) { ranges { startingLine endingLine age commit { oid abbreviatedOid messageHeadline committedDate url author { name user { login avatarUrl } } } } } }";
 
     public async Task<List<BlameRangeNode>?> BlameRanges(RepoRef repo, string @ref, string path, CancellationToken ct = default)
     {
         var r = await GraphQL<BlameResponse>(BlameQuery, V(("owner", repo.Owner), ("name", repo.Name), ("ref", @ref), ("path", path)), ct: ct).ConfigureAwait(false);
-        return r.Repository?.Object?.Blame?.Ranges;
+        return r.Repository?.Object?.Ranges;
     }
 
     public async Task<List<BranchInfo>> Branches(RepoRef repo, CancellationToken ct = default)

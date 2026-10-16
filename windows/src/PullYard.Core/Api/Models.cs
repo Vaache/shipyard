@@ -836,7 +836,12 @@ public sealed class BlameResponse
     {
         [JsonPropertyName("__typename")]
         public string Typename { get; set; } = "";
+        public string? Oid { get; set; }
         public B? Blame { get; set; }
+        public O? Target { get; set; }
+
+        [JsonIgnore]
+        public List<BlameRangeNode>? Ranges => Blame?.Ranges ?? Target?.Blame?.Ranges;
     }
 
     public sealed class R

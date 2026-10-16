@@ -857,7 +857,7 @@ public sealed class PRContent : Grid, IShortcutHost
                 WindowInterop.Copy(id);
                 break;
             case "blame":
-                if (model.Pr is { } pr) RepoDetailView.OpenFile(model.Ref.Repo, pr.HeadRefOid.Length > 0 ? pr.HeadRefOid : pr.HeadRefName, id, true);
+                if (model.Pr is { } pr) RepoDetailView.OpenFile(model.Ref.Repo, pr.HeadRefOid.Length > 0 ? pr.HeadRefOid : $"refs/pull/{model.Ref.Number}/head", id, true);
                 break;
             case "collapse":
                 model.Collapsed.Add(id);

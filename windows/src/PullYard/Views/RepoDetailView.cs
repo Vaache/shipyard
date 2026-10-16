@@ -132,7 +132,11 @@ public sealed class RepoDetailView : LiveDetail
 
     protected override void OnRefresh()
     {
-        if (tab == "code") code?.OpenDir(code.Dir).Forget();
+        if (tab == "code" && code is not null)
+        {
+            code.OpenDir(code.Dir).Forget();
+            if (code.SelectedFile is not null) code.ReloadFile().Forget();
+        }
         else LoadItems().Forget();
     }
 

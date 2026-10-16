@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using PullYard.Core.Api;
 using PullYard.Core.Util;
+using PullYard.Services;
 
 namespace PullYard.ViewModels;
 
@@ -34,8 +35,8 @@ public sealed partial class RepoCodeViewModel : ObservableObject
     [ObservableProperty] private bool blameFailed;
 
     private readonly Dictionary<string, (List<TreeEntry> Entries, string? Readme)> dirCache = new();
-    private readonly Dictionary<string, List<BlameRange>> blameCache = new();
     private string? blameKey;
+    private int fileToken;
 
     private static readonly HashSet<string> ImageExts = new(StringComparer.OrdinalIgnoreCase) { "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tiff", "svg" };
     private static readonly HashSet<string> MarkdownExts = new(StringComparer.OrdinalIgnoreCase) { "md", "markdown", "mdx" };
@@ -88,18 +89,27 @@ public sealed partial class RepoCodeViewModel : ObservableObject
     public async Task OpenAt(string @ref, string path, bool blame)
     {
         var first = CurrentRef.Length == 0;
-        if (@ref != CurrentRef)
+        var changed = @ref != CurrentRef;
+        if (changed)
         {
             CurrentRef = @ref;
             AllPaths = null;
+            SelectedFile = null;
+            File = null;
+            Entries = new();
+            Readme = null;
             ResetBlame();
         }
         if (first) LoadBranches().Forget();
         BlameOn = blame;
-        await Reveal(path);
+        var slash = path.LastIndexOf('/');
+        var parent = slash < 0 ? "" : path[..slash];
+        if (changed || parent != Dir || Entries.Count == 0) await OpenDir(parent);
+        if (CurrentRef != @ref) return;
+        await OpenFile(path);
     }
 
-    public string RefLabel => CurrentRef.Length == 40 && CurrentRef.All(Uri.IsHexDigit) ? CurrentRef[..7] : CurrentRef;
+    public string RefLabel => BlameCache.IsCommitId(CurrentRef) ? CurrentRef[..7] : CurrentRef;
 
     partial void OnCurrentRefChanged(string value) => OnPropertyChanged(nameof(RefLabel));
 
@@ -205,6 +215,9 @@ public sealed partial class RepoCodeViewModel : ObservableObject
 
     public async Task OpenFile(string path)
     {
+        var token = ++fileToken;
+        var @ref = CurrentRef;
+        bool Stale() => token != fileToken || SelectedFile != path || CurrentRef != @ref;
         SelectedFile = path;
         File = null;
         FileError = null;
@@ -215,14 +228,14 @@ public sealed partial class RepoCodeViewModel : ObservableObject
         {
             if (ImageExts.Contains(ext))
             {
-                var data = await Api.RawFile(Repo, CurrentRef, path) ?? throw new ApiException("File not found");
-                if (SelectedFile != path) return;
+                var data = await Api.RawFile(Repo, @ref, path) ?? throw new ApiException("File not found");
+                if (Stale()) return;
                 FileSize = data.Length;
                 File = new FileContent(FileContentKind.Image, Bytes: data, Size: data.Length);
                 return;
             }
-            var obj = await Api.GitObject(Repo, CurrentRef, path) ?? throw new ApiException("File not found");
-            if (SelectedFile != path) return;
+            var obj = await Api.GitObject(Repo, @ref, path) ?? throw new ApiException("File not found");
+            if (Stale()) return;
             FileSize = obj.ByteSize;
             if (obj.IsBinary == true)
             {
@@ -233,11 +246,12 @@ public sealed partial class RepoCodeViewModel : ObservableObject
                 string? html = null;
                 try
                 {
-                    html = await Api.RenderedFile(Repo, CurrentRef, path);
+                    html = await Api.RenderedFile(Repo, @ref, path);
                 }
                 catch
                 {
                 }
+                if (Stale()) return;
                 File = html is not null
                     ? new FileContent(FileContentKind.Markdown, Text: obj.Text ?? "", Html: html)
                     : new FileContent(FileContentKind.Text, Text: obj.Text ?? "", Truncated: obj.IsTruncated ?? false);
@@ -249,13 +263,20 @@ public sealed partial class RepoCodeViewModel : ObservableObject
         }
         catch (Exception e)
         {
-            FileError = e.Message;
+            if (!Stale()) FileError = e.Message;
         }
         finally
         {
-            LoadingFile = false;
+            if (token == fileToken) LoadingFile = false;
         }
-        if (SelectedFile == path && BlameOn) LoadBlame().Forget();
+        if (!Stale() && BlameOn) LoadBlame().Forget();
+    }
+
+    public async Task ReloadFile()
+    {
+        if (SelectedFile is not { } path) return;
+        BlameCache.Shared.Invalidate(BlameKey(path));
+        await OpenFile(path);
     }
 
     public bool CanBlame => File is { Kind: FileContentKind.Text or FileContentKind.Markdown };
@@ -273,6 +294,7 @@ public sealed partial class RepoCodeViewModel : ObservableObject
 
     public void RetryBlame()
     {
+        if (SelectedFile is { } path) BlameCache.Shared.Invalidate(BlameKey(path));
         ResetBlame();
         LoadBlame().Forget();
     }
@@ -285,31 +307,34 @@ public sealed partial class RepoCodeViewModel : ObservableObject
         LoadingBlame = false;
     }
 
+    private string BlameKey(string path) => PullYard.Core.Api.BlameCache.Key(AppViewModel.Shared.Account, Repo, CurrentRef, path);
+
     public async Task LoadBlame()
     {
         if (!BlameOn || SelectedFile is not { } path || File is not { } file || !CanBlame) return;
-        var key = $"{CurrentRef}|{path}";
+        var key = BlameKey(path);
         if (blameKey == key && (Blame is not null || LoadingBlame)) return;
         blameKey = key;
         BlameFailed = false;
-        if (blameCache.TryGetValue(key, out var cached))
+        var @ref = CurrentRef;
+        if (BlameCache.Shared.Get(key, @ref) is { } cached)
         {
             Blame = cached;
             return;
         }
         LoadingBlame = true;
-        var @ref = CurrentRef;
+        var unknown = L.T("Code_BlameUnknownAuthor", "unknown");
         try
         {
             var lines = PullYard.Core.Api.Blame.LineCount(file.Text);
-            var ranges = await Task.Run(async () => PullYard.Core.Api.Blame.Map(await Api.BlameRanges(Repo, @ref, path).ConfigureAwait(false), lines));
+            var ranges = await Task.Run(async () => PullYard.Core.Api.Blame.Map(await Api.BlameRanges(Repo, @ref, path).ConfigureAwait(false), lines, unknown));
             if (blameKey != key) return;
             if (ranges.Count == 0)
             {
                 BlameFailed = true;
                 return;
             }
-            blameCache[key] = ranges;
+            BlameCache.Shared.Set(key, ranges);
             Blame = ranges;
         }
         catch
