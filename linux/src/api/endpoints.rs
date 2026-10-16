@@ -384,6 +384,14 @@ impl GitHubApi {
         self.send(Method::POST, &format!("/repos/{}/actions/runs/{run_id}/rerun-failed-jobs", repo.full()), None).await
     }
 
+    pub async fn check_annotations(&self, repo: &RepoRef, check_run_id: i64) -> ApiResult<Vec<CheckAnnotation>> {
+        self.rest(Method::GET, &format!("/repos/{}/check-runs/{check_run_id}/annotations?per_page=50", repo.full()), None).await
+    }
+
+    pub async fn check_run(&self, repo: &RepoRef, check_run_id: i64) -> ApiResult<CheckRunRest> {
+        self.rest(Method::GET, &format!("/repos/{}/check-runs/{check_run_id}", repo.full()), None).await
+    }
+
     pub async fn job_log(&self, repo: &RepoRef, job_id: i64) -> ApiResult<String> {
         let target = self.redirect_target(&format!("/repos/{}/actions/jobs/{job_id}/logs", repo.full())).await?;
         self.plain(&target).await

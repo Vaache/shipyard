@@ -483,7 +483,7 @@ fn show_log(view: &gtk::TextView, buffer: &gtk::TextBuffer) {
     view.scroll_mark_onscreen(&mark);
 }
 
-pub fn job_log(api: GitHubApi, repo: RepoRef, check: CheckContext) {
+pub fn job_log(api: GitHubApi, repo: RepoRef, check: CheckContext, fix: Option<Rc<dyn Fn()>>) {
     let sheet = Sheet::new(&check.workflow_name().map(|w| format!("{w} / {}", check.title())).unwrap_or_else(|| check.title()), 980, 640);
     let stack = gtk::Stack::new();
     stack.add_named(&loading(), Some("loading"));
@@ -507,6 +507,15 @@ pub fn job_log(api: GitHubApi, repo: RepoRef, check: CheckContext) {
         sheet.footer.append(&open);
     }
     sheet.add_footer_spacer();
+    if let Some(fix) = fix {
+        let b = tinted("Fix with Claude Code", "coral");
+        let d = sheet.dialog.clone();
+        b.connect_clicked(move |_| {
+            d.close();
+            fix();
+        });
+        sheet.footer.append(&b);
+    }
     let close = button("Close");
     let d = sheet.dialog.clone();
     close.connect_clicked(move |_| {

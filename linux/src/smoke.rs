@@ -154,9 +154,10 @@ pub fn run(_app: Rc<App>) {
         let m = pr();
         let c = m.pr.borrow().as_ref().map(|p| p.checks()[0].clone());
         if let Some(c) = c {
-            crate::ui::pr::sheets::job_log(m.api.clone(), m.r.repo.clone(), c);
+            crate::ui::pr::sheets::job_log(m.api.clone(), m.r.repo.clone(), c, Some(std::rc::Rc::new(|| {})));
         }
     });
+    step(next(300), "fix ci sheet", move || crate::ui::fix_claude::show_ci(pr(), None));
     step(next(300), "open link dialog", crate::ui::main_view::open_link_dialog);
     step(next(300), "preferences", crate::ui::settings::show);
     step(next(300), "diagnostics", || {

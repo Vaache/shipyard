@@ -1571,6 +1571,38 @@ pub struct BranchCommit {
     pub sha: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct CheckAnnotation {
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub start_line: Option<i64>,
+    #[serde(default)]
+    pub end_line: Option<i64>,
+    #[serde(default)]
+    pub annotation_level: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CheckRunOutput {
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub summary: Option<String>,
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CheckRunRest {
+    #[serde(default)]
+    pub output: Option<CheckRunOutput>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct BranchInfo {
     pub name: String,

@@ -40,6 +40,7 @@ pub struct PrPage {
     sending_rerequest: Cell<bool>,
     replaced: Cell<bool>,
     actions_key: RefCell<String>,
+    ci_session: Cell<Option<crate::claude::TabState>>,
 }
 
 pub struct Conversation {
@@ -119,8 +120,22 @@ impl PrPage {
             sending_rerequest: Cell::new(false),
             replaced: Cell::new(false),
             actions_key: RefCell::new(String::new()),
+            ci_session: Cell::new(None),
         });
         *holder.borrow_mut() = Some(Rc::downgrade(&me));
+        if let Some(a) = app::try_get() {
+            let w = Rc::downgrade(&me);
+            a.claude.changed.connect(move |_| {
+                let Some(me) = w.upgrade() else { return false };
+                if fix_claude::ci_session(&me.model.r).map(|(_, s)| s) != me.ci_session.get() {
+                    let pr = me.model.pr.borrow().clone();
+                    if let Some(pr) = pr {
+                        me.render_banners(&pr);
+                    }
+                }
+                true
+            });
+        }
 
         let w = Rc::downgrade(&me);
         me.tabs.on_change(move |id| {
@@ -471,11 +486,21 @@ impl PrPage {
             b.add_css_class("flat");
             b.set_halign(gtk::Align::Start);
             let m = self.model.clone();
+            let n = failed_runs.len() as i64;
             b.connect_clicked(move |_| {
                 let m = m.clone();
-                crate::rt::spawn_local(async move {
-                    m.rerun_failed().await;
-                });
+                dialogs::confirm(
+                    "Re-run failed jobs?",
+                    Some(format!("GitHub re-runs only the failed jobs of {} on the latest commit.", util::plural(n, "workflow run", "workflow runs")).as_str()),
+                    "Re-run",
+                    false,
+                    move || {
+                        let m = m.clone();
+                        crate::rt::spawn_local(async move {
+                            m.rerun_failed().await;
+                        });
+                    },
+                );
             });
             let row = gtk::ListBoxRow::new();
             row.set_child(Some(&b));
@@ -521,8 +546,27 @@ impl PrPage {
                 log.add_css_class("flat");
                 let m = self.model.clone();
                 let cc = c.clone();
-                log.connect_clicked(move |_| sheets::job_log(m.api.clone(), m.r.repo.clone(), cc.clone()));
+                let failed = c.outcome() == CheckOutcome::Failure;
+                log.connect_clicked(move |_| {
+                    let fix: Option<Rc<dyn Fn()>> = if failed {
+                        let m = m.clone();
+                        let id = cc.id();
+                        Some(Rc::new(move || fix_claude::show_ci(m.clone(), Some(id.clone()))))
+                    } else {
+                        None
+                    };
+                    sheets::job_log(m.api.clone(), m.r.repo.clone(), cc.clone(), fix);
+                });
                 b.append(&log);
+            }
+            if c.outcome() == CheckOutcome::Failure {
+                let fix = icon_label_button("sy-sparkles-symbolic", "Fix with Claude Code");
+                fix.add_css_class("flat");
+                fix.set_tooltip_text(Some("Send this check's failure log to a new Claude Code session"));
+                let m = self.model.clone();
+                let id = c.id();
+                fix.connect_clicked(move |_| fix_claude::show_ci(m.clone(), Some(id.clone())));
+                b.append(&fix);
             }
             if let Some(link) = c.link() {
                 let open = icon_button("sy-external-symbolic", "Open in browser");
@@ -676,6 +720,11 @@ impl PrPage {
     fn render_banners(self: &Rc<Self>, pr: &PullRequestDetail) {
         clear(&self.banners);
         if let Some(b) = self.rereview_banner(pr, true) {
+            self.banners.append(&b);
+        }
+        self.ci_session.set(fix_claude::ci_session(&self.model.r).map(|(_, s)| s));
+        let m = self.model.clone();
+        if let Some(b) = fix_claude::ci_banner(pr, &self.model.r, move || fix_claude::show_ci(m.clone(), None)) {
             self.banners.append(&b);
         }
         let m = self.model.clone();

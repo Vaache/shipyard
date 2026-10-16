@@ -3,6 +3,7 @@ mod app;
 mod auth;
 mod blame;
 mod brand;
+mod ci_fix;
 mod claude;
 mod conversation_html;
 mod demo;
