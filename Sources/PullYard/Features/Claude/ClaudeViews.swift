@@ -1001,11 +1001,11 @@ struct InspectorPRDetail: View {
             let m = app.prModel(ref)
             model = m
             m?.inspectorFilesVisible = showFiles
-            await m?.load()
+            await m?.load(live: m?.pr != nil)
         }
         .onLiveTick { await model?.load(live: true) }
         .onChange(of: app.refreshTick) { Task { await model?.load(full: true) } }
-        .onChange(of: tab.busy) { _, busy in if !busy { Task { await model?.load() } } }
+        .onChange(of: tab.busy) { _, busy in if !busy { Task { await model?.load(live: true) } } }
         .alert("Error", isPresented: Binding(get: { model?.actionError != nil }, set: { if !$0 { model?.actionError = nil } })) {
             Button("OK") {}
         } message: {

@@ -93,6 +93,7 @@ final class Diagnostics: @unchecked Sendable {
     static let enabledKey = "diagnosticsEnabled"
     static let shared = Diagnostics()
     @TaskLocal static var tick: Int?
+    @TaskLocal static var note: String?
 
     private static let enabled = OSAllocatedUnfairLock(initialState: false)
 
@@ -311,7 +312,7 @@ final class Diagnostics: @unchecked Sendable {
             bytes: data?.count ?? 0,
             status: http?.statusCode,
             error: error.map(Self.errorText),
-            note: nil,
+            note: Self.note,
             authenticated: authenticated,
             rateLimitRemaining: http?.value(forHTTPHeaderField: "X-RateLimit-Remaining").flatMap { Int($0) },
             rateLimitReset: http?.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap { Int($0) },

@@ -20,6 +20,7 @@ enum SelfTest {
             }
             var samplePR: ItemRef?
             var sampleIssue: ItemRef?
+            await MainActor.run { Diagnostics.shared.setEnabled(true) }
             await step("user") { let (u, s) = try await api.currentUser(); return "\(u.login) scopes=\(s)" }
             await step("badges") { let b = try await api.badges(); return "rr=\(b.rr.issueCount) mine=\(b.mine.issueCount)" }
             for q in ["is:pr author:@me is:closed archived:false sort:updated-desc", "is:pr review-requested:@me archived:false sort:updated-desc", "is:pr author:@me sort:updated-desc"] {
@@ -55,8 +56,25 @@ enum SelfTest {
                 await step("pulse") {
                     let full = try await api.pullRequest(pr)
                     let light = try await api.pullRequestPulse(pr)
-                    guard let known = full.pulse, let light else { return "missing pulse" }
-                    return "head=\(light.headRefOid.prefix(7)) unchanged=\(known == light)"
+                    guard let known = full.pulse else { throw APIError(message: "PullRequest response did not decode PRPulse") }
+                    guard let light else { throw APIError(message: "PullRequestPulse returned no pull request") }
+                    var same = known == light
+                    if !same, let again = try await api.pullRequest(pr).pulse, let check = try await api.pullRequestPulse(pr) { same = again == check }
+                    guard same else { throw APIError(message: "pulse from PullRequest differs from PullRequestPulse") }
+                    return "head=\(light.headRefOid.prefix(7)) unchanged=true"
+                }
+                await step("live tick") {
+                    let start = Diagnostics.shared.snapshot(ifNewerThan: -1)?.requests.count ?? 0
+                    let model = await MainActor.run { PRDetailModel(ref: pr, api: api) }
+                    await model.load()
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    let before = Diagnostics.shared.snapshot(ifNewerThan: -1)?.requests.count ?? 0
+                    await model.load(live: true)
+                    let records = Diagnostics.shared.snapshot(ifNewerThan: -1)?.requests ?? []
+                    let names = records.prefix(max(records.count - before, 0)).map(\.name)
+                    guard names == ["PullRequestPulse"] else { throw APIError(message: "tick sent \(names)") }
+                    let open = records.suffix(before).prefix(max(before - start, 0)).reversed().map { "\($0.name)\($0.note.map { " [\($0)]" } ?? "")" }
+                    return "open=\(open) tick=\(names)"
                 }
                 await step("conflicts") {
                     let r = try await api.pullRequest(pr)
@@ -111,12 +129,16 @@ enum SelfTest {
             }
             await step("notifications") {
                 let n = try await api.notifications(all: true)
+                _ = try await api.notifications(all: true)
+                let statuses = (Diagnostics.shared.snapshot(ifNewerThan: -1)?.requests ?? []).filter { $0.name == "GET /notifications" }.prefix(2).map { $0.status ?? 0 }
                 let back = try JSONDecoder().decode(ListSnapshot<[NotificationThread]>.self, from: JSONEncoder().encode(ListSnapshot(saved: Date(), value: n)))
-                return "all=\(n.count) cached=\(back.value.count)"
+                return "all=\(n.count) cached=\(back.value.count) statuses=\(Array(statuses.reversed()))"
             }
             done.signal()
         }
-        done.wait()
+        while done.wait(timeout: .now()) == .timedOut {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
         exit(failures == 0 ? 0 : 1)
     }
 }

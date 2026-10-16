@@ -39,6 +39,7 @@ private final class NoRedirect: NSObject, URLSessionTaskDelegate {
 private struct PolledEntry {
     var value: Any
     var lastModified: String?
+    var etag: String?
     var fetchedAt: Date
     var pollInterval: TimeInterval
 }
@@ -240,7 +241,11 @@ final class GitHubAPI {
         if live, let cached, let value = cached.value as? T, Date() < cached.fetchedAt.addingTimeInterval(cached.pollInterval) {
             return value
         }
-        let conditional = live ? cached?.lastModified.map { ["If-Modified-Since": $0] } ?? [:] : [:]
+        var conditional: [String: String] = [:]
+        if let cached {
+            conditional["If-None-Match"] = cached.etag
+            conditional["If-Modified-Since"] = cached.lastModified
+        }
         let (data, http) = try await restRaw("GET", path, headers: conditional)
         let interval = http.value(forHTTPHeaderField: "X-Poll-Interval").flatMap(TimeInterval.init) ?? 0
         if http.statusCode == 304, let cached, let value = cached.value as? T {
@@ -259,7 +264,7 @@ final class GitHubAPI {
         } catch {
             throw APIError(message: "Failed to parse response: \(error)")
         }
-        let entry = PolledEntry(value: value, lastModified: http.value(forHTTPHeaderField: "Last-Modified"), fetchedAt: Date(), pollInterval: interval)
+        let entry = PolledEntry(value: value, lastModified: http.value(forHTTPHeaderField: "Last-Modified"), etag: http.value(forHTTPHeaderField: "ETag"), fetchedAt: Date(), pollInterval: interval)
         let current = lock.withLock { () -> Bool in
             guard polledGeneration[path] == generation else { return false }
             polled[path] = entry

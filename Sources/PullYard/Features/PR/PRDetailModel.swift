@@ -79,6 +79,7 @@ final class PRDetailModel {
     }
     @ObservationIgnored private var pulse: PRPulse?
     @ObservationIgnored private var needsFull = false
+    @ObservationIgnored private var fullReason: String?
     @ObservationIgnored private var lastFullFetch: Date?
     private static let fullFetchInterval: TimeInterval = 300
     @ObservationIgnored private var mergeRecheck: Task<Void, Never>?
@@ -145,11 +146,14 @@ final class PRDetailModel {
 
     var reviewersToReRequest: [String] { staleReviews.map(\.login) }
 
-    func load(full: Bool = false, live: Bool = false) async {
-        if full { reloadFiles = true }
+    func load(full: Bool = false, live: Bool = false, file: String = #fileID, line: Int = #line) async {
+        if full {
+            reloadFiles = true
+            stackRequest = true
+        }
         if !live {
             needsFull = true
-            stackRequest = (stackRequest ?? false) || full
+            fullReason = "\(full ? "refresh" : "load") \(file.split(separator: "/").last ?? ""):\(line)"
         }
         if let queuedLoad {
             await queuedLoad.value
@@ -179,11 +183,27 @@ final class PRDetailModel {
         loading = true
         defer { loading = false }
         let recent = lastFullFetch.map { Date().timeIntervalSince($0) < Self.fullFetchInterval } ?? false
-        let light = !needsFull && recent && pr != nil && pulse != nil
+        let forced = needsFull ? fullReason : nil
         needsFull = false
-        if light, await unchanged() { return }
+        fullReason = nil
+        let reason: String
+        if pr == nil {
+            reason = "first"
+        } else if let forced {
+            reason = forced
+        } else if !recent {
+            reason = "stale"
+        } else if pulse == nil {
+            reason = "no baseline"
+        } else {
+            switch await pulseCheck() {
+            case .same: return
+            case .changed: reason = "changed"
+            case .failed: reason = "pulse error"
+            }
+        }
         do {
-            let r = try await api.pullRequest(ref)
+            let r = try await Diagnostics.$note.withValue("full: \(reason)") { try await api.pullRequest(ref) }
             viewerLogin = r.viewer.login
             guard let repo = r.repository, let pr = repo.pullRequest else {
                 notPR = true
@@ -218,17 +238,20 @@ final class PRDetailModel {
         }
     }
 
-    private func unchanged() async -> Bool {
-        guard let known = pulse else { return false }
+    private enum PulseResult { case same, changed, failed }
+
+    private func pulseCheck() async -> PulseResult {
+        guard let known = pulse else { return .changed }
         do {
-            guard let current = try await api.pullRequestPulse(ref), current == known else { return false }
+            guard let current = try await api.pullRequestPulse(ref) else { return .changed }
+            guard current == known else { return .changed }
             refreshError = nil
             lastUpdated = Date()
             if let pr { scheduleMergeRecheck(pr) }
             ensureFiles()
-            return true
+            return .same
         } catch {
-            return isCancellation(error)
+            return isCancellation(error) ? .same : .failed
         }
     }
 
