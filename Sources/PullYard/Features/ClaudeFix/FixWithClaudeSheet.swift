@@ -26,6 +26,7 @@ struct FixWithClaudeSheet: View {
     @State private var ciGeneration = 0
     @State private var ciHead: String?
     @State private var ciNonce = CIFixPrompt.nonce()
+    @State private var ciStale = false
 
     private var allFailing: [CheckContext] { CIFailureCollector.failing(pr.checks) }
     private var failing: [CheckContext] { CIFailureCollector.shown(allFailing, focus: ci?.focus) }
@@ -82,6 +83,7 @@ struct FixWithClaudeSheet: View {
         .frame(width: 780, height: 680)
         .surface(.panel)
         .onChange(of: source) { custom = nil }
+        .onChange(of: custom == nil) { if custom == nil { ciStale = false } }
         .onChange(of: selected) { custom = nil }
         .onChange(of: ciSelected) { custom = nil }
         .onChange(of: options.commit) { custom = nil }
@@ -97,7 +99,7 @@ struct FixWithClaudeSheet: View {
             let ids = Set(failing.map(\.id))
             ciSelected.formIntersection(ids)
             if ciSelected.isEmpty { ciSelected = ids }
-            guard failing.contains(where: { ciItems[$0.id] == nil }) else { return }
+            guard failing.contains(where: needsGather) else { return }
             await gatherCI()
         }
         .task {
@@ -245,17 +247,24 @@ struct FixWithClaudeSheet: View {
         return parts.isEmpty ? "no details" : parts.joined(separator: " · ")
     }
 
+    private func needsGather(_ c: CheckContext) -> Bool {
+        guard let item = ciItems[c.id] else { return true }
+        return item.note != nil
+    }
+
     private func gatherCI() async {
         ciGeneration += 1
         let generation = ciGeneration
         ciLoading = true
         defer { if ciGeneration == generation { ciLoading = false } }
         let api = model.api, repo = model.ref.repo
-        var queue = failing.filter { ciItems[$0.id] == nil }[...]
+        var queue = failing.filter(needsGather)[...]
+        let seed = ci.flatMap { r in r.log.map { (r.focus, $0) } }
         await withTaskGroup(of: CIFailure.self) { group in
             func next() {
                 guard let c = queue.popFirst() else { return }
-                group.addTask { await CIFailureCollector.collect(api: api, repo: repo, check: c) }
+                let log = seed?.0 == c.id ? seed?.1 : nil
+                group.addTask { await CIFailureCollector.collect(api: api, repo: repo, check: c, log: log) }
             }
             for _ in 0..<CIFailureCollector.concurrency { next() }
             for await item in group {
@@ -264,6 +273,7 @@ struct FixWithClaudeSheet: View {
                     return
                 }
                 ciItems[item.id] = item
+                if custom != nil { ciStale = true }
                 next()
             }
         }
@@ -276,6 +286,11 @@ struct FixWithClaudeSheet: View {
                 if custom != nil {
                     ChipView(text: "edited", color: .syAmber)
                     Button("Reset") { custom = nil }.buttonStyle(.link).font(.caption)
+                }
+                if source == .ci, custom != nil, ciStale || ciLoading {
+                    Label(ciLoading ? "Logs still loading — your edit won't include them" : "Logs loaded after your edit — Reset to include them", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.syAmber)
                 }
                 Spacer()
                 Text("\(prompt.count)").font(.caption2.monospacedDigit()).foregroundStyle(Color.syDim)

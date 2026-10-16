@@ -278,7 +278,7 @@ struct JobLogSheet: View {
     let api: GitHubAPI
     let repo: RepoRef
     let check: CheckContext
-    var onFix: (() -> Void)?
+    var onFix: ((String?) -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var log: String?
     @State private var error: String?
@@ -294,7 +294,7 @@ struct JobLogSheet: View {
                 if let log { Button("Copy") { copyToPasteboard(log) } }
                 if let link = check.link { Button("Open in browser") { openInBrowser(link) } }
                 if let onFix {
-                    Button("Fix with Claude Code", action: onFix)
+                    Button("Fix with Claude Code") { onFix(log) }
                         .buttonStyle(.borderedProminent)
                         .tint(Color.syCoral)
                 }

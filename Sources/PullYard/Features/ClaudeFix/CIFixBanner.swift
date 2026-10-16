@@ -3,6 +3,7 @@ import SwiftUI
 struct CIFixRequest: Identifiable {
     let id = UUID()
     var focus: String?
+    var log: String?
 }
 
 struct CIFixLaunch {

@@ -107,7 +107,7 @@ struct PRDetailContent: View {
         switch tab {
         case .conversation: ConversationTab(model: model, pr: pr)
         case .commits: CommitsTab(model: model, pr: pr)
-        case .checks: ChecksTab(model: model, pr: pr, onFix: { ciFix = CIFixRequest(focus: $0) }, onRerun: { confirm = .rerunFailed })
+        case .checks: ChecksTab(model: model, pr: pr, onFix: { ciFix = $0 }, onRerun: { confirm = .rerunFailed })
         case .files: FilesTab(model: model)
         }
     }
@@ -641,10 +641,10 @@ struct CommitsTab: View {
 struct ChecksTab: View {
     let model: PRDetailModel
     let pr: PullRequestDetail
-    let onFix: (String?) -> Void
+    let onFix: (CIFixRequest) -> Void
     let onRerun: () -> Void
     @State private var logTarget: CheckContext?
-    @State private var fixAfterLog: String?
+    @State private var fixAfterLog: CIFixRequest?
 
     var body: some View {
         let checks = pr.checks.sorted { ($0.outcome.rawValue, $0.title) < ($1.outcome.rawValue, $1.title) }
@@ -667,8 +667,8 @@ struct ChecksTab: View {
                         Text(subtitle(c)).font(.caption).foregroundStyle(Color.syMuted).lineLimit(1)
                     }
                     Spacer()
-                    if c.outcome == .failure, pr.isOpen {
-                        Button("Fix with Claude Code") { onFix(c.id) }
+                    if CIFailureCollector.isFixable(c), pr.isOpen {
+                        Button("Fix with Claude Code") { onFix(CIFixRequest(focus: c.id)) }
                             .controlSize(.small)
                             .tint(Color.syCoral)
                     }
@@ -687,11 +687,11 @@ struct ChecksTab: View {
         }
         .liveRefresh(updated: model.lastUpdated, refreshing: model.loading, footer: false) { await model.load(full: true) }
         .sheet(item: $logTarget, onDismiss: {
-            guard let id = fixAfterLog else { return }
+            guard let request = fixAfterLog else { return }
             fixAfterLog = nil
-            onFix(id)
+            onFix(request)
         }) { c in
-            JobLogSheet(api: model.api, repo: model.ref.repo, check: c, onFix: c.outcome == .failure && pr.isOpen ? { fixAfterLog = c.id; logTarget = nil } : nil)
+            JobLogSheet(api: model.api, repo: model.ref.repo, check: c, onFix: CIFailureCollector.isFixable(c) && pr.isOpen ? { log in fixAfterLog = CIFixRequest(focus: c.id, log: log); logTarget = nil } : nil)
         }
     }
 

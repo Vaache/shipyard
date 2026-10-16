@@ -9,15 +9,16 @@ struct CIAnnotation: Decodable, Hashable {
     let message: String?
 
     var line: String {
-        var loc = path ?? ""
+        func flat(_ s: String) -> String { s.replacingOccurrences(of: "\r", with: " ").replacingOccurrences(of: "\n", with: " ") }
+        var loc = CILogExcerpt.clip(flat(path ?? ""), to: 300)
         if let startLine, startLine > 0 {
             loc += ":\(startLine)"
             if let endLine, endLine != startLine { loc += "-\(endLine)" }
         }
         var out = loc.isEmpty ? "" : loc + " "
-        out += "[\(annotationLevel ?? "notice")]"
-        if let title, !title.isEmpty { out += " \(title):" }
-        let msg = (message ?? "").trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ")
+        out += "[\(flat(annotationLevel ?? "notice"))]"
+        if let title, !title.isEmpty { out += " \(CILogExcerpt.clip(flat(title), to: 200)):" }
+        let msg = flat((message ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
         return out + " " + CILogExcerpt.clip(msg, to: 600)
     }
 }
@@ -61,8 +62,12 @@ enum CIFailureCollector {
     static let logTailBytes = 8 << 20
     static let concurrency = 3
 
+    static func isFixable(_ check: CheckContext) -> Bool {
+        check.outcome == .failure && check.conclusion != "ACTION_REQUIRED"
+    }
+
     static func failing(_ checks: [CheckContext]) -> [CheckContext] {
-        checks.filter { $0.outcome == .failure }.sorted { $0.title < $1.title }
+        checks.filter(isFixable).sorted { $0.title < $1.title }
     }
 
     static func shown(_ failing: [CheckContext], focus: String?) -> [CheckContext] {
@@ -73,14 +78,15 @@ enum CIFailureCollector {
         return list
     }
 
-    static func collect(api: GitHubAPI, repo: RepoRef, check: CheckContext) async -> CIFailure {
+    static func collect(api: GitHubAPI, repo: RepoRef, check: CheckContext, log: String? = nil) async -> CIFailure {
         var item = CIFailure(check: check)
         guard item.kind != .status, let id = check.databaseId else { return item }
         var problems: [String] = []
         async let annotations = fetchAnnotations(api: api, repo: repo, id: id)
         if item.kind == .actions {
             do {
-                let raw = try await api.jobLogTail(repo: repo, jobId: id, maxBytes: logTailBytes)
+                let raw: String
+                if let log { raw = log } else { raw = try await api.jobLogTail(repo: repo, jobId: id, maxBytes: logTailBytes) }
                 if Task.isCancelled { return item }
                 item.excerpt = CILogExcerpt.extract(raw)
             } catch {
@@ -177,37 +183,50 @@ enum CIFixPrompt {
 
         var budget = totalLimit
         for (i, f) in failures.enumerated() {
+            let share = budget / (failures.count - i)
             out += "\n## Check \(i + 1) of \(failures.count)\n"
             var details = "Check: \(f.name)\nConclusion: \(f.conclusion)"
             if let link = f.link { details += "\nDetails: \(link)" }
-            if let note = f.note { details += "\nNote: \(note)" }
+            if let note = f.note { details += "\nNote: \(CILogExcerpt.clip(note, to: 500))" }
+            var room = share - details.utf8.count
+            let hasExtras = f.summary?.isEmpty == false || !f.annotations.isEmpty
+            var log: String?
+            var logOmitted = false
+            if let excerpt = f.excerpt, !excerpt.isEmpty {
+                let cap = hasExtras ? room * 3 / 4 : room
+                if cap >= 1_000 {
+                    let text = CILogExcerpt.truncateTail(excerpt, to: cap)
+                    room -= text.utf8.count
+                    log = text
+                } else {
+                    logOmitted = true
+                }
+            }
             if let summary = f.summary, !summary.isEmpty {
-                let text = CILogExcerpt.truncate(summary, to: max(0, min(budget, CIFailureCollector.summaryLimit)))
-                budget -= text.utf8.count
-                if !text.isEmpty { details += "\n\n" + text }
+                let cap = min(CIFailureCollector.summaryLimit, f.annotations.isEmpty ? room : room / 2)
+                if cap >= 200 {
+                    let text = CILogExcerpt.truncate(summary, to: cap)
+                    room -= text.utf8.count + 2
+                    details += "\n\n" + text
+                }
             }
             out += block(detailsTag, details)
-            if !f.annotations.isEmpty {
-                var lines: [String] = []
-                for a in f.annotations {
-                    let line = a.line
-                    guard budget - line.utf8.count - 1 >= 0 else { break }
-                    budget -= line.utf8.count + 1
-                    lines.append(line)
-                }
-                if !lines.isEmpty { out += "\nAnnotations:\n" + block(annTag, lines.joined(separator: "\n")) }
+            var lines: [String] = []
+            for a in f.annotations {
+                let line = a.line
+                guard room - line.utf8.count - 1 >= 0 else { break }
+                room -= line.utf8.count + 1
+                lines.append(line)
             }
-            if let excerpt = f.excerpt, !excerpt.isEmpty {
-                if budget < 2_000 {
-                    out += "\nLog excerpt omitted (size limit) — open the details link of this check.\n"
-                    continue
-                }
-                let text = CILogExcerpt.truncateTail(excerpt, to: budget)
-                budget -= text.utf8.count
-                out += "\nLog excerpt (failing step):\n" + block(logTag, text)
+            if !lines.isEmpty { out += "\nAnnotations:\n" + block(annTag, lines.joined(separator: "\n")) }
+            if let log {
+                out += "\nLog excerpt (failing step):\n" + block(logTag, log)
+            } else if logOmitted {
+                out += "\nLog excerpt omitted (size limit) — open the details link of this check.\n"
             } else if f.kind == .actions, f.note == nil {
                 out += "\nLog excerpt: empty — open the details link of this check.\n"
             }
+            budget -= share - max(0, room)
         }
         return out
     }
