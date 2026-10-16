@@ -64,11 +64,6 @@
     return window.innerHeight + window.scrollY >= document.body.scrollHeight - 40;
   }
 
-  function following() {
-    if (window.innerHeight > 0) stick = atBottom();
-    return stick;
-  }
-
   function scrollDown() {
     window.scrollTo(0, document.body.scrollHeight);
     stick = true;
@@ -89,20 +84,29 @@
     if (!n || !n.parentNode) return;
     var delta = n.getBoundingClientRect().top - a.top;
     if (delta) window.scrollBy(0, delta);
-    stick = atBottom();
   }
 
   function preserving(change) {
-    var follow = following();
+    var follow = stick;
     var a = follow ? null : anchor();
     change();
     if (follow) scrollDown();
     else restore(a);
   }
 
+  function repin() {
+    if (stick && window.innerHeight > 0) window.scrollTo(0, document.body.scrollHeight);
+  }
+
   window.addEventListener("scroll", function () {
     if (window.innerHeight > 0) stick = atBottom();
   }, { passive: true });
+
+  window.addEventListener("resize", repin);
+
+  document.addEventListener("load", function (e) {
+    if (e.target instanceof HTMLImageElement) repin();
+  }, true);
 
   function relative(path) {
     var f = (meta.folder || "").replace(/[\\/]+$/, "");

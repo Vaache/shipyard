@@ -45,7 +45,7 @@ public sealed class ChatView : Grid
     private readonly List<ChatImage> attached = new();
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? flushTimer;
     private bool ready;
-    private bool revealOwnMessage;
+    private readonly HashSet<string> shownUserItems = new();
     private List<string> files = new();
     private bool filesLoading;
     private string? completionKind;
@@ -188,9 +188,11 @@ public sealed class ChatView : Grid
         if (!reset && changed.Count == 0) return;
         var arr = new JsonArray(changed.Select(i => (JsonNode)i.ToJson(chat.Folder)).ToArray());
         web.Send(new JsonObject { ["op"] = reset ? "reset" : "upsert", ["items"] = arr, ["meta"] = Meta() });
-        if (!revealOwnMessage) return;
-        revealOwnMessage = false;
-        web.Send(new JsonObject { ["op"] = "bottom" });
+        if (reset) shownUserItems.Clear();
+        var ownMessage = false;
+        foreach (var item in changed.OfType<UserItem>())
+            ownMessage |= shownUserItems.Add(item.Id) && !reset;
+        if (ownMessage) web.Send(new JsonObject { ["op"] = "bottom" });
     }
 
     private void OnChat(object? sender, PropertyChangedEventArgs e)
@@ -508,7 +510,6 @@ public sealed class ChatView : Grid
     private void Send(string text, List<ChatImage> imgs)
     {
         if (!chat.Running) AppViewModel.Shared.Claude.Restart(tab);
-        revealOwnMessage = true;
         chat.Send(text, imgs);
     }
 

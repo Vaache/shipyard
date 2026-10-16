@@ -15,12 +15,15 @@ public static class RetryPolicy
 
     public static bool IsTransient(int status) => status is 502 or 503 or 504;
 
-    public static bool IsTransient(Exception e, CancellationToken ct) => e switch
+    public static bool IsTransient(Exception e, CancellationToken ct, TimeSpan elapsed, TimeSpan total) => e switch
     {
-        OperationCanceledException => !ct.IsCancellationRequested,
-        HttpRequestException => true,
+        OperationCanceledException => !ct.IsCancellationRequested && elapsed < total - TimeSpan.FromSeconds(1),
+        HttpRequestException h => IsConnectionFailure(h.HttpRequestError) || h.InnerException is HttpIOException { HttpRequestError: HttpRequestError.ResponseEnded },
+        HttpIOException io => io.HttpRequestError == HttpRequestError.ResponseEnded,
         _ => false
     };
+
+    private static bool IsConnectionFailure(HttpRequestError error) => error is HttpRequestError.ConnectionError or HttpRequestError.ResponseEnded;
 }
 
 public sealed class RateLimitPause
@@ -45,7 +48,11 @@ public sealed class RateLimitPause
 
     public void Observe(HttpResponseMessage response, byte[] data, bool graphQL, DateTimeOffset now)
     {
-        if (Evaluate(response, data, graphQL, now) is not { } next) return;
+        if (Evaluate(response, data, graphQL, now) is { } next) PauseUntil(next);
+    }
+
+    public void PauseUntil(DateTimeOffset next)
+    {
         lock (gate)
         {
             if (until is { } current && current >= next) return;

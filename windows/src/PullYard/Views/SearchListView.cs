@@ -205,6 +205,7 @@ public sealed class NotificationsView : ListPane
     private bool loading;
     private string? error;
     private bool showAll;
+    private bool? loadedMode;
     private DateTimeOffset? lastUpdated;
     private bool syncing;
 
@@ -257,7 +258,8 @@ public sealed class NotificationsView : ListPane
         try
         {
             var mode = showAll;
-            var fetched = reset ? await api.Notifications(mode) : await api.NotificationsIfChanged(mode, live);
+            var needData = loadedMode != mode || error is not null;
+            var fetched = reset ? await api.Notifications(mode) : await api.NotificationsIfChanged(mode, live, needData);
             if (mode != showAll) return;
             lastUpdated = DateTimeOffset.Now;
             error = null;
@@ -267,6 +269,7 @@ public sealed class NotificationsView : ListPane
                 return;
             }
             items = fetched;
+            loadedMode = mode;
             if (!showAll) Model.UnreadCount = items.Count;
         }
         catch (Exception e)

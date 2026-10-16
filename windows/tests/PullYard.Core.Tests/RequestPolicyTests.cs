@@ -47,9 +47,14 @@ public class RequestPolicyTests : IDisposable
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
-            Seen.Add((request, body));
-            if (replies.Count == 0) throw new InvalidOperationException("unexpected request " + request.RequestUri);
-            return replies.Dequeue()(request);
+            Func<HttpRequestMessage, HttpResponseMessage> reply;
+            lock (replies)
+            {
+                if (replies.Count == 0) throw new InvalidOperationException("unexpected request " + request.RequestUri);
+                reply = replies.Dequeue();
+                Seen.Add((request, body));
+            }
+            return reply(request);
         }
     }
 
@@ -95,11 +100,37 @@ public class RequestPolicyTests : IDisposable
     public async Task ReadIsRetriedOnConnectFailureAndTimeout()
     {
         var (api, h) = Make();
-        h.Throw(new HttpRequestException("Connection refused")).Then(HttpStatusCode.OK, "{\"login\":\"a\"}");
+        h.Throw(new HttpRequestException(HttpRequestError.ConnectionError, "Connection refused")).Then(HttpStatusCode.OK, "{\"login\":\"a\"}");
         Assert.Equal("a", (await api.Rest<RestUser>("GET", "/user")).Login);
         h.Throw(new TaskCanceledException("timeout", new TimeoutException())).Then(HttpStatusCode.OK, "{\"login\":\"b\"}");
         Assert.Equal("b", (await api.Rest<RestUser>("GET", "/user")).Login);
         Assert.Equal(4, h.Seen.Count);
+    }
+
+    [Theory]
+    [InlineData(HttpRequestError.NameResolutionError)]
+    [InlineData(HttpRequestError.SecureConnectionError)]
+    [InlineData(HttpRequestError.Unknown)]
+    public async Task DnsAndTlsFailuresAreNotRetried(HttpRequestError error)
+    {
+        var (api, h) = Make();
+        h.Throw(new HttpRequestException(error, "nope"));
+        await Assert.ThrowsAsync<HttpRequestException>(() => api.Rest<RestUser>("GET", "/user"));
+        Assert.Single(h.Seen);
+    }
+
+    [Fact]
+    public async Task TotalTimeoutIsNotRetried()
+    {
+        var handler = new FakeHandler();
+        var api = new GitHubApi("t", new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(1200) });
+        handler.Then(_ =>
+        {
+            Thread.Sleep(1300);
+            throw new TaskCanceledException("timeout", new TimeoutException());
+        });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => api.Rest<RestUser>("GET", "/user"));
+        Assert.Single(handler.Seen);
     }
 
     [Fact]
@@ -186,7 +217,7 @@ public class RequestPolicyTests : IDisposable
         h.Then(HttpStatusCode.OK, "[{\"id\":\"1\",\"unread\":true},{\"id\":\"2\",\"unread\":true}]", LastModified(stamp))
             .Then(_ => new HttpResponseMessage(HttpStatusCode.NotModified));
         Assert.Equal(2, await api.UnreadNotificationCount());
-        Assert.Null(await api.UnreadNotificationCount());
+        Assert.Null(await api.UnreadNotificationCount(live: true));
         Assert.Equal(2, h.Seen.Count);
         Assert.False(h.Seen[0].Request.Headers.Contains("If-Modified-Since"));
         Assert.Equal(stamp, h.Seen[1].Request.Headers.GetValues("If-Modified-Since").Single());
@@ -202,8 +233,8 @@ public class RequestPolicyTests : IDisposable
             .Then(_ => new HttpResponseMessage(HttpStatusCode.NotModified))
             .Then(_ => new HttpResponseMessage(HttpStatusCode.NotModified));
         Assert.Single((await api.NotificationsIfChanged(false, false))!);
-        Assert.Null(await api.NotificationsIfChanged(false, false));
-        Assert.Equal("9", Assert.Single(await api.Notifications(false)).Id);
+        Assert.Null(await api.NotificationsIfChanged(false, true));
+        Assert.Equal("9", Assert.Single((await api.NotificationsIfChanged(false, true, needData: true))!).Id);
     }
 
     [Fact]
@@ -215,8 +246,43 @@ public class RequestPolicyTests : IDisposable
         Assert.Equal(0, await api.UnreadNotificationCount(live: true));
         Assert.Null(await api.UnreadNotificationCount(live: true));
         Assert.Single(h.Seen);
-        Assert.Null(await api.UnreadNotificationCount(live: false));
-        Assert.Equal(2, h.Seen.Count);
+    }
+
+    [Fact]
+    public async Task UserLoadsAreUnconditionalAndRefreshTheCache()
+    {
+        var (api, h) = Make();
+        h.Then(HttpStatusCode.OK, "[{\"id\":\"1\"},{\"id\":\"2\"}]", LastModified("Thu, 15 Oct 2026 10:00:00 GMT"))
+            .Then(HttpStatusCode.OK, "[{\"id\":\"2\"}]", LastModified("Thu, 15 Oct 2026 10:00:00 GMT"))
+            .Then(_ => new HttpResponseMessage(HttpStatusCode.NotModified));
+        Assert.Equal(2, (await api.Notifications(false)).Count);
+        Assert.Single(await api.Notifications(false));
+        Assert.False(h.Seen[1].Request.Headers.Contains("If-Modified-Since"));
+        Assert.Single((await api.NotificationsIfChanged(false, true, needData: true))!);
+        Assert.True(h.Seen[2].Request.Headers.Contains("If-Modified-Since"));
+    }
+
+    [Fact]
+    public async Task InFlightLiveFetchDoesNotOutliveInvalidation()
+    {
+        var (api, h) = Make();
+        var release = new TaskCompletionSource();
+        h.Then(r =>
+        {
+            release.Task.Wait();
+            var m = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[{\"id\":\"1\",\"unread\":true}]") };
+            m.Content.Headers.TryAddWithoutValidation("Last-Modified", "Thu, 15 Oct 2026 10:00:00 GMT");
+            return m;
+        }).Then(HttpStatusCode.ResetContent).Then(HttpStatusCode.OK, "[]");
+        var live = Task.Run(() => api.UnreadNotificationCount(live: true));
+        while (h.Seen.Count == 0) await Task.Delay(5);
+        var mark = api.MarkNotificationRead("1");
+        while (h.Seen.Count < 2) await Task.Delay(5);
+        await mark;
+        release.SetResult();
+        Assert.Null(await live);
+        Assert.Equal(0, await api.UnreadNotificationCount(live: true));
+        Assert.False(h.Seen[2].Request.Headers.Contains("If-Modified-Since"));
     }
 
     [Fact]
@@ -294,7 +360,7 @@ public class RequestPolicyTests : IDisposable
         Assert.DoesNotContain("stack {", h.Seen[1].Body);
 
         var (api2, h2) = Make();
-        h2.Throw(new HttpRequestException("Connection refused")).Throw(new HttpRequestException("Connection refused"));
+        h2.Throw(new HttpRequestException(HttpRequestError.ConnectionError, "Connection refused")).Throw(new HttpRequestException(HttpRequestError.ConnectionError, "Connection refused"));
         await Assert.ThrowsAsync<HttpRequestException>(() => api2.PullRequestStack(Pr, "b", "main"));
         Assert.Equal(2, h2.Seen.Count);
         Assert.All(h2.Seen, s => Assert.Contains("stack {", s.Body));

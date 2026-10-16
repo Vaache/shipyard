@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
@@ -68,13 +69,14 @@ public sealed partial class GitHubApi
         {
             using var req = make();
             var retryable = attempt == 0 && RetryPolicy.IsRead(req.Method, graphQLQuery);
+            var started = Stopwatch.GetTimestamp();
             HttpResponseMessage response;
             byte[] data;
             try
             {
                 (response, data) = await RecordedHttp.Send(client, req, ct, graphQLQuery, caller, keepRedirectBody, retry: attempt > 0).ConfigureAwait(false);
             }
-            catch (Exception e) when (retryable && RetryPolicy.IsTransient(e, ct))
+            catch (Exception e) when (retryable && RetryPolicy.IsTransient(e, ct, Stopwatch.GetElapsedTime(started), client.Timeout))
             {
                 await Backoff(ct).ConfigureAwait(false);
                 continue;
@@ -275,37 +277,60 @@ public sealed partial class GitHubApi
     private sealed record Validated(string? LastModified, byte[] Data, DateTimeOffset FetchedAt, TimeSpan PollInterval);
 
     private readonly ConcurrentDictionary<string, Validated> validated = new();
+    private readonly object validatedGate = new();
+    private long validatedGeneration;
 
     internal async Task<(byte[] Data, bool Changed)> Conditional(string path, bool live, CancellationToken ct = default)
     {
         var url = Url(path);
-        validated.TryGetValue(url, out var prior);
+        long generation;
+        Validated? prior;
+        lock (validatedGate)
+        {
+            generation = validatedGeneration;
+            validated.TryGetValue(url, out prior);
+        }
         if (live && prior is not null && DateTimeOffset.Now - prior.FetchedAt < prior.PollInterval) return (prior.Data, false);
+        var since = live ? prior?.LastModified : null;
         HttpRequestMessage Make()
         {
             var req = Request(HttpMethod.Get, url, noCache: false);
-            if (prior?.LastModified is { } since) req.Headers.TryAddWithoutValidation("If-Modified-Since", since);
+            if (since is not null) req.Headers.TryAddWithoutValidation("If-Modified-Since", since);
             return req;
         }
         var (response, data) = await Send(http, Make, ct).ConfigureAwait(false);
         using var _ = response;
         var poll = PollInterval(response) ?? prior?.PollInterval ?? TimeSpan.Zero;
-        if (response.StatusCode == HttpStatusCode.NotModified && prior is not null)
+        if (response.StatusCode == HttpStatusCode.NotModified && since is not null && prior is not null)
         {
-            validated[url] = prior with { FetchedAt = DateTimeOffset.Now, PollInterval = poll };
+            Store(url, generation, prior with { FetchedAt = DateTimeOffset.Now, PollInterval = poll });
             return (prior.Data, false);
         }
         await Check(response, data);
         var lastModified = response.Content.Headers.TryGetValues("Last-Modified", out var values) ? values.FirstOrDefault() : null;
-        validated[url] = new Validated(lastModified, data, DateTimeOffset.Now, poll);
+        if (!Store(url, generation, new Validated(lastModified, data, DateTimeOffset.Now, poll)) && live) return (data, false);
         return (data, true);
+    }
+
+    private bool Store(string url, long generation, Validated entry)
+    {
+        lock (validatedGate)
+        {
+            if (generation != validatedGeneration) return false;
+            validated[url] = entry;
+            return true;
+        }
     }
 
     internal void Invalidate(string pathPrefix)
     {
         var prefix = Url(pathPrefix);
-        foreach (var key in validated.Keys)
-            if (key.StartsWith(prefix, StringComparison.Ordinal)) validated.TryRemove(key, out _);
+        lock (validatedGate)
+        {
+            validatedGeneration++;
+            foreach (var key in validated.Keys)
+                if (key.StartsWith(prefix, StringComparison.Ordinal)) validated.TryRemove(key, out _);
+        }
     }
 
     private static TimeSpan? PollInterval(HttpResponseMessage response) =>

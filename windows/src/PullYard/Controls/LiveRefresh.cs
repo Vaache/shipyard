@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 
@@ -5,6 +6,8 @@ namespace PullYard.Controls;
 
 public sealed class LiveRefresh
 {
+    private static readonly ConditionalWeakTable<FrameworkElement, LiveRefresh> Registry = new();
+
     private readonly FrameworkElement owner;
     private readonly Action reload;
     private bool stale;
@@ -13,12 +16,22 @@ public sealed class LiveRefresh
     {
         this.owner = owner;
         this.reload = reload;
-        owner.EffectiveViewportChanged += (_, _) =>
-        {
-            if (!stale || !IsShown(owner)) return;
-            stale = false;
-            reload();
-        };
+        Registry.AddOrUpdate(owner, this);
+        owner.EffectiveViewportChanged += (_, _) => Resume();
+    }
+
+    private void Resume()
+    {
+        if (!stale || !IsShown(owner)) return;
+        stale = false;
+        reload();
+    }
+
+    public static void Reveal(DependencyObject root)
+    {
+        if (root is FrameworkElement element && Registry.TryGetValue(element, out var live)) live.Resume();
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++) Reveal(VisualTreeHelper.GetChild(root, i));
     }
 
     public void Tick()

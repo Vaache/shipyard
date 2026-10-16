@@ -48,6 +48,7 @@ public sealed partial class AppViewModel : ObservableObject
     private bool viewsStale;
     private SynchronizationContext? context;
     private CancellationTokenSource? rateLimitCts;
+    private GitHubApi? loginAttempt;
     public bool IsActive { get; set; } = true;
     public Func<bool> IsShown { get; set; } = () => true;
 
@@ -73,6 +74,9 @@ public sealed partial class AppViewModel : ObservableObject
         if (newValue is not null) newValue.RateLimit.Paused += OnRateLimited;
         rateLimitCts?.Cancel();
         RateLimitedUntil = null;
+        if (newValue is null) return;
+        if (oldValue is not null && oldValue.Token == newValue.Token && oldValue.RateLimit.Until is { } carried) newValue.RateLimit.PauseUntil(carried);
+        if (newValue.RateLimit.Until is { } until && until > DateTimeOffset.Now) ApplyRateLimit(until);
     }
 
     private void OnRateLimited(DateTimeOffset until)
@@ -133,7 +137,7 @@ public sealed partial class AppViewModel : ObservableObject
         }
         catch
         {
-            Api = new GitHubApi(token);
+            Api = loginAttempt is { } attempt && attempt.Token == token ? attempt : new GitHubApi(token);
             Phase = Phase.LoggedIn;
             StartPolling();
         }
@@ -142,6 +146,7 @@ public sealed partial class AppViewModel : ObservableObject
     public async Task Login(string token, bool persist = true)
     {
         var api = new GitHubApi(token);
+        loginAttempt = api;
         var (user, scopes) = await api.CurrentUser();
         if (persist) CredentialStore.Save(token);
         Api = api;
@@ -315,7 +320,7 @@ public sealed partial class AppViewModel : ObservableObject
         var cts = new CancellationTokenSource();
         pollCts = cts;
         lastLiveRefresh = DateTimeOffset.Now;
-        RefreshBadges().Forget();
+        if (!LivePaused) RefreshBadges().Forget();
         Poll(cts.Token).Forget();
     }
 

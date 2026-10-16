@@ -116,7 +116,9 @@ public sealed class ClaudeWorkspaceView : Grid
             inspectorHost.Content = inspector;
         }
         inspectorColumn.Width = Ws.ShowInspector ? new GridLength(380) : new GridLength(0);
+        var revealInspector = Ws.ShowInspector && inspectorHost.Visibility == Visibility.Collapsed;
         inspectorHost.Visibility = Ws.ShowInspector ? Visibility.Visible : Visibility.Collapsed;
+        if (revealInspector) DispatcherQueue.TryEnqueue(() => LiveRefresh.Reveal(inspectorHost));
         RenderTabBar();
         RenderControlBar();
     }

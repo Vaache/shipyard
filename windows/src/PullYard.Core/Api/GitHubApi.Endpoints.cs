@@ -256,11 +256,11 @@ public sealed partial class GitHubApi
         return DecodeNotifications(data);
     }
 
-    public async Task<List<NotificationThread>?> NotificationsIfChanged(bool all, bool live, CancellationToken ct = default)
+    public async Task<List<NotificationThread>?> NotificationsIfChanged(bool all, bool live, bool needData = false, CancellationToken ct = default)
     {
         if (Demo.IsOn) return new();
         var (data, changed) = await Conditional(NotificationsPath(all), live, ct).ConfigureAwait(false);
-        return changed ? DecodeNotifications(data) : null;
+        return changed || needData ? DecodeNotifications(data) : null;
     }
 
     public async Task<int?> UnreadNotificationCount(bool live = false, CancellationToken ct = default)
