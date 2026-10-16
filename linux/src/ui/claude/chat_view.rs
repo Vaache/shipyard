@@ -37,6 +37,7 @@ pub struct ChatView {
     dirty_texts: RefCell<Vec<String>>,
     flush_scheduled: Cell<bool>,
     open_tools: RefCell<std::collections::HashMap<String, bool>>,
+    markdowns: RefCell<std::collections::HashMap<String, Rc<markdown::MarkdownView>>>,
     composer: Rc<ChatComposer>,
 }
 
@@ -328,6 +329,7 @@ impl ChatView {
             dirty_texts: RefCell::new(vec![]),
             flush_scheduled: Cell::new(false),
             open_tools: RefCell::new(std::collections::HashMap::new()),
+            markdowns: RefCell::new(std::collections::HashMap::new()),
             composer,
         });
         let w = Rc::downgrade(&me);
@@ -386,6 +388,7 @@ impl ChatView {
         let w = Rc::downgrade(self);
         glib::timeout_add_local_once(Duration::from_millis(80), move || {
             if let Some(me) = w.upgrade() {
+                let _span = crate::diagnostics::ui_span("chat.flush");
                 me.flush_scheduled.set(false);
                 let ids: Vec<String> = std::mem::take(&mut *me.dirty_texts.borrow_mut());
                 let mut seen = std::collections::HashSet::new();
@@ -402,6 +405,7 @@ impl ChatView {
     fn reset(self: &Rc<Self>) {
         clear(&self.items_box);
         self.rendered.borrow_mut().clear();
+        self.markdowns.borrow_mut().clear();
         self.append_new();
         self.jump_to_bottom();
     }
@@ -431,15 +435,18 @@ impl ChatView {
     }
 
     fn append_new(self: &Rc<Self>) {
-        let items: Vec<ChatItem> = self.chat.items.borrow().clone();
         let start = self.rendered.borrow().len();
-        let sent = items.iter().skip(start).any(|i| matches!(i, ChatItem::User { .. }));
-        for item in items.iter().skip(start) {
+        let (items, total): (Vec<ChatItem>, usize) = {
+            let all = self.chat.items.borrow();
+            (all.iter().skip(start).cloned().collect(), all.len())
+        };
+        let sent = items.iter().any(|i| matches!(i, ChatItem::User { .. }));
+        for item in &items {
             let w = self.item_widget(item);
             self.items_box.append(&w);
             self.rendered.borrow_mut().push((item.id(), w));
         }
-        self.welcome.set_visible(items.is_empty());
+        self.welcome.set_visible(total == 0);
         if sent {
             self.jump_to_bottom();
         } else {
@@ -449,11 +456,17 @@ impl ChatView {
 
     fn update_item(self: &Rc<Self>, key: &str) {
         let candidates = [key.to_string(), format!("t{key}"), format!("k{key}")];
-        let items: Vec<ChatItem> = self.chat.items.borrow().clone();
         let pos = self.rendered.borrow().iter().position(|(id, _)| candidates.contains(id));
         let Some(pos) = pos else { return };
-        let Some(item) = items.get(pos) else { return };
-        let new = self.item_widget(item);
+        let Some(item) = self.chat.items.borrow().get(pos).cloned() else { return };
+        if let ChatItem::Text(t) = &item {
+            let view = self.markdowns.borrow().get(&item.id()).cloned();
+            if let Some(view) = view {
+                view.set_text(&t.text.borrow());
+                return;
+            }
+        }
+        let new = self.item_widget(&item);
         let old = self.rendered.borrow()[pos].1.clone();
         self.items_box.insert_child_after(&new, Some(&old));
         self.items_box.remove(&old);
@@ -586,11 +599,9 @@ impl ChatView {
                 b.upcast()
             }
             ChatItem::Text(t) => {
-                let text = t.text.borrow().clone();
-                if text.is_empty() {
-                    return vbox(0).upcast();
-                }
-                markdown::view(&text).upcast()
+                let view = markdown::MarkdownView::new(&t.text.borrow());
+                self.markdowns.borrow_mut().insert(item.id(), view.clone());
+                view.widget.clone().upcast()
             }
             ChatItem::Thinking(t) => {
                 let text = t.text.borrow().clone();
@@ -941,8 +952,10 @@ pub struct ChatComposer {
     completion_box: gtk::ListBox,
     completion: Cell<Option<Completion>>,
     items: RefCell<Vec<CompletionItem>>,
-    files: RefCell<Vec<String>>,
+    items_token: RefCell<String>,
+    file_search: RefCell<Option<Rc<util::FuzzySearch>>>,
     loading_files: Cell<bool>,
+    completion_timer: RefCell<Option<glib::SourceId>>,
     left: gtk::Box,
     left_key: RefCell<String>,
     stop: gtk::Button,
@@ -1052,8 +1065,10 @@ impl ChatComposer {
             completion_box: completion_box.clone(),
             completion: Cell::new(None),
             items: RefCell::new(vec![]),
-            files: RefCell::new(vec![]),
+            items_token: RefCell::new(String::new()),
+            file_search: RefCell::new(None),
             loading_files: Cell::new(false),
+            completion_timer: RefCell::new(None),
             left,
             left_key: RefCell::new(String::new()),
             stop: stop.clone(),
@@ -1206,6 +1221,9 @@ impl ChatComposer {
 
     fn handle_key(self: &Rc<Self>, key: gdk::Key, state: gdk::ModifierType) -> glib::Propagation {
         let shift = state.contains(gdk::ModifierType::SHIFT_MASK);
+        if matches!(key, gdk::Key::Return | gdk::Key::KP_Enter | gdk::Key::Tab | gdk::Key::ISO_Left_Tab) {
+            self.flush_file_completion();
+        }
         let completing = self.completion.get().is_some() && !self.items.borrow().is_empty();
         match key {
             gdk::Key::Escape => {
@@ -1278,36 +1296,92 @@ impl ChatComposer {
     }
 
     fn update_completion(self: &Rc<Self>) {
+        if let Some(id) = self.completion_timer.take() {
+            id.remove();
+        }
         let Some((start, end)) = self.token_range() else {
             self.completion.set(None);
             self.completion_box.set_visible(false);
             return;
         };
         let token: String = self.text().chars().skip(start).take(end - start).collect();
-        let (kind, query) = if token.starts_with('/') && start == 0 {
-            (Completion::Slash, token[1..].to_string())
-        } else if let Some(q) = token.strip_prefix('@') {
-            if self.files.borrow().is_empty() {
+        if token.starts_with('@') {
+            self.completion.set(Some(Completion::File));
+            if self.file_search.borrow().is_none() {
                 self.load_files();
+                self.show_completion(&token, vec![]);
+                return;
             }
-            (Completion::File, q.to_string())
-        } else {
+            let w = Rc::downgrade(self);
+            let id = glib::timeout_add_local_once(Duration::from_millis(80), move || {
+                if let Some(me) = w.upgrade() {
+                    me.completion_timer.take();
+                    me.run_file_completion();
+                }
+            });
+            *self.completion_timer.borrow_mut() = Some(id);
+            return;
+        }
+        if !(token.starts_with('/') && start == 0) {
             self.completion.set(None);
             self.completion_box.set_visible(false);
             return;
+        }
+        self.completion.set(Some(Completion::Slash));
+        let mut all = vec![("compact".to_string(), "Compact the conversation".to_string()), ("clear".to_string(), "Start a new session".to_string())];
+        all.extend(self.chat.commands.borrow().iter().filter(|c| c.name != "compact" && c.name != "clear").map(|c| (c.name.clone(), c.description.clone())));
+        let q = token[1..].to_lowercase();
+        let mut f: Vec<(String, String)> = all.into_iter().filter(|(n, _)| q.is_empty() || n.to_lowercase().contains(&q)).collect();
+        f.sort_by_key(|(n, _)| (if n.to_lowercase().starts_with(&q) { 0 } else { 1 }, n.clone()));
+        self.show_completion(&token, f.into_iter().take(12).map(|(n, d)| CompletionItem { title: format!("/{n}"), detail: d, insert: format!("/{n} ") }).collect());
+    }
+
+    fn current_token(&self) -> Option<String> {
+        let (start, end) = self.token_range()?;
+        Some(self.text().chars().skip(start).take(end - start).collect())
+    }
+
+    fn file_items(paths: Vec<String>) -> Vec<CompletionItem> {
+        paths.into_iter().map(|p| CompletionItem { title: util::last_component(&p), detail: p.clone(), insert: format!("@{p} ") }).collect()
+    }
+
+    fn flush_file_completion(self: &Rc<Self>) {
+        if self.completion.get() != Some(Completion::File) {
+            return;
+        }
+        let Some(token) = self.current_token() else { return };
+        let pending = self.completion_timer.borrow().is_some();
+        if !pending && *self.items_token.borrow() == token {
+            return;
+        }
+        if let Some(id) = self.completion_timer.take() {
+            id.remove();
+        }
+        let Some(search) = self.file_search.borrow().clone() else {
+            self.show_completion(&token, vec![]);
+            return;
         };
-        self.completion.set(Some(kind));
-        let items: Vec<CompletionItem> = match kind {
-            Completion::Slash => {
-                let mut all = vec![("compact".to_string(), "Compact the conversation".to_string()), ("clear".to_string(), "Start a new session".to_string())];
-                all.extend(self.chat.commands.borrow().iter().filter(|c| c.name != "compact" && c.name != "clear").map(|c| (c.name.clone(), c.description.clone())));
-                let q = query.to_lowercase();
-                let mut f: Vec<(String, String)> = all.into_iter().filter(|(n, _)| q.is_empty() || n.to_lowercase().contains(&q)).collect();
-                f.sort_by_key(|(n, _)| (if n.to_lowercase().starts_with(&q) { 0 } else { 1 }, n.clone()));
-                f.into_iter().take(12).map(|(n, d)| CompletionItem { title: format!("/{n}"), detail: d, insert: format!("/{n} ") }).collect()
+        let Some(query) = token.strip_prefix('@') else { return };
+        let paths = search.run_now(query, 12, "chat.mention");
+        self.show_completion(&token, Self::file_items(paths));
+    }
+
+    fn run_file_completion(self: &Rc<Self>) {
+        let Some(search) = self.file_search.borrow().clone() else { return };
+        let Some(token) = self.current_token() else { return };
+        let Some(query) = token.strip_prefix('@').map(str::to_string) else { return };
+        let w = Rc::downgrade(self);
+        crate::rt::spawn_local(async move {
+            let Some(paths) = search.run(&query, 12, "chat.mention").await else { return };
+            let Some(me) = w.upgrade() else { return };
+            if me.completion.get() != Some(Completion::File) || me.current_token().as_deref() != Some(token.as_str()) {
+                return;
             }
-            Completion::File => util::fuzzy_match(&query, &self.files.borrow(), 12).into_iter().map(|p| CompletionItem { title: util::last_component(&p), detail: p.clone(), insert: format!("@{p} ") }).collect(),
-        };
+            me.show_completion(&token, Self::file_items(paths));
+        });
+    }
+
+    fn show_completion(&self, token: &str, items: Vec<CompletionItem>) {
         self.completion_box.remove_all();
         for it in &items {
             let row = hbox(8);
@@ -1322,6 +1396,7 @@ impl ChatComposer {
         }
         self.completion_box.set_visible(!items.is_empty());
         *self.items.borrow_mut() = items;
+        *self.items_token.borrow_mut() = token.to_string();
     }
 
     fn accept(self: &Rc<Self>, i: usize) {
@@ -1384,11 +1459,15 @@ impl ChatComposer {
                 list
             })
             .await;
-            if let Some(me) = w.upgrade() {
-                *me.files.borrow_mut() = list;
+            let search = if list.is_empty() { None } else { Some(util::FuzzySearch::build(list).await) };
+            let Some(me) = w.upgrade() else { return };
+            let Some(search) = search else {
                 me.loading_files.set(false);
-                me.update_completion();
-            }
+                return;
+            };
+            *me.file_search.borrow_mut() = Some(search);
+            me.loading_files.set(false);
+            me.update_completion();
         });
     }
 

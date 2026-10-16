@@ -146,14 +146,25 @@ fn code_block(code: &str) -> gtk::Widget {
     b.upcast()
 }
 
-pub fn view(text: &str) -> gtk::Box {
-    let root = vbox(8);
+#[derive(Clone, PartialEq, Debug)]
+enum Block {
+    Para(String),
+    Code(String),
+    Heading(usize, String),
+    Rule,
+    Quote(String),
+    Table(Vec<String>),
+    Item(i32, String, String),
+}
+
+fn parse(text: &str) -> Vec<Block> {
+    let mut blocks = vec![];
     let lines: Vec<&str> = text.split('\n').collect();
     let mut i = 0;
-    let mut para: Vec<String> = vec![];
-    let flush_para = |para: &mut Vec<String>, root: &gtk::Box| {
+    let mut para: Vec<&str> = vec![];
+    let flush_para = |para: &mut Vec<&str>, blocks: &mut Vec<Block>| {
         if !para.is_empty() {
-            root.append(&inline_label(&para.join("\n")));
+            blocks.push(Block::Para(para.join("\n")));
             para.clear();
         }
     };
@@ -161,7 +172,7 @@ pub fn view(text: &str) -> gtk::Box {
         let line = lines[i];
         let trimmed = line.trim_start();
         if trimmed.starts_with("```") {
-            flush_para(&mut para, &root);
+            flush_para(&mut para, &mut blocks);
             let mut code = vec![];
             i += 1;
             while i < lines.len() && !lines[i].trim_start().starts_with("```") {
@@ -169,84 +180,134 @@ pub fn view(text: &str) -> gtk::Box {
                 i += 1;
             }
             i += 1;
-            root.append(&code_block(&code.join("\n")));
+            blocks.push(Block::Code(code.join("\n")));
             continue;
         }
         if trimmed.is_empty() {
-            flush_para(&mut para, &root);
+            flush_para(&mut para, &mut blocks);
             i += 1;
             continue;
         }
         if trimmed.starts_with('#') {
             let level = trimmed.chars().take_while(|c| *c == '#').count();
             if level <= 6 && trimmed.chars().nth(level) == Some(' ') {
-                flush_para(&mut para, &root);
-                let l = inline_label(trimmed[level..].trim());
-                l.add_css_class("sy-bold");
-                if level <= 2 {
-                    l.add_css_class("title-4");
-                } else {
-                    l.add_css_class("heading");
-                }
-                root.append(&l);
+                flush_para(&mut para, &mut blocks);
+                blocks.push(Block::Heading(level, trimmed[level..].trim().to_string()));
                 i += 1;
                 continue;
             }
         }
         if trimmed == "---" || trimmed == "***" || trimmed == "___" {
-            flush_para(&mut para, &root);
-            root.append(&line_sep());
+            flush_para(&mut para, &mut blocks);
+            blocks.push(Block::Rule);
             i += 1;
             continue;
         }
         if trimmed.starts_with("> ") || trimmed == ">" {
-            flush_para(&mut para, &root);
+            flush_para(&mut para, &mut blocks);
             let mut quote = vec![];
             while i < lines.len() && lines[i].trim_start().starts_with('>') {
-                quote.push(lines[i].trim_start().trim_start_matches('>').trim_start().to_string());
+                quote.push(lines[i].trim_start().trim_start_matches('>').trim_start());
                 i += 1;
             }
-            let q = view(&quote.join("\n"));
+            blocks.push(Block::Quote(quote.join("\n")));
+            continue;
+        }
+        if trimmed.starts_with('|') && i + 1 < lines.len() && lines[i + 1].trim_start().starts_with('|') && lines[i + 1].contains("---") {
+            flush_para(&mut para, &mut blocks);
+            let mut table = vec![];
+            while i < lines.len() && lines[i].trim_start().starts_with('|') {
+                table.push(lines[i].to_string());
+                i += 1;
+            }
+            blocks.push(Block::Table(table));
+            continue;
+        }
+        if let Some((marker, rest)) = list_marker(trimmed) {
+            flush_para(&mut para, &mut blocks);
+            blocks.push(Block::Item((line.len() - trimmed.len()) as i32, marker, rest));
+            i += 1;
+            continue;
+        }
+        para.push(line);
+        i += 1;
+    }
+    flush_para(&mut para, &mut blocks);
+    blocks
+}
+
+fn block_widget(block: &Block) -> gtk::Widget {
+    match block {
+        Block::Para(text) => inline_label(text).upcast(),
+        Block::Code(code) => code_block(code),
+        Block::Heading(level, text) => {
+            let l = inline_label(text);
+            l.add_css_class("sy-bold");
+            l.add_css_class(if *level <= 2 { "title-4" } else { "heading" });
+            l.upcast()
+        }
+        Block::Rule => line_sep().upcast(),
+        Block::Quote(text) => {
+            let q = view(text);
             q.add_css_class("sy-muted");
             let b = hbox(8);
             let bar = gtk::Box::new(gtk::Orientation::Horizontal, 0);
             bar.add_css_class("edge-slate");
             b.append(&bar);
             b.append(&q);
-            root.append(&b);
-            continue;
+            b.upcast()
         }
-        if trimmed.starts_with('|') && i + 1 < lines.len() && lines[i + 1].trim_start().starts_with('|') && lines[i + 1].contains("---") {
-            flush_para(&mut para, &root);
-            let mut table = vec![];
-            while i < lines.len() && lines[i].trim_start().starts_with('|') {
-                table.push(lines[i]);
-                i += 1;
-            }
-            root.append(&table_widget(&table));
-            continue;
+        Block::Table(rows) => {
+            let rows: Vec<&str> = rows.iter().map(|r| r.as_str()).collect();
+            table_widget(&rows)
         }
-        let bullet = list_marker(trimmed);
-        if let Some((marker, rest)) = bullet {
-            flush_para(&mut para, &root);
-            let indent = (line.len() - trimmed.len()) as i32;
+        Block::Item(indent, marker, rest) => {
             let row = hbox(6);
             row.set_margin_start(indent * 4);
-            let m = label_with(&marker, &["sy-muted"]);
+            let m = label_with(marker, &["sy-muted"]);
             m.set_valign(gtk::Align::Start);
             row.append(&m);
-            let content = inline_label(&rest);
+            let content = inline_label(rest);
             content.set_hexpand(true);
             row.append(&content);
-            root.append(&row);
-            i += 1;
-            continue;
+            row.upcast()
         }
-        para.push(line.to_string());
-        i += 1;
     }
-    flush_para(&mut para, &root);
+}
+
+pub fn view(text: &str) -> gtk::Box {
+    let root = vbox(8);
+    for block in parse(text) {
+        root.append(&block_widget(&block));
+    }
     root
+}
+
+pub struct MarkdownView {
+    pub widget: gtk::Box,
+    blocks: std::cell::RefCell<Vec<(Block, gtk::Widget)>>,
+}
+
+impl MarkdownView {
+    pub fn new(text: &str) -> std::rc::Rc<Self> {
+        let me = std::rc::Rc::new(MarkdownView { widget: vbox(8), blocks: std::cell::RefCell::new(vec![]) });
+        me.set_text(text);
+        me
+    }
+
+    pub fn set_text(&self, text: &str) {
+        let new = parse(text);
+        let mut blocks = self.blocks.borrow_mut();
+        let keep = blocks.iter().zip(&new).take_while(|((old, _), block)| old == *block).count();
+        for (_, w) in blocks.drain(keep..) {
+            self.widget.remove(&w);
+        }
+        for block in new.into_iter().skip(keep) {
+            let w = block_widget(&block);
+            self.widget.append(&w);
+            blocks.push((block, w));
+        }
+    }
 }
 
 fn line_sep() -> gtk::Separator {
@@ -309,5 +370,23 @@ mod tests {
         assert_eq!(inline_markup("a **b** `c`"), "a <b>b</b> <tt>c</tt>");
         assert_eq!(inline_markup("see [x](https://e.com)"), "see <a href=\"https://e.com\">x</a>");
         assert_eq!(inline_markup("1 < 2"), "1 &lt; 2");
+    }
+
+    #[test]
+    fn blocks() {
+        let b = parse("# Title\n\nsome text\nmore\n\n- a\n```\ncode\n```\n> q\n---");
+        assert_eq!(
+            b,
+            vec![
+                Block::Heading(1, "Title".into()),
+                Block::Para("some text\nmore".into()),
+                Block::Item(0, "•".into(), "a".into()),
+                Block::Code("code".into()),
+                Block::Quote("q".into()),
+                Block::Rule,
+            ]
+        );
+        let streaming = parse("# Title\n\nsome te");
+        assert_eq!(streaming[0], b[0]);
     }
 }

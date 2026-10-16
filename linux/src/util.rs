@@ -324,52 +324,155 @@ pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     }
 }
 
-pub fn fuzzy_match(query: &str, paths: &[String], limit: usize) -> Vec<String> {
-    let q: Vec<char> = query.to_lowercase().chars().filter(|c| !c.is_whitespace()).collect();
-    if q.is_empty() {
-        return paths.iter().take(limit).cloned().collect();
+pub const FUZZY_WORKER_MIN: usize = 4000;
+
+pub fn fuzzy_query(query: &str) -> String {
+    query.to_lowercase().chars().filter(|c| !c.is_whitespace()).collect()
+}
+
+pub struct FuzzyIndex {
+    paths: Vec<String>,
+    lower: Vec<Box<str>>,
+    names: Vec<(u32, u32)>,
+    chars: Vec<u32>,
+}
+
+impl FuzzyIndex {
+    pub fn new(paths: Vec<String>) -> Self {
+        let mut lower = Vec::with_capacity(paths.len());
+        let mut names = Vec::with_capacity(paths.len());
+        let mut chars = Vec::with_capacity(paths.len());
+        for p in &paths {
+            let l = p.to_lowercase();
+            let trimmed = l.trim_end_matches('/');
+            let start = trimmed.rfind('/').map(|i| i + 1).unwrap_or(0);
+            names.push((start as u32, trimmed.len() as u32));
+            chars.push(l.chars().count() as u32);
+            lower.push(l.into_boxed_str());
+        }
+        FuzzyIndex { paths, lower, names, chars }
     }
-    let qs: String = q.iter().collect();
-    let mut scored: Vec<(&String, i64)> = Vec::new();
-    for p in paths {
-        let lower: Vec<char> = p.to_lowercase().chars().collect();
+
+    pub fn len(&self) -> usize {
+        self.paths.len()
+    }
+
+    pub fn path(&self, i: u32) -> &str {
+        &self.paths[i as usize]
+    }
+
+    fn score(&self, i: usize, q: &[char], qs: &str) -> Option<i64> {
+        let lower = &self.lower[i];
         let mut score = 0i64;
         let mut qi = 0usize;
         let mut last: Option<usize> = None;
-        for (i, c) in lower.iter().enumerate() {
+        for (ci, c) in lower.chars().enumerate() {
             if qi >= q.len() {
                 break;
             }
-            if *c == q[qi] {
-                if let Some(l) = last {
-                    if l + 1 == i {
-                        score += 3;
-                    } else {
-                        score += 1;
-                    }
-                } else {
-                    score += 1;
-                }
-                last = Some(i);
+            if c == q[qi] {
+                score += match last {
+                    Some(l) if l + 1 == ci => 3,
+                    _ => 1,
+                };
+                last = Some(ci);
                 qi += 1;
             }
         }
         if qi < q.len() {
-            continue;
+            return None;
         }
-        let lower_s: String = lower.iter().collect();
-        let name = last_component(&lower_s);
-        if name.contains(&qs) {
+        let (start, end) = self.names[i];
+        let name = &lower[start as usize..end as usize];
+        if name.contains(qs) {
             score += 20;
         }
-        if name.starts_with(&qs) {
+        if name.starts_with(qs) {
             score += 10;
         }
-        score -= lower.len() as i64 / 20;
-        scored.push((p, score));
+        score -= self.chars[i] as i64 / 20;
+        Some(score)
     }
-    scored.sort_by(|a, b| b.1.cmp(&a.1));
-    scored.into_iter().take(limit).map(|(p, _)| p.clone()).collect()
+
+    pub fn search(&self, query: &str, candidates: Option<&[u32]>, limit: usize) -> (Vec<u32>, Vec<u32>) {
+        let q: Vec<char> = query.chars().collect();
+        let all: Box<dyn Iterator<Item = u32> + '_> = match candidates {
+            Some(c) => Box::new(c.iter().copied()),
+            None => Box::new(0..self.paths.len() as u32),
+        };
+        let mut matched = Vec::new();
+        let mut scored: Vec<(u32, i64)> = Vec::new();
+        for i in all {
+            if let Some(score) = self.score(i as usize, &q, query) {
+                matched.push(i);
+                scored.push((i, score));
+            }
+        }
+        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        (matched, scored.into_iter().take(limit).map(|(i, _)| i).collect())
+    }
+}
+
+pub struct FuzzySearch {
+    index: std::sync::Arc<FuzzyIndex>,
+    last: std::cell::RefCell<Option<(String, std::sync::Arc<Vec<u32>>)>>,
+    generation: std::cell::Cell<u64>,
+}
+
+impl FuzzySearch {
+    pub async fn build(paths: Vec<String>) -> std::rc::Rc<Self> {
+        let index = if paths.len() >= FUZZY_WORKER_MIN { crate::rt::blocking(move || FuzzyIndex::new(paths)).await } else { FuzzyIndex::new(paths) };
+        std::rc::Rc::new(FuzzySearch { index: std::sync::Arc::new(index), last: std::cell::RefCell::new(None), generation: std::cell::Cell::new(0) })
+    }
+
+    fn candidates(&self, q: &str) -> Option<std::sync::Arc<Vec<u32>>> {
+        self.last.borrow().as_ref().filter(|(prev, _)| q.starts_with(prev.as_str())).map(|(_, m)| m.clone())
+    }
+
+    fn finish(&self, q: String, matched: Vec<u32>, top: Vec<u32>) -> Vec<String> {
+        *self.last.borrow_mut() = Some((q, std::sync::Arc::new(matched)));
+        top.into_iter().map(|i| self.index.path(i).to_string()).collect()
+    }
+
+    fn first(&self, limit: usize) -> Vec<String> {
+        *self.last.borrow_mut() = None;
+        self.index.paths.iter().take(limit).cloned().collect()
+    }
+
+    pub fn run_now(&self, query: &str, limit: usize, span: &'static str) -> Vec<String> {
+        self.generation.set(self.generation.get() + 1);
+        let q = fuzzy_query(query);
+        if q.is_empty() {
+            return self.first(limit);
+        }
+        let candidates = self.candidates(&q);
+        let _span = crate::diagnostics::ui_span(span);
+        let (matched, top) = self.index.search(&q, candidates.as_deref().map(|v| v.as_slice()), limit);
+        self.finish(q, matched, top)
+    }
+
+    pub async fn run(&self, query: &str, limit: usize, span: &'static str) -> Option<Vec<String>> {
+        let generation = self.generation.get() + 1;
+        self.generation.set(generation);
+        let q = fuzzy_query(query);
+        if q.is_empty() {
+            return Some(self.first(limit));
+        }
+        let candidates = self.candidates(&q);
+        let size = candidates.as_ref().map(|c| c.len()).unwrap_or(self.index.len());
+        let (matched, top) = if size >= FUZZY_WORKER_MIN {
+            let index = self.index.clone();
+            let qq = q.clone();
+            crate::rt::blocking(move || index.search(&qq, candidates.as_deref().map(|v| v.as_slice()), limit)).await
+        } else {
+            let _span = crate::diagnostics::ui_span(span);
+            self.index.search(&q, candidates.as_deref().map(|v| v.as_slice()), limit)
+        };
+        if self.generation.get() != generation {
+            return None;
+        }
+        Some(self.finish(q, matched, top))
+    }
 }
 
 pub fn thousands(n: i64) -> String {
@@ -405,8 +508,13 @@ mod tests {
 
     #[test]
     fn fuzzy() {
-        let paths = vec!["src/main.rs".to_string(), "README.md".to_string(), "src/ui/pr.rs".to_string()];
-        assert_eq!(fuzzy_match("main", &paths, 10).first().map(|s| s.as_str()), Some("src/main.rs"));
+        let index = FuzzyIndex::new(vec!["src/main.rs".to_string(), "README.md".to_string(), "src/ui/pr.rs".to_string(), "Src/Domain/Mainline.rs".to_string()]);
+        let (_, top) = index.search(&fuzzy_query("main"), None, 10);
+        assert_eq!(top.first().map(|&i| index.path(i)), Some("src/main.rs"));
+        let (matched, _) = index.search(&fuzzy_query("ma"), None, 10);
+        let narrowed = index.search(&fuzzy_query("main"), Some(&matched), 10);
+        assert_eq!(narrowed, index.search(&fuzzy_query("main"), None, 10));
+        assert!(index.search("zzz", None, 10).0.is_empty());
     }
 
     #[test]

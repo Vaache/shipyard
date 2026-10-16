@@ -57,6 +57,9 @@ pub fn profile_badge(p: &ClaudeProfile, size: i32) -> gtk::Box {
     b.add_css_class(color);
     b.set_size_request(size, size);
     b.set_valign(gtk::Align::Center);
+    b.set_halign(gtk::Align::Center);
+    b.set_hexpand(false);
+    b.set_vexpand(false);
     let l = label_with(&p.initial(), &["sy-bold", &format!("fg-{color}")]);
     l.set_hexpand(true);
     l.set_xalign(0.5);

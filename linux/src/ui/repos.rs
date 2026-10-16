@@ -1106,36 +1106,113 @@ pub fn quick_open(model: Rc<CodeModel>) {
     let open = suggested("Open");
     sheet.footer.append(&open);
     let results: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(vec![]));
-    let refresh = {
-        let model = model.clone();
+    let results_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+    let show = {
         let list = list.clone();
-        let entry = entry.clone();
         let results = results.clone();
+        let results_query = results_query.clone();
+        Rc::new(move |query: String, r: Vec<String>| {
+            let _span = crate::diagnostics::ui_span("quickopen.render");
+            list.remove_all();
+            for path in &r {
+                let row = gtk::ListBoxRow::new();
+                let col = vbox(1);
+                col.append(&label_with(&util::last_component(path), &["sy-text"]));
+                let full = label_with(path, &["sy-muted", "sy-small", "sy-mono"]);
+                full.set_ellipsize(gtk::pango::EllipsizeMode::Start);
+                col.append(&full);
+                row.set_child(Some(&col));
+                list.append(&row);
+            }
+            if let Some(first) = list.row_at_index(0) {
+                list.select_row(Some(&first));
+            }
+            *results.borrow_mut() = r;
+            *results_query.borrow_mut() = Some(query);
+        })
+    };
+    let search: Rc<RefCell<Option<Rc<util::FuzzySearch>>>> = Rc::new(RefCell::new(None));
+    let refresh = {
+        let search = search.clone();
+        let entry = entry.clone();
+        let show = show.clone();
+        Rc::new(move || {
+            let Some(s) = search.borrow().clone() else { return };
+            let query = entry.text().to_string();
+            let show = show.clone();
+            let search = search.clone();
+            crate::rt::spawn_local(async move {
+                let Some(r) = s.run(&query, 200, "quickopen.filter").await else { return };
+                if search.borrow().as_ref().is_some_and(|current| Rc::ptr_eq(current, &s)) {
+                    show(query, r);
+                }
+            });
+        })
+    };
+    let flush = {
+        let search = search.clone();
+        let entry = entry.clone();
+        let results_query = results_query.clone();
+        move || {
+            let Some(s) = search.borrow().clone() else { return };
+            let query = entry.text().to_string();
+            if results_query.borrow().as_deref() == Some(query.as_str()) {
+                return;
+            }
+            let r = s.run_now(&query, 200, "quickopen.filter");
+            show(query, r);
+        }
+    };
+    let epoch = Rc::new(Cell::new(0u64));
+    let building = Rc::new(Cell::new(false));
+    let release = {
+        let epoch = epoch.clone();
+        let building = building.clone();
+        let search = search.clone();
+        move || {
+            epoch.set(epoch.get() + 1);
+            building.set(false);
+            search.borrow_mut().take();
+        }
+    };
+    let sync = {
+        let model = model.clone();
         let stack = stack.clone();
         let trunc = trunc.clone();
+        let refresh = refresh.clone();
         Rc::new(move || {
-            let paths = model.all_paths.borrow().clone();
+            let paths = match model.all_paths.borrow().as_ref() {
+                None => None,
+                Some(_) if search.borrow().is_some() || building.get() => return,
+                Some(p) => Some(p.clone()),
+            };
             match paths {
-                None => stack.set_visible_child_name("loading"),
+                None => {
+                    epoch.set(epoch.get() + 1);
+                    building.set(false);
+                    search.borrow_mut().take();
+                    stack.set_visible_child_name("loading");
+                }
                 Some(p) => {
-                    stack.set_visible_child_name("list");
+                    stack.set_visible_child_name("loading");
                     trunc.set_visible(model.paths_truncated.get());
-                    let r = util::fuzzy_match(&entry.text(), &p, 200);
-                    list.remove_all();
-                    for path in &r {
-                        let row = gtk::ListBoxRow::new();
-                        let col = vbox(1);
-                        col.append(&label_with(&util::last_component(path), &["sy-text"]));
-                        let full = label_with(path, &["sy-muted", "sy-small", "sy-mono"]);
-                        full.set_ellipsize(gtk::pango::EllipsizeMode::Start);
-                        col.append(&full);
-                        row.set_child(Some(&col));
-                        list.append(&row);
-                    }
-                    if let Some(first) = list.row_at_index(0) {
-                        list.select_row(Some(&first));
-                    }
-                    *results.borrow_mut() = r;
+                    building.set(true);
+                    let current = epoch.get();
+                    let epoch = epoch.clone();
+                    let building = building.clone();
+                    let search = search.clone();
+                    let stack = stack.clone();
+                    let refresh = refresh.clone();
+                    crate::rt::spawn_local(async move {
+                        let s = util::FuzzySearch::build(p).await;
+                        if epoch.get() != current {
+                            return;
+                        }
+                        building.set(false);
+                        *search.borrow_mut() = Some(s);
+                        stack.set_visible_child_name("list");
+                        refresh();
+                    });
                 }
             }
         })
@@ -1146,6 +1223,9 @@ pub fn quick_open(model: Rc<CodeModel>) {
         let results = results.clone();
         let list = list.clone();
         Rc::new(move |idx: Option<i32>| {
+            if idx.is_none() {
+                flush();
+            }
             let i = idx.or_else(|| list.selected_row().map(|r| r.index())).unwrap_or(0).max(0) as usize;
             if let Some(path) = results.borrow().get(i).cloned() {
                 d.close();
@@ -1154,6 +1234,7 @@ pub fn quick_open(model: Rc<CodeModel>) {
             }
         })
     };
+    entry.set_search_delay(100);
     let r = refresh.clone();
     entry.connect_search_changed(move |_| r());
     let g = go.clone();
@@ -1162,10 +1243,13 @@ pub fn quick_open(model: Rc<CodeModel>) {
     list.connect_row_activated(move |_, row| g(Some(row.index())));
     let g = go.clone();
     open.connect_clicked(move |_| g(None));
-    let r = refresh.clone();
+    let r = sync.clone();
     let closed = Rc::new(Cell::new(false));
     let c = closed.clone();
-    sheet.dialog.connect_closed(move |_| c.set(true));
+    sheet.dialog.connect_closed(move |_| {
+        c.set(true);
+        release();
+    });
     model.changed.connect(move |_| {
         if closed.get() {
             return false;
@@ -1173,7 +1257,7 @@ pub fn quick_open(model: Rc<CodeModel>) {
         r();
         true
     });
-    refresh();
+    sync();
     let m = model.clone();
     crate::rt::spawn_local(async move { m.load_all_paths().await });
     sheet.present();
