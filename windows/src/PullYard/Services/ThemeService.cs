@@ -11,6 +11,8 @@ public enum AppearanceMode { Auto, Light, Dark }
 public static class ThemeService
 {
     private static FrameworkElement? root;
+    private static Windows.UI.ViewManagement.AccessibilitySettings? accessibility;
+    private static bool? highContrast;
 
     public static event Action? Changed;
 
@@ -44,7 +46,25 @@ public static class ThemeService
         }
     }
 
-    public static bool IsBrand => Style == ThemeStyle.PullYard;
+    public static bool IsBrand => Style == ThemeStyle.PullYard && !IsHighContrast;
+
+    public static bool IsHighContrast
+    {
+        get
+        {
+            if (highContrast is { } known) return known;
+            try
+            {
+                accessibility ??= new Windows.UI.ViewManagement.AccessibilitySettings();
+                highContrast = accessibility.HighContrast;
+            }
+            catch
+            {
+                highContrast = false;
+            }
+            return highContrast.Value;
+        }
+    }
 
     public static bool IsDark
     {
@@ -58,7 +78,31 @@ public static class ThemeService
     public static void Attach(FrameworkElement element)
     {
         root = element;
-        element.ActualThemeChanged += (_, _) => Changed?.Invoke();
+        element.ActualThemeChanged += (_, _) =>
+        {
+            var was = highContrast;
+            highContrast = null;
+            if (was is { } known && known != IsHighContrast) Apply();
+            else Changed?.Invoke();
+        };
+        try
+        {
+            accessibility ??= new Windows.UI.ViewManagement.AccessibilitySettings();
+            var queue = element.DispatcherQueue;
+            accessibility.HighContrastChanged += (sender, _) =>
+            {
+                var value = sender.HighContrast;
+                queue.TryEnqueue(() =>
+                {
+                    if (highContrast == value) return;
+                    highContrast = value;
+                    Apply();
+                });
+            };
+        }
+        catch
+        {
+        }
         Apply();
     }
 

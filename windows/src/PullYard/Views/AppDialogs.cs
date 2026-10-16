@@ -62,12 +62,64 @@ public static class SettingsDialog
     public static async Task Show(XamlRoot? root)
     {
         if (root is null) return;
+        var scroll = new ScrollViewer { Content = Build(), MaxHeight = 620, Padding = new Thickness(0, 0, 12, 0) };
+        openScroll = scroll;
+        var d = Dialogs.Create(root, L.T("Common_Settings", "Settings"), scroll, close: L.T("Common_Done", "Done"), maxWidth: 640);
+        openDialog = d;
+        var pending = false;
+        void Rebuild()
+        {
+            if (pending) return;
+            pending = true;
+            scroll.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                pending = false;
+                var focused = FocusedSelector(scroll);
+                var offset = scroll.VerticalOffset;
+                scroll.Content = Build();
+                scroll.UpdateLayout();
+                scroll.ChangeView(null, offset, null, true);
+                if (focused is { } f && (f.Key == "style" ? styleBar : modeBar)?.SelectedItem is { } item) item.Focus(f.State);
+            });
+        }
+        ThemeService.Changed += Rebuild;
+        try
+        {
+            await Dialogs.ShowAsync(d);
+        }
+        finally
+        {
+            ThemeService.Changed -= Rebuild;
+            openDialog = null;
+            openScroll = null;
+            styleBar = null;
+            modeBar = null;
+        }
+    }
+
+    private static SelectorBar? styleBar;
+    private static SelectorBar? modeBar;
+
+    private static (string Key, FocusState State)? FocusedSelector(ScrollViewer scroll)
+    {
+        if (scroll.XamlRoot is null || Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(scroll.XamlRoot) is not DependencyObject focused) return null;
+        var state = focused is Control c && c.FocusState != FocusState.Unfocused ? c.FocusState : FocusState.Keyboard;
+        for (var node = focused; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+        {
+            if (ReferenceEquals(node, styleBar)) return ("style", state);
+            if (ReferenceEquals(node, modeBar)) return ("mode", state);
+        }
+        return null;
+    }
+
+    private static StackPanel Build()
+    {
         var app = AppViewModel.Shared;
         var panel = Ui.V(18);
 
-        var style = Segmented(new[] { ("brand", AppInfo.DisplayName), ("system", L.T("Settings_System", "System")) }, ThemeService.Style == ThemeStyle.System ? "system" : "brand",
+        var style = styleBar = Segmented(new[] { ("brand", AppInfo.DisplayName), ("system", L.T("Settings_System", "System")) }, ThemeService.Style == ThemeStyle.System ? "system" : "brand",
             v => ThemeService.Style = v == "system" ? ThemeStyle.System : ThemeStyle.PullYard);
-        var mode = Segmented(new[] { ("auto", L.T("Settings_MatchSystem", "Match system")), ("light", L.T("Settings_Light", "Light")), ("dark", L.T("Settings_Dark", "Dark")) },
+        var mode = modeBar = Segmented(new[] { ("auto", L.T("Settings_MatchSystem", "Match system")), ("light", L.T("Settings_Light", "Light")), ("dark", L.T("Settings_Dark", "Dark")) },
             ThemeService.Appearance switch { AppearanceMode.Light => "light", AppearanceMode.Dark => "dark", _ => "auto" },
             v => ThemeService.Appearance = v switch { "light" => AppearanceMode.Light, "dark" => AppearanceMode.Dark, _ => AppearanceMode.Auto });
         panel.Children.Add(Group(L.T("Settings_Appearance", "Appearance"), "", "violet", Row(L.T("Settings_Theme", "Theme"), style), Row(L.T("Settings_Mode", "Mode"), mode)));
@@ -152,13 +204,7 @@ public static class SettingsDialog
         Ui.Tip(pizza, AppInfo.DonateUrl);
         pizza.Click += (_, _) => LinkBrowser.OpenDonation();
         panel.Children.Add(Group(L.F("Support_Title", "Support {0}", AppInfo.DisplayName), "\uEB51", "coral", pizza));
-
-        var scroll = new ScrollViewer { Content = panel, MaxHeight = 620, Padding = new Thickness(0, 0, 12, 0) };
-        openScroll = scroll;
-        var d = Dialogs.Create(root, L.T("Common_Settings", "Settings"), scroll, close: L.T("Common_Done", "Done"), maxWidth: 640);
-        openDialog = d;
-        await Dialogs.ShowAsync(d);
-        openDialog = null;
+        return panel;
     }
 
     private static ContentDialog? openDialog;
@@ -245,7 +291,7 @@ public static class SettingsDialog
         return g;
     }
 
-    private static FrameworkElement Segmented((string Id, string Title)[] options, string selected, Action<string> changed)
+    private static SelectorBar Segmented((string Id, string Title)[] options, string selected, Action<string> changed)
     {
         var bar = new SelectorBar();
         foreach (var (id, title) in options)

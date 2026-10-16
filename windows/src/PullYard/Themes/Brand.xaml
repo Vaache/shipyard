@@ -38,7 +38,8 @@
             <SolidColorBrush x:Key="SyInputDisabledBrush" Color="#FFF5F3EE" />
             <SolidColorBrush x:Key="SySubtleHoverBrush" Color="#0D1A2333" />
             <SolidColorBrush x:Key="SySubtlePressedBrush" Color="#081A2333" />
-            <SolidColorBrush x:Key="SySubtleSelectedBrush" Color="#121A2333" />
+            <SolidColorBrush x:Key="SySubtleSelectedBrush" Color="#1F1A2333" />
+            <SolidColorBrush x:Key="SySubtleSelectedHoverBrush" Color="#291A2333" />
             <SolidColorBrush x:Key="SyListSelectedHoverBrush" Color="#262A8BC8" />
             <SolidColorBrush x:Key="SyAccentFillBrush" Color="#FF1D70A6" />
             <SolidColorBrush x:Key="SyAccentFillHoverBrush" Color="#FF1A6699" />
@@ -77,6 +78,38 @@
                 <GradientStop Offset="1.0" Color="{StaticResource SyAccentColor}" />
                 <GradientStop Offset="1.0" Color="{StaticResource SyStrokeSecondaryColor}" />
             </LinearGradientBrush>
+            <Color x:Key="SyControlAltColor">#FFF1EEE8</Color>
+            <Color x:Key="SyControlAltHoverColor">#FFEAE7E0</Color>
+            <Color x:Key="SyControlAltPressedColor">#FFE3E0D9</Color>
+            <Color x:Key="SyControlAltDisabledColor">#FFF5F3EE</Color>
+            <SolidColorBrush x:Key="SyControlAltBrush" Color="{StaticResource SyControlAltColor}" />
+            <SolidColorBrush x:Key="SyControlAltHoverBrush" Color="{StaticResource SyControlAltHoverColor}" />
+            <SolidColorBrush x:Key="SyControlAltPressedBrush" Color="{StaticResource SyControlAltPressedColor}" />
+            <SolidColorBrush x:Key="SyControlAltDisabledBrush" Color="{StaticResource SyControlAltDisabledColor}" />
+            <SolidColorBrush x:Key="SyStrongStrokeBrush" Color="{StaticResource SyStrongStrokeColor}" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFill" ResourceKey="SyControlAltBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillUnchecked" ResourceKey="SyControlAltBrush" />
+            <StaticResource x:Key="ToggleSwitchFillOff" ResourceKey="SyControlAltBrush" />
+            <StaticResource x:Key="ListViewItemCheckBoxBrush" ResourceKey="SyControlAltBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFillPointerOver" ResourceKey="SyControlAltHoverBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedPointerOver" ResourceKey="SyControlAltHoverBrush" />
+            <StaticResource x:Key="ListViewItemCheckBoxPointerOverBrush" ResourceKey="SyControlAltHoverBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFillPressed" ResourceKey="SyControlAltPressedBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedPressed" ResourceKey="SyControlAltPressedBrush" />
+            <StaticResource x:Key="ListViewItemCheckBoxPressedBrush" ResourceKey="SyControlAltPressedBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFillDisabled" ResourceKey="SyControlAltDisabledBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedDisabled" ResourceKey="SyControlAltDisabledBrush" />
+            <StaticResource x:Key="ToggleSwitchFillOffPointerOver" ResourceKey="SyControlAltHoverColor" />
+            <StaticResource x:Key="ToggleSwitchFillOffPressed" ResourceKey="SyControlAltPressedColor" />
+            <StaticResource x:Key="ToggleSwitchFillOffDisabled" ResourceKey="SyControlAltDisabledColor" />
+            <StaticResource x:Key="RadioButtonOuterEllipseStroke" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseStrokePointerOver" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUnchecked" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUncheckedPointerOver" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="ToggleSwitchStrokeOff" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="ListViewItemCheckBoxBorderBrush" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="ToggleSwitchStrokeOffPointerOver" ResourceKey="SyStrongStrokeColor" />
+            <StaticResource x:Key="ToggleSwitchStrokeOffPressed" ResourceKey="SyStrongStrokeColor" />
             <StaticResource x:Key="ScrollBarThumbBackgroundColor" ResourceKey="SyScrollThumbColor" />
             <StaticResource x:Key="ScrollBarPanningThumbBackgroundColor" ResourceKey="SyScrollThumbColor" />
             <StaticResource x:Key="SolidBackgroundFillColorBaseBrush" ResourceKey="SyWindowBrush" />
@@ -182,13 +215,13 @@
             <StaticResource x:Key="SubtleFillColorSecondaryBrush" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="ListViewItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
-            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="SySubtleHoverBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="NavigationViewButtonBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="MenuFlyoutItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="ComboBoxItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
-            <StaticResource x:Key="ComboBoxItemBackgroundSelected" ResourceKey="SySubtleHoverBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelected" ResourceKey="SySubtleSelectedBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundHighLightOverlayPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="HyperlinkButtonBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
@@ -200,13 +233,13 @@
             <StaticResource x:Key="SubtleFillColorTertiaryBrush" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
-            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="SySubtlePressedBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="NavigationViewButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="MenuFlyoutItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="ComboBoxItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
-            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="SySubtlePressedBrush" />
-            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="SySubtlePressedBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedHoverBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundHighLightOverlayPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="HyperlinkButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
@@ -215,6 +248,7 @@
             <StaticResource x:Key="ExpanderChevronPressedBackground" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="SelectorBarItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundSelected" ResourceKey="SySubtleSelectedBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedUnfocused" ResourceKey="SySubtleSelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelected" ResourceKey="SySelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelectedPressed" ResourceKey="SySelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelectedPointerOver" ResourceKey="SyListSelectedHoverBrush" />
@@ -402,7 +436,8 @@
             <SolidColorBrush x:Key="SyInputDisabledBrush" Color="#FF0E1526" />
             <SolidColorBrush x:Key="SySubtleHoverBrush" Color="#17A0AEC4" />
             <SolidColorBrush x:Key="SySubtlePressedBrush" Color="#10A0AEC4" />
-            <SolidColorBrush x:Key="SySubtleSelectedBrush" Color="#1FA0AEC4" />
+            <SolidColorBrush x:Key="SySubtleSelectedBrush" Color="#29A0AEC4" />
+            <SolidColorBrush x:Key="SySubtleSelectedHoverBrush" Color="#33A0AEC4" />
             <SolidColorBrush x:Key="SyListSelectedHoverBrush" Color="#335BB8EC" />
             <SolidColorBrush x:Key="SyAccentFillBrush" Color="#FF5BB8EC" />
             <SolidColorBrush x:Key="SyAccentFillHoverBrush" Color="#FF6FC2EF" />
@@ -441,6 +476,38 @@
                 <GradientStop Offset="1.0" Color="{StaticResource SyAccentColor}" />
                 <GradientStop Offset="1.0" Color="{StaticResource SyStrokeSecondaryColor}" />
             </LinearGradientBrush>
+            <Color x:Key="SyControlAltColor">#FF0A101C</Color>
+            <Color x:Key="SyControlAltHoverColor">#FF0F1729</Color>
+            <Color x:Key="SyControlAltPressedColor">#FF131C30</Color>
+            <Color x:Key="SyControlAltDisabledColor">#FF0E1526</Color>
+            <SolidColorBrush x:Key="SyControlAltBrush" Color="{StaticResource SyControlAltColor}" />
+            <SolidColorBrush x:Key="SyControlAltHoverBrush" Color="{StaticResource SyControlAltHoverColor}" />
+            <SolidColorBrush x:Key="SyControlAltPressedBrush" Color="{StaticResource SyControlAltPressedColor}" />
+            <SolidColorBrush x:Key="SyControlAltDisabledBrush" Color="{StaticResource SyControlAltDisabledColor}" />
+            <SolidColorBrush x:Key="SyStrongStrokeBrush" Color="{StaticResource SyStrongStrokeColor}" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFill" ResourceKey="SyControlAltBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillUnchecked" ResourceKey="SyControlAltBrush" />
+            <StaticResource x:Key="ToggleSwitchFillOff" ResourceKey="SyControlAltBrush" />
+            <StaticResource x:Key="ListViewItemCheckBoxBrush" ResourceKey="SyControlAltBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFillPointerOver" ResourceKey="SyControlAltHoverBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedPointerOver" ResourceKey="SyControlAltHoverBrush" />
+            <StaticResource x:Key="ListViewItemCheckBoxPointerOverBrush" ResourceKey="SyControlAltHoverBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFillPressed" ResourceKey="SyControlAltPressedBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedPressed" ResourceKey="SyControlAltPressedBrush" />
+            <StaticResource x:Key="ListViewItemCheckBoxPressedBrush" ResourceKey="SyControlAltPressedBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFillDisabled" ResourceKey="SyControlAltDisabledBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedDisabled" ResourceKey="SyControlAltDisabledBrush" />
+            <StaticResource x:Key="ToggleSwitchFillOffPointerOver" ResourceKey="SyControlAltHoverColor" />
+            <StaticResource x:Key="ToggleSwitchFillOffPressed" ResourceKey="SyControlAltPressedColor" />
+            <StaticResource x:Key="ToggleSwitchFillOffDisabled" ResourceKey="SyControlAltDisabledColor" />
+            <StaticResource x:Key="RadioButtonOuterEllipseStroke" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseStrokePointerOver" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUnchecked" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUncheckedPointerOver" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="ToggleSwitchStrokeOff" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="ListViewItemCheckBoxBorderBrush" ResourceKey="SyStrongStrokeBrush" />
+            <StaticResource x:Key="ToggleSwitchStrokeOffPointerOver" ResourceKey="SyStrongStrokeColor" />
+            <StaticResource x:Key="ToggleSwitchStrokeOffPressed" ResourceKey="SyStrongStrokeColor" />
             <StaticResource x:Key="ScrollBarThumbBackgroundColor" ResourceKey="SyScrollThumbColor" />
             <StaticResource x:Key="ScrollBarPanningThumbBackgroundColor" ResourceKey="SyScrollThumbColor" />
             <StaticResource x:Key="SolidBackgroundFillColorBaseBrush" ResourceKey="SyWindowBrush" />
@@ -546,13 +613,13 @@
             <StaticResource x:Key="SubtleFillColorSecondaryBrush" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="ListViewItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
-            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="SySubtleHoverBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="NavigationViewButtonBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="MenuFlyoutItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="ComboBoxItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
-            <StaticResource x:Key="ComboBoxItemBackgroundSelected" ResourceKey="SySubtleHoverBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelected" ResourceKey="SySubtleSelectedBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundHighLightOverlayPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="HyperlinkButtonBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
@@ -564,13 +631,13 @@
             <StaticResource x:Key="SubtleFillColorTertiaryBrush" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
-            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="SySubtlePressedBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="NavigationViewButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="MenuFlyoutItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="ComboBoxItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
-            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="SySubtlePressedBrush" />
-            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="SySubtlePressedBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedHoverBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundHighLightOverlayPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="HyperlinkButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
@@ -579,6 +646,7 @@
             <StaticResource x:Key="ExpanderChevronPressedBackground" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="SelectorBarItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundSelected" ResourceKey="SySubtleSelectedBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedUnfocused" ResourceKey="SySubtleSelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelected" ResourceKey="SySelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelectedPressed" ResourceKey="SySelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelectedPointerOver" ResourceKey="SyListSelectedHoverBrush" />
@@ -729,6 +797,32 @@
             <StaticResource x:Key="ScrollBarThumbFillPressed" ResourceKey="SyScrollThumbBrush" />
             <StaticResource x:Key="ScrollBarThumbBackground" ResourceKey="SyScrollThumbBrush" />
             <StaticResource x:Key="ScrollBarPanningThumbBackground" ResourceKey="SyScrollThumbBrush" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="SyWindowBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SySidebarBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SyListBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SyPanelBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SyRaisedBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SySunkenBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SyBarBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SyLineBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="SyLineStrongBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SyTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SyMutedBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SyDimBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="SyAccentBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="SySkyBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="SyVioletBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SyCoralBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SyGreenBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SyRedBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SyAmberBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SyTealBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SyIndigoBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SySlateBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SySelectedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="SyHoverBrush" Color="#00000000" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

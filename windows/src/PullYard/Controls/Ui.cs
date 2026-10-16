@@ -120,10 +120,10 @@ public static class Ui
                 VerticalAlignment = VerticalAlignment.Top
             };
         }
-        var white = new SolidColorBrush(Microsoft.UI.Colors.White);
+        var (fill, white) = Palette.Filled(key);
         return new Border
         {
-            Background = Palette.Brush(key),
+            Background = fill,
             CornerRadius = new CornerRadius(11),
             Padding = new Thickness(9, 2, 10, 3),
             VerticalAlignment = VerticalAlignment.Center,
