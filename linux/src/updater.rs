@@ -5,7 +5,7 @@ use std::rc::Rc;
 use chrono::Utc;
 use serde::Deserialize;
 
-use crate::api::{http_client, ApiError};
+use crate::api::{http_client, probed_get, scrub, ApiError};
 use crate::brand;
 use crate::settings;
 use crate::signal::Signal;
@@ -170,16 +170,17 @@ pub fn parse_release(data: &[u8]) -> Result<Release, ApiError> {
 }
 
 async fn fetch_latest() -> Result<Release, ApiError> {
-    let resp = http_client().get(brand::latest_release_api()).header("Accept", "application/vnd.github+json").send().await?;
-    let code = resp.status().as_u16();
+    let url = brand::latest_release_api();
+    let mut probe = crate::diagnostics::begin_rest("GET", &url);
+    let (status, bytes) = probed_get(&mut probe, http_client().get(&url).header("Accept", "application/vnd.github+json")).await?;
+    let code = status.as_u16();
     if code == 404 {
-        return Err(ApiError::new("No releases found."));
+        return probe.track(Err(ApiError::new("No releases found.")));
     }
     if !(200..300).contains(&code) {
-        return Err(ApiError::new(if code == 403 || code == 429 { "GitHub rate limit reached. Try again later.".to_string() } else { format!("GitHub responded with error {code}.") }));
+        return probe.track(Err(ApiError::new(if code == 403 || code == 429 { "GitHub rate limit reached. Try again later.".to_string() } else { format!("GitHub responded with error {code}.") })));
     }
-    let bytes = resp.bytes().await?;
-    parse_release(&bytes)
+    probe.track(parse_release(&bytes))
 }
 
 pub async fn check_on_launch() {
@@ -292,17 +293,19 @@ fn staging_dir() -> PathBuf {
 
 async fn download(url: String, dest: PathBuf, expected: i64, progress: async_channel::Sender<f64>) -> Result<PathBuf, String> {
     use tokio::io::AsyncWriteExt;
-    let resp = http_client().get(&url).header("Accept", "application/octet-stream").timeout(std::time::Duration::from_secs(600)).send().await.map_err(|e| e.to_string())?;
+    let mut probe = crate::diagnostics::begin_rest("GET", &url);
+    let resp = probe.track(http_client().get(&url).header("Accept", "application/octet-stream").timeout(std::time::Duration::from_secs(600)).send().await.map_err(|e| scrub(e).to_string()))?;
+    probe.response(resp.status().as_u16(), resp.headers());
     if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status().as_u16()));
+        return probe.track(Err(format!("HTTP {}", resp.status().as_u16())));
     }
     let total = resp.content_length().map(|v| v as i64).unwrap_or(expected).max(1);
-    let mut file = tokio::fs::File::create(&dest).await.map_err(|e| e.to_string())?;
+    let mut file = probe.track(tokio::fs::File::create(&dest).await.map_err(|e| e.to_string()))?;
     let mut written = 0i64;
     let mut last = -1.0f64;
     let mut resp = resp;
-    while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
-        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+    while let Some(chunk) = probe.track(resp.chunk().await.map_err(|e| scrub(e).to_string()))? {
+        probe.track(file.write_all(&chunk).await.map_err(|e| e.to_string()))?;
         written += chunk.len() as i64;
         let f = (written as f64 / total as f64).min(1.0);
         if f - last >= 0.005 || f >= 1.0 {
@@ -310,6 +313,7 @@ async fn download(url: String, dest: PathBuf, expected: i64, progress: async_cha
             let _ = progress.send(f).await;
         }
     }
+    probe.body(written as usize);
     file.flush().await.map_err(|e| e.to_string())?;
     Ok(dest)
 }

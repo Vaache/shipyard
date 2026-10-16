@@ -1,5 +1,4 @@
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -8,10 +7,11 @@ use chrono::{DateTime, Local, TimeZone, Utc};
 use gtk::{gio, glib};
 
 use super::widgets::*;
-use crate::diagnostics::{self, RequestEntry, Snapshot, Stats};
+use crate::diagnostics::{self, RequestEntry, Snapshot, Stats, TickEntry};
 use crate::{app, brand, settings, util};
 
 const RECENT_TICKS: usize = 10;
+const SEP: char = '\u{1f}';
 
 thread_local! {
     static OPEN: RefCell<Option<glib::WeakRef<adw::Window>>> = const { RefCell::new(None) };
@@ -20,13 +20,27 @@ thread_local! {
 struct Table {
     view: gtk::ColumnView,
     model: gtk::StringList,
-    rows: Rc<RefCell<Vec<Vec<String>>>>,
+    current: RefCell<Vec<String>>,
+}
+
+fn encode(cells: &[String]) -> String {
+    cells.iter().map(|c| c.replace(SEP, " ")).collect::<Vec<_>>().join(&SEP.to_string())
+}
+
+fn splice_plan(old: &[String], new: &[String]) -> Vec<(usize, usize, std::ops::Range<usize>)> {
+    if let Some(p) = old.first().and_then(|first| new.iter().position(|r| r == first)) {
+        let kept = old.iter().zip(&new[p..]).take_while(|(a, b)| a == b).count();
+        return vec![(kept, old.len() - kept, p + kept..new.len()), (0, 0, 0..p)];
+    }
+    let prefix = old.iter().zip(new).take_while(|(a, b)| a == b).count();
+    let max_suffix = old.len().min(new.len()) - prefix;
+    let suffix = old.iter().rev().zip(new.iter().rev()).take(max_suffix).take_while(|(a, b)| a == b).count();
+    vec![(prefix, old.len() - prefix - suffix, prefix..new.len() - suffix)]
 }
 
 impl Table {
     fn new(columns: &[(&str, bool, bool)]) -> Table {
         let model = gtk::StringList::new(&[] as &[&str]);
-        let rows: Rc<RefCell<Vec<Vec<String>>>> = Rc::default();
         let view = gtk::ColumnView::new(Some(gtk::NoSelection::new(Some(model.clone()))));
         view.set_show_row_separators(true);
         view.set_show_column_separators(true);
@@ -43,28 +57,33 @@ impl Table {
                 }
                 item.set_child(Some(&l));
             });
-            let r = rows.clone();
             factory.connect_bind(move |_, obj| {
                 let Some(item) = obj.downcast_ref::<gtk::ListItem>() else { return };
                 let Some(l) = item.child().and_downcast::<gtk::Label>() else { return };
-                let row = item.item().and_downcast::<gtk::StringObject>().and_then(|s| s.string().parse::<usize>().ok());
-                let text = row.and_then(|n| r.borrow().get(n).and_then(|cells| cells.get(i).cloned())).unwrap_or_default();
-                l.set_tooltip_text(if expand && !text.is_empty() { Some(text.as_str()) } else { None });
-                l.set_text(&text);
+                let row = item.item().and_downcast::<gtk::StringObject>().map(|s| s.string());
+                let text = row.as_deref().and_then(|r| r.split(SEP).nth(i)).unwrap_or("");
+                l.set_tooltip_text(if expand && !text.is_empty() { Some(text) } else { None });
+                l.set_text(text);
             });
             let col = gtk::ColumnViewColumn::new(Some(title), Some(factory));
             col.set_expand(expand);
             col.set_resizable(true);
             view.append_column(&col);
         }
-        Table { view, model, rows }
+        Table { view, model, current: RefCell::new(vec![]) }
     }
 
     fn set_rows(&self, rows: Vec<Vec<String>>) {
-        let ids: Vec<String> = (0..rows.len()).map(|i| i.to_string()).collect();
-        let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
-        *self.rows.borrow_mut() = rows;
-        self.model.splice(0, self.model.n_items(), &refs);
+        let new: Vec<String> = rows.iter().map(|r| encode(r)).collect();
+        let old = self.current.replace(vec![]);
+        for (at, remove, add) in splice_plan(&old, &new) {
+            if remove == 0 && add.is_empty() {
+                continue;
+            }
+            let refs: Vec<&str> = new[add].iter().map(String::as_str).collect();
+            self.model.splice(at as u32, remove as u32, &refs);
+        }
+        *self.current.borrow_mut() = new;
     }
 
     fn widget(&self) -> gtk::ScrolledWindow {
@@ -130,11 +149,15 @@ fn bytes(b: u64) -> String {
 }
 
 fn status_text(r: &RequestEntry) -> String {
-    match (r.status, &r.error) {
+    let base = match (r.status, &r.error) {
         (Some(s), Some(e)) => format!("{s} · {e}"),
         (None, Some(e)) => e.clone(),
         (Some(s), None) => s.to_string(),
         (None, None) => String::new(),
+    };
+    match &r.note {
+        Some(n) => format!("{base} · {n}"),
+        None => base,
     }
 }
 
@@ -146,23 +169,27 @@ fn rate_text(r: &RequestEntry) -> String {
     }
 }
 
-fn latest_rate_limits(requests: &[RequestEntry]) -> BTreeMap<String, (i64, Option<i64>)> {
-    let mut out = BTreeMap::new();
-    for r in requests {
-        if let Some(n) = r.rate_limit_remaining {
-            out.insert(r.rate_limit_resource.clone().unwrap_or_else(|| r.kind.to_string()), (n, r.rate_limit_reset));
-        }
+fn display_name(r: &RequestEntry) -> String {
+    match (&r.path, r.name.split_once(' ')) {
+        (Some(path), Some((method, _))) => format!("{method} {path}"),
+        _ => r.name.clone(),
     }
-    out
 }
 
-fn recent_ticks(snap: &Snapshot) -> Vec<f64> {
-    snap.ticks.iter().rev().take(RECENT_TICKS).map(|t| t.duration_ms).collect()
+fn rate_lines(snap: &Snapshot) -> Vec<String> {
+    diagnostics::latest_rate_limits(&snap.requests)
+        .into_iter()
+        .map(|(res, n, reset)| format!("{res} {n}{}", reset.map(|r| format!(", resets {}", reset_clock(r))).unwrap_or_default()))
+        .collect()
 }
 
-fn span_text(snap: &Snapshot) -> Option<(String, f64)> {
-    let first = snap.requests.first()?.ts;
-    let last = snap.requests.last()?.ts;
+fn recent_ticks(ticks: &[TickEntry]) -> Vec<f64> {
+    diagnostics::active_ticks(ticks).rev().take(RECENT_TICKS).map(|t| t.duration_ms).collect()
+}
+
+fn span<'a>(newest_first: impl Iterator<Item = &'a RequestEntry> + Clone) -> Option<(String, f64)> {
+    let last = newest_first.clone().next()?.ts;
+    let first = newest_first.last()?.ts;
     let secs = (last - first).num_milliseconds().max(0) as f64 / 1000.0;
     let label = if secs >= 60.0 { format!("{}m {}s", (secs / 60.0).floor(), (secs % 60.0).floor()) } else { format!("{secs:.0}s") };
     Some((label, secs))
@@ -173,24 +200,28 @@ fn summary_text(snap: &Snapshot) -> String {
     let graphql = snap.requests.iter().filter(|r| r.kind == "graphql").count();
     let mut out = format!("{} {} diagnostics — {}\n", brand::APP_NAME, brand::VERSION, Local::now().format("%Y-%m-%d %H:%M:%S"));
     out.push_str(&format!("Requests: {} (graphql {}, rest {}) · live-tick {} · user {} · errors {}\n", all.count, graphql, all.count - graphql, all.live, all.count - all.live, all.errors));
-    if let Some((label, secs)) = span_text(snap) {
+    if let Some((label, secs)) = span(snap.requests.iter().rev()) {
         let per_min = if secs > 0.0 { all.count as f64 / secs * 60.0 } else { 0.0 };
         out.push_str(&format!("Window: {label} · {per_min:.1} requests/min\n"));
     }
     out.push_str(&format!("Data: {}\n", bytes(all.bytes)));
     out.push_str(&format!("Duration: avg {} · p95 {}\n", ms(all.avg_ms), ms(all.p95_ms)));
-    for (resource, (n, reset)) in latest_rate_limits(&snap.requests) {
-        out.push_str(&format!("Rate limit {resource}: {n} remaining{}\n", reset.map(|r| format!(", resets {}", reset_clock(r))).unwrap_or_default()));
+    for line in rate_lines(snap) {
+        out.push_str(&format!("Rate limit {line}\n"));
     }
-    let ticks = recent_ticks(snap);
+    let active: Vec<&TickEntry> = diagnostics::active_ticks(&snap.ticks).collect();
     if !snap.ticks.is_empty() {
-        let avg = snap.ticks.iter().map(|t| t.duration_ms).sum::<f64>() / snap.ticks.len() as f64;
-        let reqs = snap.ticks.iter().map(|t| t.requests).sum::<usize>() as f64 / snap.ticks.len() as f64;
+        let idle = snap.ticks.len() - active.len();
+        let (avg, reqs) = if active.is_empty() {
+            (0.0, 0.0)
+        } else {
+            (active.iter().map(|t| t.duration_ms).sum::<f64>() / active.len() as f64, active.iter().map(|t| t.requests).sum::<usize>() as f64 / active.len() as f64)
+        };
         out.push_str(&format!(
-            "Live ticks: {} · avg {} · avg {reqs:.1} requests · last: {}\n",
-            snap.ticks.len(),
+            "Live ticks: {} with requests ({idle} without) · avg {} · avg {reqs:.1} requests · last: {}\n",
+            active.len(),
             ms(avg),
-            ticks.iter().map(|v| format!("{v:.0}")).collect::<Vec<_>>().join(", ")
+            recent_ticks(&snap.ticks).iter().map(|v| format!("{v:.0}")).collect::<Vec<_>>().join(", ")
         ));
     }
     if !snap.slow_ui.is_empty() {
@@ -215,12 +246,12 @@ impl Panel {
         self.banner.set_revealed(!diagnostics::enabled());
         let snap = diagnostics::snapshot();
         let needle = self.filter.text().to_string();
-        let matches = |name: &str| needle.is_empty() || util::contains_ci(name, &needle);
-        let reqs: Vec<&RequestEntry> = snap.requests.iter().rev().filter(|r| matches(&r.name)).collect();
+        let matches = |text: &str| needle.is_empty() || util::contains_ci(text, &needle);
+        let reqs: Vec<&RequestEntry> = snap.requests.iter().rev().filter(|r| matches(&r.name) || r.path.as_deref().is_some_and(matches)).collect();
         self.render_summary(&snap, &reqs);
         self.requests.set_rows(
             reqs.iter()
-                .map(|r| vec![clock(r.ts), r.kind.to_string(), r.name.clone(), r.origin.to_string(), ms(r.duration_ms), bytes(r.bytes), status_text(r), rate_text(r)])
+                .map(|r| vec![clock(r.ts), r.kind.to_string(), display_name(r), r.origin.to_string(), ms(r.duration_ms), bytes(r.bytes), status_text(r), rate_text(r)])
                 .collect(),
         );
         self.grouped.set_rows(
@@ -238,9 +269,9 @@ impl Panel {
         let graphql = reqs.iter().filter(|r| r.kind == "graphql").count();
         self.requests_stat.value.set_text(&s.count.to_string());
         let mut detail = format!("graphql {graphql} · rest {}\nlive-tick {} · user {}", s.count - graphql, s.live, s.count - s.live);
-        if let Some((label, secs)) = span_text(snap) {
+        if let Some((label, secs)) = span(reqs.iter().copied()) {
             if secs > 0.0 {
-                detail.push_str(&format!("\n{:.1}/min over {label}", snap.requests.len() as f64 / secs * 60.0));
+                detail.push_str(&format!("\n{:.1}/min over {label}", s.count as f64 / secs * 60.0));
             }
         }
         self.requests_stat.detail.set_text(&detail);
@@ -250,23 +281,30 @@ impl Panel {
         self.duration_stat.detail.set_text(&format!("p95 {}", ms(s.p95_ms)));
         self.errors_stat.value.set_text(&s.errors.to_string());
         self.errors_stat.detail.set_text(&reqs.iter().find(|r| r.error.is_some()).map(|r| format!("last: {}", r.name)).unwrap_or_default());
-        let latest = snap.requests.iter().rev().find(|r| r.rate_limit_remaining.is_some());
-        self.rate_stat.value.set_text(&latest.and_then(|r| r.rate_limit_remaining).map(|n| n.to_string()).unwrap_or_else(|| "—".into()));
+        let limits = diagnostics::latest_rate_limits(&snap.requests);
+        self.rate_stat.value.set_text(&if limits.is_empty() { "—".to_string() } else { limits.iter().map(|(res, n, _)| format!("{res} {n}")).collect::<Vec<_>>().join("\n") });
         self.rate_stat.detail.set_text(
-            &latest_rate_limits(&snap.requests)
-                .into_iter()
-                .map(|(res, (n, reset))| format!("{res} {n}{}", reset.map(|r| format!(", resets {}", reset_clock(r))).unwrap_or_default()))
+            &limits
+                .iter()
+                .filter_map(|(res, _, reset)| reset.map(|r| format!("{res} resets {}", reset_clock(r))))
                 .collect::<Vec<_>>()
                 .join("\n"),
         );
-        let recent = recent_ticks(snap);
+        let recent = recent_ticks(&snap.ticks);
+        let idle = snap.ticks.len() - diagnostics::active_ticks(&snap.ticks).count();
         if recent.is_empty() {
             self.ticks_stat.value.set_text("—");
-            self.ticks_stat.detail.set_text("");
         } else {
             self.ticks_stat.value.set_text(&format!("avg {}", ms(recent.iter().sum::<f64>() / recent.len() as f64)));
-            self.ticks_stat.detail.set_text(&format!("last: {} ms", recent.iter().map(|v| format!("{v:.0}")).collect::<Vec<_>>().join(" · ")));
         }
+        let mut detail = if recent.is_empty() { String::new() } else { format!("last: {} ms", recent.iter().map(|v| format!("{v:.0}")).collect::<Vec<_>>().join(" · ")) };
+        if idle > 0 {
+            if !detail.is_empty() {
+                detail.push('\n');
+            }
+            detail.push_str(&format!("{} without requests", util::plural(idle as i64, "tick", "ticks")));
+        }
+        self.ticks_stat.detail.set_text(&detail);
     }
 
     fn toast(&self, msg: &str) {
@@ -348,7 +386,7 @@ pub fn show() {
     let duration_stat = stat(&cards, "Duration");
     let errors_stat = stat(&cards, "Errors");
     let rate_stat = stat(&cards, "Rate limit remaining");
-    let ticks_stat = stat(&cards, &format!("Last {RECENT_TICKS} live ticks"));
+    let ticks_stat = stat(&cards, &format!("Last {RECENT_TICKS} live ticks with requests"));
     body.append(&cards);
 
     let filter = gtk::SearchEntry::new();
@@ -456,4 +494,43 @@ pub fn show() {
     keep_alive(&window, panel);
     OPEN.with(|o| *o.borrow_mut() = Some(window.downgrade()));
     window.present();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::splice_plan;
+
+    fn apply(old: &[&str], new: &[&str]) -> Vec<String> {
+        let old: Vec<String> = old.iter().map(|s| s.to_string()).collect();
+        let new: Vec<String> = new.iter().map(|s| s.to_string()).collect();
+        let mut model = old.clone();
+        for (at, remove, add) in splice_plan(&old, &new) {
+            model.splice(at..at + remove, new[add].iter().cloned());
+        }
+        model
+    }
+
+    #[test]
+    fn splice_plan_reproduces_new_rows() {
+        let cases: [(&[&str], &[&str]); 7] = [
+            (&[], &["a", "b"]),
+            (&["a", "b", "c"], &["x", "a", "b"]),
+            (&["a", "b", "c"], &["y", "x", "a", "b", "c"]),
+            (&["a", "b", "c"], &["a", "q", "c"]),
+            (&["a", "b"], &[]),
+            (&["a", "b", "c"], &["c", "b", "a"]),
+            (&["a", "a", "b"], &["z", "a", "a"]),
+        ];
+        for (old, new) in cases {
+            assert_eq!(apply(old, new), new.iter().map(|s| s.to_string()).collect::<Vec<_>>(), "{old:?} -> {new:?}");
+        }
+    }
+
+    #[test]
+    fn prepending_keeps_existing_rows_in_place() {
+        let old: Vec<String> = ["a", "b"].iter().map(|s| s.to_string()).collect();
+        let new: Vec<String> = ["n", "a", "b"].iter().map(|s| s.to_string()).collect();
+        let plan = splice_plan(&old, &new);
+        assert!(plan.iter().all(|(at, remove, _)| *remove == 0 || *at > 0));
+    }
 }

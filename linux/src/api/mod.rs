@@ -91,13 +91,17 @@ fn describe_graphql_error(e: &Value) -> String {
     }
 }
 
+pub fn scrub(mut e: reqwest::Error) -> reqwest::Error {
+    if let Some(url) = e.url_mut() {
+        url.set_query(None);
+        url.set_fragment(None);
+    }
+    e
+}
+
 fn net<T>(probe: &mut Probe, result: Result<T, reqwest::Error>) -> ApiResult<T> {
-    result.map_err(|mut e| {
-        if let Some(url) = e.url_mut() {
-            url.set_query(None);
-            url.set_fragment(None);
-        }
-        let err = ApiError::from(e);
+    result.map_err(|e| {
+        let err = ApiError::from(scrub(e));
         probe.fail(&err);
         err
     })
@@ -145,7 +149,7 @@ impl GitHubApi {
     }
 
     pub async fn graphql<T: DeserializeOwned>(&self, name: &'static str, query: &str, variables: Value, strict: bool) -> ApiResult<T> {
-        self.graphql_probed(diagnostics::begin("graphql", || name.to_string()), query, variables, strict).await
+        self.graphql_probed(diagnostics::begin_graphql(|| name.to_string()), query, variables, strict).await
     }
 
     async fn graphql_probed<T: DeserializeOwned>(&self, mut probe: Probe, query: &str, variables: Value, strict: bool) -> ApiResult<T> {
@@ -171,10 +175,12 @@ impl GitHubApi {
         let errors = value.get("errors").and_then(|e| e.as_array()).cloned().unwrap_or_default();
         let data = value.get("data").cloned().unwrap_or(Value::Null);
         if let Some(first) = errors.first() {
-            probe.fail(describe_graphql_error(first));
             if strict || data.is_null() {
-                return Err(ApiError::new(describe_graphql_error(first)));
+                let err = ApiError::new(describe_graphql_error(first));
+                probe.fail(&err);
+                return Err(err);
             }
+            probe.note_with(|| format!("partial: {}", describe_graphql_error(first)));
         }
         if data.is_null() {
             return probe.track(Err(ApiError::new("Empty response from GitHub")));
@@ -186,30 +192,35 @@ impl GitHubApi {
     }
 
     pub async fn mutate(&self, query: &str, vars: Value) -> ApiResult<()> {
-        let probe = diagnostics::begin("graphql", || diagnostics::graphql_name(query));
+        let probe = diagnostics::begin_graphql(|| diagnostics::graphql_name(query));
         let _: Value = self.graphql_probed(probe, query, vars, true).await?;
         Ok(())
     }
 
-    pub async fn rest_raw(&self, method: Method, path: &str, body: Option<Value>) -> ApiResult<(Vec<u8>, HeaderMap)> {
-        let mut probe = diagnostics::begin("rest", || diagnostics::rest_name(method.as_str(), path));
+    async fn exchange(&self, probe: &mut Probe, method: Method, path: &str, body: Option<Value>) -> ApiResult<(Vec<u8>, HeaderMap)> {
         let mut req = self.inner.client.request(method, Self::url(path)).header(AUTHORIZATION, self.auth()).header(ACCEPT, "application/vnd.github+json");
         if let Some(body) = body {
             req = req.json(&body);
         }
-        let resp = net(&mut probe, req.send().await)?;
+        let resp = net(probe, req.send().await)?;
         let status = resp.status();
         let headers = resp.headers().clone();
         probe.response(status.as_u16(), &headers);
-        let bytes = net(&mut probe, resp.bytes().await)?.to_vec();
+        let bytes = net(probe, resp.bytes().await)?.to_vec();
         probe.body(bytes.len());
         probe.track(check_status(status, &bytes))?;
         Ok((bytes, headers))
     }
 
+    pub async fn rest_raw(&self, method: Method, path: &str, body: Option<Value>) -> ApiResult<(Vec<u8>, HeaderMap)> {
+        let mut probe = diagnostics::begin_rest(method.as_str(), path);
+        self.exchange(&mut probe, method, path, body).await
+    }
+
     pub async fn rest<T: DeserializeOwned>(&self, method: Method, path: &str, body: Option<Value>) -> ApiResult<T> {
-        let (bytes, _) = self.rest_raw(method, path, body).await?;
-        serde_json::from_slice(&bytes).map_err(|e| ApiError::new(format!("Failed to parse response: {e}")))
+        let mut probe = diagnostics::begin_rest(method.as_str(), path);
+        let (bytes, _) = self.exchange(&mut probe, method, path, body).await?;
+        probe.track(serde_json::from_slice(&bytes).map_err(|e| ApiError::new(format!("Failed to parse response: {e}"))))
     }
 
     pub async fn send(&self, method: Method, path: &str, body: Option<Value>) -> ApiResult<()> {
@@ -217,7 +228,7 @@ impl GitHubApi {
     }
 
     pub async fn redirect_target(&self, path: &str) -> ApiResult<String> {
-        let mut probe = diagnostics::begin("rest", || diagnostics::rest_name("GET", path));
+        let mut probe = diagnostics::begin_rest("GET", path);
         let resp = net(
             &mut probe,
             self.inner
@@ -232,6 +243,7 @@ impl GitHubApi {
         probe.response(status.as_u16(), resp.headers());
         if status.is_redirection() {
             if let Some(loc) = resp.headers().get("location").and_then(|v| v.to_str().ok()) {
+                probe.finish();
                 return Ok(loc.to_string());
             }
         }
@@ -242,7 +254,7 @@ impl GitHubApi {
     }
 
     pub async fn plain(&self, url: &str) -> ApiResult<String> {
-        let mut probe = diagnostics::begin("rest", || diagnostics::rest_name("GET", url));
+        let mut probe = diagnostics::begin_rest("GET", url);
         let resp = net(&mut probe, self.inner.plain.get(url).send().await)?;
         let status = resp.status();
         probe.response(status.as_u16(), resp.headers());
@@ -253,11 +265,12 @@ impl GitHubApi {
     }
 
     pub async fn fetch(&self, path: &str, accept: &str) -> ApiResult<Option<Vec<u8>>> {
-        let mut probe = diagnostics::begin("rest", || diagnostics::rest_name("GET", path));
+        let mut probe = diagnostics::begin_rest("GET", path);
         let resp = net(&mut probe, self.inner.client.get(Self::url(path)).header(AUTHORIZATION, self.auth()).header(ACCEPT, accept).send().await)?;
         let status = resp.status();
         probe.response(status.as_u16(), resp.headers());
         if status == StatusCode::NOT_FOUND {
+            probe.finish();
             return Ok(None);
         }
         if !status.is_success() {
@@ -274,4 +287,13 @@ static SHARED: std::sync::LazyLock<Client> =
 
 pub fn http_client() -> Client {
     SHARED.clone()
+}
+
+pub async fn probed_get(probe: &mut Probe, request: reqwest::RequestBuilder) -> Result<(StatusCode, Vec<u8>), ApiError> {
+    let resp = net(probe, request.send().await)?;
+    let status = resp.status();
+    probe.response(status.as_u16(), resp.headers());
+    let bytes = net(probe, resp.bytes().await)?.to_vec();
+    probe.body(bytes.len());
+    Ok((status, bytes))
 }

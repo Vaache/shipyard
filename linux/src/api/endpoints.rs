@@ -353,10 +353,12 @@ impl GitHubApi {
         let mut u = url::Url::parse(url).ok()?;
         let pairs: Vec<(String, String)> = u.query_pairs().filter(|(k, _)| k != "s").map(|(k, v)| (k.to_string(), v.to_string())).collect();
         u.query_pairs_mut().clear().extend_pairs(pairs).append_pair("s", &(size * 2).to_string());
-        let resp = super::http_client().get(u.as_str()).send().await.ok()?;
-        if !resp.status().is_success() {
+        let mut probe = crate::diagnostics::begin_rest("GET", u.as_str());
+        let (status, bytes) = super::probed_get(&mut probe, super::http_client().get(u.as_str())).await.ok()?;
+        if !status.is_success() {
+            probe.fail_with(|| format!("HTTP {}", status.as_u16()));
             return None;
         }
-        resp.bytes().await.ok().map(|b| b.to_vec())
+        Some(bytes)
     }
 }

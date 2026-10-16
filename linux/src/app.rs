@@ -555,11 +555,12 @@ impl App {
     }
 
     fn tick_live(self: &Rc<Self>) {
-        crate::diagnostics::tick_begin();
-        self.state.borrow_mut().last_live = Instant::now();
-        self.live.emit(&());
-        let me = self.clone();
-        crate::rt::spawn_local(async move { me.refresh_badges().await });
+        crate::diagnostics::live_tick(|| {
+            self.state.borrow_mut().last_live = Instant::now();
+            self.live.emit(&());
+            let me = self.clone();
+            crate::rt::spawn_local(async move { me.refresh_badges().await });
+        });
     }
 
     pub async fn refresh_badges(self: Rc<Self>) {

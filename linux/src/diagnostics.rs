@@ -1,6 +1,10 @@
+use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex, MutexGuard};
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -16,10 +20,19 @@ const TICK_MAX: Duration = Duration::from_secs(30);
 
 pub const ORIGIN_LIVE: &str = "live-tick";
 pub const ORIGIN_USER: &str = "user";
+pub const CANCELLED: &str = "cancelled";
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 static STORE: LazyLock<Mutex<Store>> = LazyLock::new(|| Mutex::new(Store::default()));
+
+tokio::task_local! {
+    pub static TICK: u64;
+}
+
+thread_local! {
+    static AMBIENT: Cell<u64> = const { Cell::new(0) };
+}
 
 fn ts_millis<S: Serializer>(ts: &DateTime<Utc>, s: S) -> Result<S::Ok, S::Error> {
     s.serialize_str(&ts.to_rfc3339_opts(SecondsFormat::Millis, true))
@@ -36,11 +49,13 @@ pub struct RequestEntry {
     pub ts: DateTime<Utc>,
     pub kind: &'static str,
     pub name: String,
+    pub path: Option<String>,
     pub origin: &'static str,
     pub duration_ms: f64,
     pub bytes: u64,
     pub status: Option<u16>,
     pub error: Option<String>,
+    pub note: Option<String>,
     pub rate_limit_remaining: Option<i64>,
     pub rate_limit_reset: Option<i64>,
     pub rate_limit_resource: Option<String>,
@@ -80,8 +95,10 @@ struct OpenTick {
     ts: DateTime<Utc>,
     started: Instant,
     in_flight: usize,
+    tasks: usize,
     requests: usize,
     last_end: Option<Instant>,
+    last_activity: Instant,
 }
 
 #[derive(Default)]
@@ -101,21 +118,39 @@ fn push_capped<T>(q: &mut VecDeque<T>, item: T, cap: usize) {
 }
 
 impl Store {
-    fn attach(&mut self) -> (&'static str, u64) {
-        match self.tick.as_mut() {
-            Some(t) => {
-                t.in_flight += 1;
-                t.requests += 1;
-                (ORIGIN_LIVE, t.id)
-            }
-            None => (ORIGIN_USER, 0),
+    fn open(&mut self, id: u64) -> Option<&mut OpenTick> {
+        self.tick.as_mut().filter(|t| t.id == id)
+    }
+
+    fn attach(&mut self, tick: u64) -> &'static str {
+        if tick == 0 {
+            return ORIGIN_USER;
+        }
+        if let Some(t) = self.open(tick) {
+            t.in_flight += 1;
+            t.requests += 1;
+        }
+        ORIGIN_LIVE
+    }
+
+    fn detach(&mut self, tick: u64, end: Instant, now: Instant) {
+        if let Some(t) = self.open(tick) {
+            t.in_flight = t.in_flight.saturating_sub(1);
+            t.last_end = Some(t.last_end.map_or(end, |e| e.max(end)));
+            t.last_activity = now;
         }
     }
 
-    fn detach(&mut self, tick: u64, now: Instant) {
-        if let Some(t) = self.tick.as_mut().filter(|t| t.id == tick) {
-            t.in_flight = t.in_flight.saturating_sub(1);
-            t.last_end = Some(now);
+    fn task_started(&mut self, tick: u64) {
+        if let Some(t) = self.open(tick) {
+            t.tasks += 1;
+        }
+    }
+
+    fn task_done(&mut self, tick: u64, now: Instant) {
+        if let Some(t) = self.open(tick) {
+            t.tasks = t.tasks.saturating_sub(1);
+            t.last_activity = now;
         }
     }
 
@@ -129,7 +164,7 @@ impl Store {
 
     fn settle_tick(&mut self, id: u64, now: Instant) -> bool {
         let Some(t) = self.tick.as_ref().filter(|t| t.id == id) else { return true };
-        let quiet = t.in_flight == 0 && now.saturating_duration_since(t.last_end.unwrap_or(t.started)) >= TICK_SETTLE;
+        let quiet = t.in_flight == 0 && t.tasks == 0 && now.saturating_duration_since(t.last_activity) >= TICK_SETTLE;
         if quiet || now.saturating_duration_since(t.started) >= TICK_MAX {
             self.close_tick();
             return true;
@@ -184,7 +219,7 @@ pub fn snapshot() -> Snapshot {
 
 pub fn export_lines(snap: &Snapshot) -> String {
     let mut lines: Vec<(DateTime<Utc>, String)> = Vec::with_capacity(snap.requests.len() + snap.ticks.len() + snap.slow_ui.len());
-    let mut add = |ts: DateTime<Utc>, line: Line| {
+    let mut add = |ts: DateTime<Utc>, line: Line<'_>| {
         if let Ok(s) = serde_json::to_string(&line) {
             lines.push((ts, s));
         }
@@ -207,42 +242,126 @@ pub fn export_lines(snap: &Snapshot) -> String {
     out
 }
 
+pub fn current_tick() -> u64 {
+    if !enabled() {
+        return 0;
+    }
+    TICK.try_with(|t| *t).unwrap_or_else(|_| AMBIENT.with(Cell::get))
+}
+
+pub struct Scoped<F> {
+    tick: u64,
+    inner: Pin<Box<F>>,
+}
+
+impl<F: Future> Scoped<F> {
+    pub fn new(tick: u64, future: F) -> Self {
+        store().task_started(tick);
+        Scoped { tick, inner: Box::pin(future) }
+    }
+}
+
+impl<F: Future> Future for Scoped<F> {
+    type Output = F::Output;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<F::Output> {
+        let this = self.get_mut();
+        let prev = AMBIENT.with(|a| a.replace(this.tick));
+        let out = this.inner.as_mut().poll(cx);
+        AMBIENT.with(|a| a.set(prev));
+        out
+    }
+}
+
+impl<F> Drop for Scoped<F> {
+    fn drop(&mut self) {
+        store().task_done(self.tick, Instant::now());
+    }
+}
+
+pub fn live_tick(f: impl FnOnce()) {
+    if !enabled() {
+        f();
+        return;
+    }
+    let id = {
+        let mut s = store();
+        s.close_tick();
+        s.next_tick += 1;
+        let id = s.next_tick;
+        let now = Instant::now();
+        s.tick = Some(OpenTick { id, ts: Utc::now(), started: now, in_flight: 0, tasks: 0, requests: 0, last_end: None, last_activity: now });
+        id
+    };
+    let prev = AMBIENT.with(|a| a.replace(id));
+    f();
+    AMBIENT.with(|a| a.set(prev));
+    gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
+        if store().settle_tick(id, Instant::now()) {
+            gtk::glib::ControlFlow::Break
+        } else {
+            gtk::glib::ControlFlow::Continue
+        }
+    });
+}
+
 struct Pending {
     ts: DateTime<Utc>,
     started: Instant,
+    ended: Option<Instant>,
+    done: bool,
     kind: &'static str,
     name: String,
+    path: Option<String>,
     origin: &'static str,
     tick: u64,
     status: Option<u16>,
     bytes: u64,
     error: Option<String>,
+    note: Option<String>,
     rate_limit_remaining: Option<i64>,
     rate_limit_reset: Option<i64>,
     rate_limit_resource: Option<String>,
 }
 
-pub struct Probe(Option<Pending>);
+pub struct Probe(Option<Box<Pending>>);
 
-pub fn begin(kind: &'static str, name: impl FnOnce() -> String) -> Probe {
-    if !enabled() {
-        return Probe(None);
-    }
-    let (origin, tick) = store().attach();
-    Probe(Some(Pending {
+fn start(kind: &'static str, name: String, path: Option<String>) -> Probe {
+    let tick = current_tick();
+    let origin = store().attach(tick);
+    Probe(Some(Box::new(Pending {
         ts: Utc::now(),
         started: Instant::now(),
+        ended: None,
+        done: false,
         kind,
-        name: name(),
+        name,
+        path,
         origin,
         tick,
         status: None,
         bytes: 0,
         error: None,
+        note: None,
         rate_limit_remaining: None,
         rate_limit_reset: None,
         rate_limit_resource: None,
-    }))
+    })))
+}
+
+pub fn begin_graphql(name: impl FnOnce() -> String) -> Probe {
+    if !enabled() {
+        return Probe(None);
+    }
+    start("graphql", name(), None)
+}
+
+pub fn begin_rest(method: &str, url: &str) -> Probe {
+    if !enabled() {
+        return Probe(None);
+    }
+    let path = rest_path(url);
+    start("rest", format!("{method} {}", normalize_path(&path)), Some(path))
 }
 
 fn header<'a>(headers: &'a HeaderMap, key: &str) -> Option<&'a str> {
@@ -250,27 +369,48 @@ fn header<'a>(headers: &'a HeaderMap, key: &str) -> Option<&'a str> {
 }
 
 impl Probe {
+    fn with(&mut self, f: impl FnOnce(&mut Pending)) {
+        if let Some(p) = self.0.as_deref_mut() {
+            f(p);
+        }
+    }
+
     pub fn response(&mut self, status: u16, headers: &HeaderMap) {
-        if let Some(p) = self.0.as_mut() {
+        self.with(|p| {
             p.status = Some(status);
             p.rate_limit_remaining = header(headers, "x-ratelimit-remaining").and_then(|v| v.parse().ok());
             p.rate_limit_reset = header(headers, "x-ratelimit-reset").and_then(|v| v.parse().ok());
             p.rate_limit_resource = header(headers, "x-ratelimit-resource").map(str::to_string);
-        }
+        });
     }
 
     pub fn body(&mut self, bytes: usize) {
-        if let Some(p) = self.0.as_mut() {
-            p.bytes = bytes as u64;
-        }
+        self.with(|p| p.bytes = bytes as u64);
+        self.finish();
+    }
+
+    pub fn finish(&mut self) {
+        self.with(|p| {
+            p.ended.get_or_insert_with(Instant::now);
+            p.done = true;
+        });
+    }
+
+    pub fn fail_with(&mut self, error: impl FnOnce() -> String) {
+        self.with(|p| {
+            if p.error.is_none() {
+                p.error = Some(error());
+            }
+        });
+        self.finish();
     }
 
     pub fn fail(&mut self, error: impl std::fmt::Display) {
-        if let Some(p) = self.0.as_mut() {
-            if p.error.is_none() {
-                p.error = Some(error.to_string());
-            }
-        }
+        self.fail_with(|| error.to_string());
+    }
+
+    pub fn note_with(&mut self, note: impl FnOnce() -> String) {
+        self.with(|p| p.note = Some(note()));
     }
 
     pub fn track<T, E: std::fmt::Display>(&mut self, result: Result<T, E>) -> Result<T, E> {
@@ -284,47 +424,31 @@ impl Probe {
 impl Drop for Probe {
     fn drop(&mut self) {
         let Some(p) = self.0.take() else { return };
+        let p = *p;
         let now = Instant::now();
+        let end = p.ended.unwrap_or(now);
+        let error = if p.done { p.error } else { p.error.or_else(|| Some(CANCELLED.to_string())) };
         let entry = RequestEntry {
             ts: p.ts,
             kind: p.kind,
             name: p.name,
+            path: p.path,
             origin: p.origin,
-            duration_ms: round_ms(now.saturating_duration_since(p.started)),
+            duration_ms: round_ms(end.saturating_duration_since(p.started)),
             bytes: p.bytes,
             status: p.status,
-            error: p.error,
+            error,
+            note: p.note,
             rate_limit_remaining: p.rate_limit_remaining,
             rate_limit_reset: p.rate_limit_reset,
             rate_limit_resource: p.rate_limit_resource,
         };
         let mut s = store();
-        s.detach(p.tick, now);
+        s.detach(p.tick, end, now);
         push_capped(&mut s.requests, entry, REQUEST_CAPACITY);
         drop(s);
         bump();
     }
-}
-
-pub fn tick_begin() {
-    if !enabled() {
-        return;
-    }
-    let id = {
-        let mut s = store();
-        s.close_tick();
-        s.next_tick += 1;
-        let id = s.next_tick;
-        s.tick = Some(OpenTick { id, ts: Utc::now(), started: Instant::now(), in_flight: 0, requests: 0, last_end: None });
-        id
-    };
-    gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
-        if store().settle_tick(id, Instant::now()) {
-            gtk::glib::ControlFlow::Break
-        } else {
-            gtk::glib::ControlFlow::Continue
-        }
-    });
 }
 
 pub struct UiSpan(Option<(&'static str, Instant)>);
@@ -376,16 +500,44 @@ pub fn graphql_name(query: &str) -> String {
     }
 }
 
-pub fn rest_name(method: &str, path: &str) -> String {
-    let without_host = match path.find("://") {
+pub fn rest_path(url: &str) -> String {
+    let without_host = match url.find("://") {
         Some(i) => {
-            let after = &path[i + 3..];
+            let after = &url[i + 3..];
             after.find('/').map(|j| &after[j..]).unwrap_or("/")
         }
-        None => path,
+        None => url,
     };
-    let clean = without_host.split(['?', '#']).next().unwrap_or("");
-    format!("{method} {clean}")
+    without_host.split(['?', '#']).next().unwrap_or("").to_string()
+}
+
+fn is_sha(s: &str) -> bool {
+    s.len() == 40 && s.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+pub fn normalize_path(path: &str) -> String {
+    let segs: Vec<&str> = path.split('/').collect();
+    let in_repo = segs.len() > 1 && segs[0].is_empty() && segs[1] == "repos";
+    let mut out: Vec<&str> = Vec::with_capacity(segs.len());
+    for (i, s) in segs.iter().copied().enumerate() {
+        let prev = if i > 0 { segs[i - 1] } else { "" };
+        if prev == "contents" && in_repo && i > 4 {
+            out.push("{path}");
+            break;
+        }
+        let token = match (i, prev) {
+            (2, "repos") if in_repo => "{owner}",
+            (3, _) if in_repo => "{repo}",
+            (2, "users") => "{user}",
+            (2, "orgs") => "{org}",
+            (_, "branches") if in_repo => "{branch}",
+            _ if !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) => "{n}",
+            _ if is_sha(s) => "{sha}",
+            _ => s,
+        };
+        out.push(token);
+    }
+    out.join("/")
 }
 
 pub fn percentile(sorted: &[f64], p: f64) -> f64 {
@@ -437,6 +589,22 @@ pub fn grouped<'a>(entries: impl IntoIterator<Item = &'a RequestEntry>) -> Vec<(
     out
 }
 
+pub fn active_ticks<'a>(ticks: &'a [TickEntry]) -> impl DoubleEndedIterator<Item = &'a TickEntry> + 'a {
+    ticks.iter().filter(|t| t.requests > 0)
+}
+
+pub fn latest_rate_limits(requests: &[RequestEntry]) -> Vec<(String, i64, Option<i64>)> {
+    let mut by_resource: Vec<(String, i64, Option<i64>)> = vec![];
+    for r in requests.iter().rev() {
+        let (Some(n), Some(res)) = (r.rate_limit_remaining, r.rate_limit_resource.as_deref()) else { continue };
+        if !by_resource.iter().any(|(k, _, _)| k == res) {
+            by_resource.push((res.to_string(), n, r.rate_limit_reset));
+        }
+    }
+    by_resource.sort_by(|a, b| a.0.cmp(&b.0));
+    by_resource
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -446,15 +614,21 @@ mod tests {
             ts: Utc::now(),
             kind: "rest",
             name: name.into(),
+            path: Some("/user".into()),
             origin,
             duration_ms: ms,
             bytes,
             status: Some(200),
             error: None,
+            note: None,
             rate_limit_remaining: Some(4999),
             rate_limit_reset: Some(1_760_000_000),
             rate_limit_resource: Some("core".into()),
         }
+    }
+
+    fn open_tick(id: u64, started: Instant) -> OpenTick {
+        OpenTick { id, ts: Utc::now(), started, in_flight: 0, tasks: 0, requests: 0, last_end: None, last_activity: started }
     }
 
     #[test]
@@ -468,11 +642,23 @@ mod tests {
     }
 
     #[test]
-    fn rest_names_strip_host_and_query() {
-        assert_eq!(rest_name("GET", "/repos/o/r/pulls?per_page=100&page=2"), "GET /repos/o/r/pulls");
-        assert_eq!(rest_name("PUT", "https://api.github.com/notifications/threads/1?x=1"), "PUT /notifications/threads/1");
-        assert_eq!(rest_name("GET", "https://example.com"), "GET /");
-        assert_eq!(rest_name("GET", "/user#frag"), "GET /user");
+    fn rest_paths_strip_host_and_query() {
+        assert_eq!(rest_path("/repos/o/r/pulls?per_page=100&page=2"), "/repos/o/r/pulls");
+        assert_eq!(rest_path("https://api.github.com/notifications/threads/1?x=1"), "/notifications/threads/1");
+        assert_eq!(rest_path("https://example.com"), "/");
+        assert_eq!(rest_path("/user#frag"), "/user");
+    }
+
+    #[test]
+    fn rest_names_are_normalized() {
+        assert_eq!(normalize_path("/repos/octo/hello/pulls/12/files"), "/repos/{owner}/{repo}/pulls/{n}/files");
+        assert_eq!(normalize_path("/repos/octo/hello/contents/src/a%2Fb.rs"), "/repos/{owner}/{repo}/contents/{path}");
+        assert_eq!(normalize_path("/repos/octo/hello/commits/7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"), "/repos/{owner}/{repo}/commits/{sha}");
+        assert_eq!(normalize_path("/repos/octo/hello/branches/main/protection"), "/repos/{owner}/{repo}/branches/{branch}/protection");
+        assert_eq!(normalize_path("/notifications/threads/42"), "/notifications/threads/{n}");
+        assert_eq!(normalize_path("/users/octo/repos"), "/users/{user}/repos");
+        assert_eq!(normalize_path("/u/583231"), "/u/{n}");
+        assert_eq!(normalize_path("/user"), "/user");
     }
 
     #[test]
@@ -500,6 +686,20 @@ mod tests {
     }
 
     #[test]
+    fn rate_limits_are_latest_per_resource() {
+        let mut a = entry("a", 1.0, 1, ORIGIN_USER);
+        a.rate_limit_remaining = Some(10);
+        a.rate_limit_resource = Some("graphql".into());
+        let mut b = entry("b", 1.0, 1, ORIGIN_USER);
+        b.rate_limit_remaining = Some(4000);
+        let mut c = entry("c", 1.0, 1, ORIGIN_USER);
+        c.rate_limit_remaining = Some(9);
+        c.rate_limit_resource = Some("graphql".into());
+        let limits = latest_rate_limits(&[a, b, c]);
+        assert_eq!(limits.iter().map(|(r, n, _)| (r.as_str(), *n)).collect::<Vec<_>>(), vec![("core", 4000), ("graphql", 9)]);
+    }
+
+    #[test]
     fn ring_buffer_is_capped() {
         let mut q = VecDeque::new();
         for i in 0..(REQUEST_CAPACITY + 25) {
@@ -510,21 +710,33 @@ mod tests {
     }
 
     #[test]
-    fn tick_attribution_and_settle() {
+    fn tick_counts_only_its_own_requests_and_tasks() {
         let mut s = Store::default();
-        assert_eq!(s.attach(), (ORIGIN_USER, 0));
         let started = Instant::now();
-        s.tick = Some(OpenTick { id: 1, ts: Utc::now(), started, in_flight: 0, requests: 0, last_end: None });
-        let (origin, id) = s.attach();
-        assert_eq!((origin, id), (ORIGIN_LIVE, 1));
-        assert!(!s.settle_tick(1, started + Duration::from_secs(1)));
-        s.detach(1, started + Duration::from_millis(400));
-        assert!(!s.settle_tick(1, started + Duration::from_millis(500)));
-        assert!(s.settle_tick(1, started + Duration::from_millis(800)));
+        s.tick = Some(open_tick(1, started));
+        assert_eq!(s.attach(0), ORIGIN_USER);
+        assert_eq!(s.attach(1), ORIGIN_LIVE);
+        s.task_started(1);
+        s.detach(1, started + Duration::from_millis(400), started + Duration::from_millis(400));
+        assert!(!s.settle_tick(1, started + Duration::from_secs(2)));
+        s.task_done(1, started + Duration::from_secs(2));
+        assert!(!s.settle_tick(1, started + Duration::from_millis(2100)));
+        assert!(s.settle_tick(1, started + Duration::from_millis(2400)));
         assert!(s.tick.is_none());
         assert_eq!(s.ticks.len(), 1);
         assert_eq!(s.ticks[0].requests, 1);
         assert_eq!(s.ticks[0].duration_ms, 400.0);
+        assert_eq!(s.attach(1), ORIGIN_LIVE);
+    }
+
+    #[test]
+    fn user_request_does_not_hold_tick_open() {
+        let mut s = Store::default();
+        let started = Instant::now();
+        s.tick = Some(open_tick(2, started));
+        assert_eq!(s.attach(0), ORIGIN_USER);
+        assert!(s.settle_tick(2, started + Duration::from_millis(350)));
+        assert_eq!(s.ticks[0].requests, 0);
     }
 
     #[test]
@@ -537,6 +749,7 @@ mod tests {
         assert_eq!(req["durationMs"], 12.5);
         assert_eq!(req["rateLimitRemaining"], 4999);
         assert_eq!(req["origin"], "user");
+        assert_eq!(req["path"], "/user");
         assert!(req.get("authorization").is_none());
         assert!(lines.iter().any(|l| l["type"] == "slow-ui"));
     }
@@ -545,9 +758,14 @@ mod tests {
     fn disabled_probe_records_nothing() {
         ENABLED.store(false, Ordering::Relaxed);
         let before = store().requests.len();
-        let mut p = begin("rest", || unreachable!());
+        let mut p = begin_graphql(|| unreachable!());
         p.response(200, &HeaderMap::new());
+        p.fail_with(|| unreachable!());
+        drop(p);
+        let mut p = begin_rest("GET", "/user");
+        p.body(10);
         drop(p);
         assert_eq!(store().requests.len(), before);
+        assert_eq!(current_tick(), 0);
     }
 }
