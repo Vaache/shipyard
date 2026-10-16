@@ -151,7 +151,11 @@ public sealed class PRContent : Grid, IShortcutHost
         status.Retry = () => model.Load(true).Forget();
         busy.Visibility = Visibility.Collapsed;
         model.PropertyChanged += OnModel;
-        Unloaded += (_, _) => model.PropertyChanged -= OnModel;
+        Unloaded += (_, _) =>
+        {
+            model.PropertyChanged -= OnModel;
+            WatchFixTab(null);
+        };
         Loaded += (_, _) =>
         {
             model.PropertyChanged -= OnModel;
@@ -236,6 +240,9 @@ public sealed class PRContent : Grid, IShortcutHost
                 break;
             case nameof(PRDetailViewModel.PendingCount):
                 RenderToolbar();
+                break;
+            case nameof(PRDetailViewModel.CiFix):
+                RenderBanners();
                 break;
         }
     }
@@ -447,7 +454,86 @@ public sealed class PRContent : Grid, IShortcutHost
         if (model.Pr is null) return;
         if (ReReviewBanner(model, () => Dialogs.Reviewers(XamlRoot, model).Forget()) is { } rr) banners.Children.Add(rr);
         if (FixBanner(Pr, () => Dialogs.FixWithClaude(XamlRoot, model).Forget()) is { } fix) banners.Children.Add(fix);
+        var launch = model.CiFix is { } l && l.HeadOid == Pr.HeadRefOid ? l : null;
+        var fixTab = launch?.Tab is { } t && app.Claude.Tabs.Contains(t) ? t : null;
+        WatchFixTab(fixTab);
+        if (CiBanner(model, launch, fixTab, () => Dialogs.FixCi(XamlRoot, model).Forget(), () => ConfirmRerun().Forget(), () => OpenFixTab(fixTab)) is { } ciBanner) banners.Children.Add(ciBanner);
         banners.Visibility = banners.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private ClaudeTab? watchedTab;
+
+    private void WatchFixTab(ClaudeTab? tab)
+    {
+        if (ReferenceEquals(watchedTab, tab)) return;
+        if (watchedTab is not null) watchedTab.PropertyChanged -= OnFixTab;
+        watchedTab = tab;
+        if (tab is not null) tab.PropertyChanged += OnFixTab;
+    }
+
+    private void OnFixTab(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(ClaudeTab.State)) return;
+        DispatcherQueue.TryEnqueue(RenderBanners);
+    }
+
+    private void OpenFixTab(ClaudeTab? tab)
+    {
+        if (tab is null) return;
+        app.Section = Section.Claude;
+        app.Claude.SelectedTab = tab;
+    }
+
+    private async Task ConfirmRerun()
+    {
+        var runs = model.FailedRuns;
+        if (runs == 0) return;
+        var message = runs == 1 ? L.T("Checks_RerunOne", "GitHub Actions will re-run the failed jobs of 1 workflow run on the latest commit.") : L.F("Checks_RerunMany", "GitHub Actions will re-run the failed jobs of {0} workflow runs on the latest commit.", runs);
+        if (await Dialogs.Confirm(XamlRoot, L.T("Checks_RerunTitle", "Re-run failed jobs?"), L.T("Checks_RerunButton", "Re-run"), destructive: false, message: message))
+            await model.RerunFailed();
+    }
+
+    public static FrameworkElement? CiBanner(PRDetailViewModel model, CiFixLaunch? launch, ClaudeTab? fixTab, Action fix, Action rerun, Action openTab)
+    {
+        if (model.Pr is not { IsOpen: true }) return null;
+        var failing = model.FailingChecks;
+        if (failing.Count == 0) return null;
+        var text = failing.Count == 1 ? L.T("CiFix_OneFailing", "1 check failing") : L.F("CiFix_Failing", "{0} checks failing", failing.Count);
+        var row = Ui.H(8, Ui.IconTile("\uEA39", "red", 18), Ui.Text(text, 13));
+        var names = Ui.Text("· " + string.Join(", ", failing.Take(3).Select(c => c.FullTitle)) + (failing.Count > 3 ? ", …" : ""), 13, "muted");
+        names.TextTrimming = TextTrimming.CharacterEllipsis;
+        names.MaxWidth = 520;
+        row.Children.Add(names);
+        if (fixTab is { } tab)
+        {
+            var label = tab.Running ? L.T("CiFix_Running", "Fix running") : L.T("CiFix_Session", "Fix session");
+            var running = new Button
+            {
+                Content = Ui.Chip(label + " · " + tab.State.Title(), tab.State.ColorKey(), "\uE945"),
+                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(0)
+            };
+            Ui.Tip(running, L.T("CiFix_OpenSession", "Open the Claude Code session"));
+            running.Click += (_, _) => openTab();
+            row.Children.Add(running);
+        }
+        else if (launch is { Tab: null } external)
+        {
+            row.Children.Add(Ui.Chip(L.F("CiFix_Launched", "Fix launched in {0} · {1}", external.Target.Title(), Fmt.Rel(external.At)), "slate", "\uE945"));
+        }
+        else if (launch is { Tab: not null })
+        {
+            row.Children.Add(Ui.Chip(L.T("CiFix_SessionClosed", "Fix session closed"), "dim", "\uE945"));
+        }
+        var actions = Ui.H(6);
+        if (model.CanWrite && model.FailedRuns > 0) actions.Children.Add(Ui.Button(L.T("Checks_RerunShort", "Re-run failed"), rerun));
+        var button = Ui.Button(L.T("Fix_Button", "Fix with Claude Code"), fix, accent: true);
+        button.Background = Palette.Brush("coral");
+        button.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
+        actions.Children.Add(button);
+        var grid = Ui.Columns((row, Ui.Star), (actions, Ui.Auto));
+        return new Border { Background = Palette.Brush("red", 0.08), CornerRadius = new CornerRadius(10), Padding = new Thickness(10, 6, 8, 6), Child = grid };
     }
 
     public static FrameworkElement? ReReviewBanner(PRDetailViewModel model, Action more)
@@ -751,11 +837,15 @@ public sealed class PRContent : Grid, IShortcutHost
         if (model.Pr is { } pr)
         {
             var checks = pr.Checks.OrderBy(c => (int)c.Outcome).ThenBy(c => c.Title).ToList();
-            var failedRuns = checks.Where(c => c.Outcome == CheckOutcome.Failure && c.RunId is not null).Select(c => c.RunId).Distinct().Count();
+            var failedRuns = model.FailedRuns;
             var items = new List<object>();
             if (checks.Count == 0) items.Add(new TextRowItem(L.T("Checks_None", "No checks for the latest commit")));
-            if (failedRuns > 0 && model.CanWrite) items.Add(new ActionRowItem(L.F("Checks_Rerun", "Re-run failed jobs ({0} workflow)", failedRuns), () => model.RerunFailed().Forget(), ""));
-            foreach (var c in checks) items.Add(new CheckRowItem(c, () => Dialogs.JobLog(XamlRoot, model.Api, model.Ref.Repo, c).Forget()));
+            if (failedRuns > 0 && model.CanWrite) items.Add(new ActionRowItem(L.F("Checks_Rerun", "Re-run failed jobs ({0} workflow)", failedRuns), () => ConfirmRerun().Forget(), ""));
+            foreach (var c in checks)
+            {
+                void Fix() => Dialogs.FixCi(XamlRoot, model, c).Forget();
+                items.Add(new CheckRowItem(c, () => Dialogs.JobLog(XamlRoot, model.Api, model.Ref.Repo, c, log => Dialogs.FixCi(XamlRoot, model, c, log).Forget()).Forget(), CiFailures.IsFixable(c) ? new Action(Fix) : null));
+            }
             list.ItemsSource = items;
         }
         return list;
@@ -919,7 +1009,7 @@ public sealed record CommitRowItem(CommitInfo Commit) : IRowContent
     }
 }
 
-public sealed record CheckRowItem(CheckContext Check, Action ShowLog) : IRowContent
+public sealed record CheckRowItem(CheckContext Check, Action ShowLog, Action? Fix = null) : IRowContent
 {
     public UIElement BuildRow()
     {
@@ -939,6 +1029,7 @@ public sealed record CheckRowItem(CheckContext Check, Action ShowLog) : IRowCont
         if (!string.IsNullOrEmpty(c.Description)) parts.Add(c.Description);
         var body = Ui.V(1, Ui.Text(c.FullTitle, 13), Ui.Caption(string.Join(" · ", parts)));
         var right = Ui.H(4);
+        if (Fix is not null) right.Children.Add(Ui.Button(L.T("Fix_Button", "Fix with Claude Code"), Fix, glyph: "\uE945", tooltip: L.T("CiFix_RowHelp", "Send this check's log and the PR context to Claude Code")));
         if (c.IsActionsJob && c.Outcome is not CheckOutcome.Pending and not CheckOutcome.Skipped)
             right.Children.Add(Ui.Button(L.T("Checks_Log", "Log"), ShowLog));
         if (c.Link is { } link) right.Children.Add(Ui.IconButton("", L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(link)));

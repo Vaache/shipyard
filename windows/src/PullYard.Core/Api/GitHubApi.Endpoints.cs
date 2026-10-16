@@ -343,6 +343,18 @@ public sealed partial class GitHubApi
         return await Plain(target, ct).ConfigureAwait(false);
     }
 
+    public async Task<(string Text, bool Truncated)> JobLogTail(RepoRef repo, long jobId, int maxBytes, CancellationToken ct = default)
+    {
+        var target = await RedirectTarget($"/repos/{repo.Full}/actions/jobs/{jobId}/logs", ct).ConfigureAwait(false);
+        return await PlainTail(target, maxBytes, ct).ConfigureAwait(false);
+    }
+
+    public Task<List<CheckRunAnnotation>> CheckRunAnnotations(RepoRef repo, long checkRunId, CancellationToken ct = default) =>
+        Rest<List<CheckRunAnnotation>>("GET", $"/repos/{repo.Full}/check-runs/{checkRunId}/annotations?per_page=50", ct: ct);
+
+    public Task<CheckRunDetail> CheckRun(RepoRef repo, long checkRunId, CancellationToken ct = default) =>
+        Rest<CheckRunDetail>("GET", $"/repos/{repo.Full}/check-runs/{checkRunId}", ct: ct);
+
     public static readonly string GitObjectQuery = @"query GitObject($owner: String!, $name: String!, $expr: String!) { repository(owner: $owner, name: $name) { object(expression: $expr) { __typename
   ... on Tree { entries { name path type object { ... on Blob { byteSize isBinary } } } }
   ... on Blob { byteSize isBinary isTruncated text }

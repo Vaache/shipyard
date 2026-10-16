@@ -31,6 +31,34 @@
   <data name="Checks_Log" xml:space="preserve"><value>Log</value></data>
   <data name="Checks_None" xml:space="preserve"><value>No checks for the latest commit</value></data>
   <data name="Checks_Rerun" xml:space="preserve"><value>Re-run failed jobs ({0} workflow)</value></data>
+  <data name="Checks_RerunButton" xml:space="preserve"><value>Re-run</value></data>
+  <data name="Checks_RerunMany" xml:space="preserve"><value>GitHub Actions will re-run the failed jobs of {0} workflow runs on the latest commit.</value></data>
+  <data name="Checks_RerunOne" xml:space="preserve"><value>GitHub Actions will re-run the failed jobs of 1 workflow run on the latest commit.</value></data>
+  <data name="Checks_RerunShort" xml:space="preserve"><value>Re-run failed</value></data>
+  <data name="Checks_RerunTitle" xml:space="preserve"><value>Re-run failed jobs?</value></data>
+  <data name="CiFix_Annotations" xml:space="preserve"><value>{0} annotations</value></data>
+  <data name="CiFix_Collecting" xml:space="preserve"><value>Collecting failure logs…</value></data>
+  <data name="CiFix_Failing" xml:space="preserve"><value>{0} checks failing</value></data>
+  <data name="CiFix_FailingChecks" xml:space="preserve"><value>Failing checks</value></data>
+  <data name="CiFix_IntroMany" xml:space="preserve"><value>{0} checks failing on {1} — job logs, annotations and check output go into the prompt</value></data>
+  <data name="CiFix_IntroOne" xml:space="preserve"><value>1 check failing on {0} — its job log, annotations and check output go into the prompt</value></data>
+  <data name="CiFix_Launched" xml:space="preserve"><value>Fix launched in {0} · {1}</value></data>
+  <data name="CiFix_LinkOnly" xml:space="preserve"><value>link only</value></data>
+  <data name="CiFix_Loading" xml:space="preserve"><value>loading…</value></data>
+  <data name="CiFix_LogExpired" xml:space="preserve"><value>log expired</value></data>
+  <data name="CiFix_LogForbidden" xml:space="preserve"><value>no access to the log</value></data>
+  <data name="CiFix_LogNotFound" xml:space="preserve"><value>log not found</value></data>
+  <data name="CiFix_LogSize" xml:space="preserve"><value>log {0} KB</value></data>
+  <data name="CiFix_NoLog" xml:space="preserve"><value>no log: {0}</value></data>
+  <data name="CiFix_OneFailing" xml:space="preserve"><value>1 check failing</value></data>
+  <data name="CiFix_OpenSession" xml:space="preserve"><value>Open the Claude Code session</value></data>
+  <data name="CiFix_RowHelp" xml:space="preserve"><value>Send this check's log and the PR context to Claude Code</value></data>
+  <data name="CiFix_Running" xml:space="preserve"><value>Fix running</value></data>
+  <data name="CiFix_Session" xml:space="preserve"><value>Fix session</value></data>
+  <data name="CiFix_SessionClosed" xml:space="preserve"><value>Fix session closed</value></data>
+  <data name="CiFix_Showing" xml:space="preserve"><value>Showing {0} of {1} failing checks</value></data>
+  <data name="CiFix_Summary" xml:space="preserve"><value>check summary</value></data>
+  <data name="CiFix_Untrusted" xml:space="preserve"><value>Log excerpts are marked as untrusted data in the prompt, so the agent treats them as information, not instructions.</value></data>
   <data name="Claude_Account" xml:space="preserve"><value>Account</value></data>
   <data name="Claude_Accounts" xml:space="preserve"><value>Claude accounts</value></data>
   <data name="Claude_AddAccount" xml:space="preserve"><value>Add…</value></data>

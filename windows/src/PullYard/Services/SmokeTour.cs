@@ -89,6 +89,26 @@ public static class SmokeTour
                 CloseDialogs(root);
                 await Step("close", 800);
             }
+            var ciLink = AppInfo.Env("TOUR_CI_PR");
+            if (GitHubUrl.Parse(ciLink.Length > 0 ? ciLink : "https://github.com/sharkdp/bat/pull/3918") is { Kind: RouteKind.PullRequest, Item: { } ciItem } ciRoute)
+            {
+                Log($"ci {ciItem}");
+                app.Open(ciRoute);
+                await Step("ci pr", 9000);
+                if (app.PrModel(ciItem) is { } ciModel)
+                {
+                    await Shot("09b-ci-banner");
+                    ciModel.Tab = PRTab.Checks;
+                    await Step("ci checks", 3000);
+                    await Shot("09c-ci-checks");
+                    Dialogs.FixCi(root, ciModel).Forget();
+                    await Step("ci fix", 9000);
+                    await Shot("09d-ci-fix");
+                    CloseDialogs(root);
+                    await Step("close", 800);
+                    ciModel.Tab = PRTab.Conversation;
+                }
+            }
             app.Section = Section.MyPrsByRepo;
             await Step("prs by project", 5000);
             await Shot("02-prs-by-project");
