@@ -43,9 +43,7 @@ enum RowKey {
 fn blame_target(m: &PrModel) -> Option<(RepoRef, String)> {
     let pr = m.pr.borrow();
     let pr = pr.as_ref()?;
-    let repo = pr.head_repository.as_ref().and_then(|r| RepoRef::from_full(&r.name_with_owner)).unwrap_or_else(|| m.r.repo.clone());
-    let git_ref = if pr.head_ref.is_some() { pr.head_ref_name.clone() } else { pr.head_ref_oid.clone() };
-    Some((repo, git_ref))
+    Some((m.r.repo.clone(), pr.head_ref_oid.clone()).filter(|(_, oid)| !oid.is_empty())
 }
 
 fn status_label(f: &DiffFile) -> gtk::Label {

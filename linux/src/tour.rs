@@ -119,6 +119,19 @@ pub fn run(_app: Rc<App>) {
     .shot("04-pr-files");
     let m = model.clone();
     p.act(move || {
+        let Some(m) = m() else { return };
+        let Some(oid) = m.pr.borrow().as_ref().map(|p| p.head_ref_oid.clone()) else { return };
+        let file = m.files.borrow().iter().filter(|f| f.status != "removed").max_by_key(|f| f.additions + f.deletions).map(|f| f.id.clone());
+        if let Some(path) = file {
+            crate::ui::repos::open_blame(m.r.repo.clone(), oid, path);
+        }
+    })
+    .wait(8000)
+    .shot("04b-pr-diff-blame")
+    .act(app::back)
+    .wait(1500);
+    let m = model.clone();
+    p.act(move || {
         if let Some(m) = m() {
             m.set_tab(PrTab::Commits);
         }

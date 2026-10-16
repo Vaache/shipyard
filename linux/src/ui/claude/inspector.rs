@@ -521,6 +521,8 @@ impl BranchPrs {
             m.item("Open in browser", move || util::open_url(&u));
             let u = item.url.clone();
             m.item("Copy link", move || util::copy(&u));
+            let r = item.route();
+            m.item("Copy short link", move || crate::ui::item_row::copy_short_link(&r));
             m
         });
         row

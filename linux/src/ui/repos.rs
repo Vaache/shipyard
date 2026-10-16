@@ -1048,7 +1048,8 @@ impl CodeBrowser {
     fn render(self: &Rc<Self>) {
         let m = &self.model;
         let git_ref = m.git_ref.borrow().clone();
-        self.branch_button.set_label(if git_ref.is_empty() { "…" } else { &git_ref });
+        let shown = if git_ref.len() == 40 && git_ref.chars().all(|c| c.is_ascii_hexdigit()) { &git_ref[..7] } else { git_ref.as_str() };
+        self.branch_button.set_label(if git_ref.is_empty() { "…" } else { shown });
         let menu = Menu::new();
         for b in m.branches.borrow().iter() {
             let name = b.name.clone();

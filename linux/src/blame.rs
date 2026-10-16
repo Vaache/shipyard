@@ -55,10 +55,8 @@ impl Blame {
     }
 
     pub fn starts_range(&self, line: u32) -> bool {
-        match self.index_at(line) {
-            None => false,
-            Some(i) => line == 0 || self.index_at(line - 1) != Some(i),
-        }
+        let Some(r) = self.range_at(line) else { return false };
+        line == 0 || self.range_at(line - 1).is_none_or(|p| p.commit.oid != r.commit.oid)
     }
 }
 
@@ -101,6 +99,9 @@ mod tests {
         assert_eq!(b.index_at(6), None);
         let starts: Vec<u32> = (0..6).filter(|&l| b.starts_range(l)).collect();
         assert_eq!(starts, vec![0, 2, 3]);
+        let same = Blame::new(Rc::new(vec![range(1, 2, "a"), range(3, 4, "a"), range(6, 6, "b")]), 7);
+        let starts: Vec<u32> = (0..7).filter(|&l| same.starts_range(l)).collect();
+        assert_eq!(starts, vec![0, 5]);
     }
 
     #[test]
