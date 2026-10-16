@@ -55,6 +55,12 @@ public static class Palette
 
     public static SolidColorBrush Brush(string key, double opacity = 1) => new(Get(key, (byte)Math.Round(255 * opacity)));
 
+    public static (SolidColorBrush Fill, SolidColorBrush Text) Filled(string key)
+    {
+        if (ThemeService.IsHighContrast) return (new(SystemColor(Windows.UI.ViewManagement.UIElementType.Highlight)), new(SystemColor(Windows.UI.ViewManagement.UIElementType.HighlightText)));
+        return (Brush(key), new SolidColorBrush(Microsoft.UI.Colors.White));
+    }
+
     public static SolidColorBrush HexBrush(string? hex, double opacity = 1) => new(Hex(hex, (byte)Math.Round(255 * opacity)));
 
     public static string CssHex(string key)
@@ -74,6 +80,11 @@ public static class Palette
             "accent" or "sky" => Windows.UI.ViewManagement.UIElementType.Hotlight,
             _ => Windows.UI.ViewManagement.UIElementType.WindowText
         };
+        return SystemColor(type, alpha);
+    }
+
+    private static Color SystemColor(Windows.UI.ViewManagement.UIElementType type, byte alpha = 255)
+    {
         try
         {
             uiSettings ??= new Windows.UI.ViewManagement.UISettings();
@@ -82,7 +93,8 @@ public static class Palette
         }
         catch
         {
-            return Hex(type == Windows.UI.ViewManagement.UIElementType.Window ? 0x000000u : 0xFFFFFFu, alpha);
+            var dark = type is Windows.UI.ViewManagement.UIElementType.Window or Windows.UI.ViewManagement.UIElementType.HighlightText;
+            return Hex(dark ? 0x000000u : 0xFFFFFFu, alpha);
         }
     }
 

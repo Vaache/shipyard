@@ -497,8 +497,9 @@ public sealed class PRContent : Grid, IShortcutHost
             row.Children.Add(Ui.Text(L.F("Fix_PromptBy", "Fix prompt by @{0}", found.Author) + (found.Date is { } d ? " · " + Fmt.Rel(d) : ""), 13, "muted"));
         }
         var button = Ui.Button(L.T("Fix_Button", "Fix with Claude Code"), action, accent: true);
-        button.Background = Palette.Brush("coral");
-        button.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
+        var (fill, text) = Palette.Filled("coral");
+        button.Background = fill;
+        button.Foreground = text;
         var grid = Ui.Columns((row, Ui.Star), (button, Ui.Auto));
         return new Border { Background = Palette.Brush("coral", 0.08), CornerRadius = new CornerRadius(10), Padding = new Thickness(10, 6, 8, 6), Child = grid };
     }

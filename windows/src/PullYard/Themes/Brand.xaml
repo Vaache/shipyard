@@ -39,6 +39,7 @@
             <SolidColorBrush x:Key="SySubtleHoverBrush" Color="#0D1A2333" />
             <SolidColorBrush x:Key="SySubtlePressedBrush" Color="#081A2333" />
             <SolidColorBrush x:Key="SySubtleSelectedBrush" Color="#1F1A2333" />
+            <SolidColorBrush x:Key="SySubtleSelectedHoverBrush" Color="#291A2333" />
             <SolidColorBrush x:Key="SyListSelectedHoverBrush" Color="#262A8BC8" />
             <SolidColorBrush x:Key="SyAccentFillBrush" Color="#FF1D70A6" />
             <SolidColorBrush x:Key="SyAccentFillHoverBrush" Color="#FF1A6699" />
@@ -214,7 +215,7 @@
             <StaticResource x:Key="SubtleFillColorSecondaryBrush" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="ListViewItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
-            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="NavigationViewButtonBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="MenuFlyoutItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
@@ -232,13 +233,13 @@
             <StaticResource x:Key="SubtleFillColorTertiaryBrush" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
-            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="NavigationViewButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="MenuFlyoutItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="ComboBoxItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
-            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedBrush" />
-            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedHoverBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundHighLightOverlayPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="HyperlinkButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
@@ -247,6 +248,7 @@
             <StaticResource x:Key="ExpanderChevronPressedBackground" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="SelectorBarItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundSelected" ResourceKey="SySubtleSelectedBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedUnfocused" ResourceKey="SySubtleSelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelected" ResourceKey="SySelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelectedPressed" ResourceKey="SySelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelectedPointerOver" ResourceKey="SyListSelectedHoverBrush" />
@@ -435,6 +437,7 @@
             <SolidColorBrush x:Key="SySubtleHoverBrush" Color="#17A0AEC4" />
             <SolidColorBrush x:Key="SySubtlePressedBrush" Color="#10A0AEC4" />
             <SolidColorBrush x:Key="SySubtleSelectedBrush" Color="#29A0AEC4" />
+            <SolidColorBrush x:Key="SySubtleSelectedHoverBrush" Color="#33A0AEC4" />
             <SolidColorBrush x:Key="SyListSelectedHoverBrush" Color="#335BB8EC" />
             <SolidColorBrush x:Key="SyAccentFillBrush" Color="#FF5BB8EC" />
             <SolidColorBrush x:Key="SyAccentFillHoverBrush" Color="#FF6FC2EF" />
@@ -610,7 +613,7 @@
             <StaticResource x:Key="SubtleFillColorSecondaryBrush" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="ListViewItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
-            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="NavigationViewButtonBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="MenuFlyoutItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundPointerOver" ResourceKey="SySubtleHoverBrush" />
@@ -628,13 +631,13 @@
             <StaticResource x:Key="SubtleFillColorTertiaryBrush" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
-            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="NavigationViewButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="MenuFlyoutItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="ComboBoxItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
-            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedBrush" />
-            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="SySubtleSelectedHoverBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="SySubtleSelectedHoverBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="AppBarToggleButtonBackgroundHighLightOverlayPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="HyperlinkButtonBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
@@ -643,6 +646,7 @@
             <StaticResource x:Key="ExpanderChevronPressedBackground" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="SelectorBarItemBackgroundPressed" ResourceKey="SySubtlePressedBrush" />
             <StaticResource x:Key="NavigationViewItemBackgroundSelected" ResourceKey="SySubtleSelectedBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedUnfocused" ResourceKey="SySubtleSelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelected" ResourceKey="SySelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelectedPressed" ResourceKey="SySelectedBrush" />
             <StaticResource x:Key="ListViewItemBackgroundSelectedPointerOver" ResourceKey="SyListSelectedHoverBrush" />

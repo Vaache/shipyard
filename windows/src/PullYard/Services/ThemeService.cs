@@ -78,7 +78,13 @@ public static class ThemeService
     public static void Attach(FrameworkElement element)
     {
         root = element;
-        element.ActualThemeChanged += (_, _) => Changed?.Invoke();
+        element.ActualThemeChanged += (_, _) =>
+        {
+            var was = highContrast;
+            highContrast = null;
+            if (was is { } known && known != IsHighContrast) Apply();
+            else Changed?.Invoke();
+        };
         try
         {
             accessibility ??= new Windows.UI.ViewManagement.AccessibilitySettings();

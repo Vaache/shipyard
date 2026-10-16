@@ -128,7 +128,7 @@ public sealed class DiagnosticsWindow : Window
             AppearanceMode.Dark => ElementTheme.Dark,
             _ => ElementTheme.Default
         };
-        root.RequestedTheme = target == ElementTheme.Light ? ElementTheme.Dark : ElementTheme.Light;
+        root.RequestedTheme = root.ActualTheme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
         root.RequestedTheme = target;
         root.Background = ThemeService.IsBrand ? Palette.Brush("window") : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
     }
