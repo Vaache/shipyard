@@ -19,9 +19,47 @@ public abstract class CodeRow : ContentControl
         HorizontalAlignment = HorizontalAlignment.Stretch;
         IsTabStop = false;
         DataContextChanged += (_, e) => Content = e.NewValue is null ? null : Build(e.NewValue);
+        Loaded += (_, _) =>
+        {
+            if (ticking) return;
+            ticking = true;
+            RelativeClock.Minute += Rebuild;
+        };
+        Unloaded += (_, _) =>
+        {
+            if (!ticking) return;
+            ticking = false;
+            RelativeClock.Minute -= Rebuild;
+        };
+    }
+
+    private bool ticking;
+
+    private void Rebuild()
+    {
+        if (DataContext is { } item) Content = Build(item);
     }
 
     protected abstract UIElement? Build(object item);
+}
+
+public static class RelativeClock
+{
+    private static DispatcherTimer? timer;
+    private static Action? minute;
+
+    public static event Action Minute
+    {
+        add
+        {
+            minute += value;
+            if (timer is not null) return;
+            timer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+            timer.Tick += (_, _) => minute?.Invoke();
+            timer.Start();
+        }
+        remove => minute -= value;
+    }
 }
 
 public sealed class GroupHeaderItem

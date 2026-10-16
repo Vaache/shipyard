@@ -10,6 +10,7 @@ public enum RowAppearMode { Silent, Refresh, Cascade }
 public sealed class RowAppear
 {
     private static readonly TimeSpan Window = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan CascadeWindow = TimeSpan.FromMilliseconds(200);
     private static readonly Duration Length = new(TimeSpan.FromMilliseconds(220));
 
     private readonly Func<object, string?> key;
@@ -33,7 +34,7 @@ public sealed class RowAppear
         else if (mode == RowAppearMode.Refresh && known.Count > 0) pending.UnionWith(next.Where(id => !known.Contains(id)));
         known = next;
         cascade = mode == RowAppearMode.Cascade;
-        until = DateTimeOffset.Now + Window;
+        until = DateTimeOffset.Now + (cascade ? CascadeWindow : Window);
     }
 
     private void OnContainer(ListViewBase sender, ContainerContentChangingEventArgs e)

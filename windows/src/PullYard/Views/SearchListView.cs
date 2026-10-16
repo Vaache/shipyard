@@ -206,7 +206,7 @@ public sealed class NotificationsView : ListPane
 {
     private List<NotificationThread> items = new();
     private bool loading;
-    private bool quiet;
+    private int shownLoads;
     private string? error;
     private bool showAll;
     private bool? loadedMode;
@@ -257,7 +257,7 @@ public sealed class NotificationsView : ListPane
     {
         if (Model.Api is not { } api) return;
         loading = true;
-        quiet = live;
+        if (!live) shownLoads++;
         Update();
         var changed = true;
         var appear = RowAppearMode.Refresh;
@@ -286,6 +286,7 @@ public sealed class NotificationsView : ListPane
         finally
         {
             loading = false;
+            if (!live) shownLoads--;
             if (changed) Render(appear);
             else Update();
         }
@@ -302,7 +303,7 @@ public sealed class NotificationsView : ListPane
 
     private void Update()
     {
-        SetLoading(loading && !quiet, items.Count > 0);
+        SetLoading(shownLoads > 0, items.Count > 0);
         Footer.Update(lastUpdated, loading, items.Count == 0 ? null : error);
         if (items.Count == 0)
         {
@@ -511,7 +512,7 @@ public sealed class ProjectsView : ListPane
 {
     private List<ProjectSummary> projects = new();
     private bool loading;
-    private bool quiet;
+    private int shownLoads;
     private string? error;
     private bool showClosed;
     private DateTimeOffset? lastUpdated;
@@ -549,7 +550,7 @@ public sealed class ProjectsView : ListPane
     {
         if (Model.Api is not { } api) return;
         loading = true;
-        quiet = live;
+        if (!live) shownLoads++;
         Update();
         var appear = projects.Count == 0 ? RowAppearMode.Cascade : RowAppearMode.Refresh;
         try
@@ -566,6 +567,7 @@ public sealed class ProjectsView : ListPane
         finally
         {
             loading = false;
+            if (!live) shownLoads--;
             Render(appear);
         }
     }
@@ -585,7 +587,7 @@ public sealed class ProjectsView : ListPane
     {
         var scopeProblem = !Model.HasProjectScope || (error?.Contains("scope", StringComparison.OrdinalIgnoreCase) ?? false);
         hint.Content = scopeProblem ? ScopeHint() : null;
-        SetLoading(loading && !quiet, projects.Count > 0);
+        SetLoading(shownLoads > 0, projects.Count > 0);
         Footer.Update(lastUpdated, loading, projects.Count == 0 ? null : error);
         if (projects.Count == 0)
         {

@@ -49,18 +49,19 @@ public sealed partial class SearchListViewModel : ObservableObject
             currentQuery = query;
             fetched = false;
             Error = null;
-            if (Cache.TryGetValue(key, out var snap)) Apply(snap, RowAppearMode.Silent);
+            if (Cache.TryGetValue(key, out var snap))
+            {
+                CheckingCache = false;
+                Apply(snap, RowAppearMode.Silent);
+            }
             else
             {
                 AppearMode = RowAppearMode.Silent;
                 Items = new();
                 Total = 0;
                 LastUpdated = null;
-                if (account is not null)
-                {
-                    CheckingCache = true;
-                    ShowStored(account, query, key).Forget();
-                }
+                CheckingCache = account is not null;
+                if (account is not null) ShowStored(account, query, key).Forget();
             }
         }
         var gen = ++generation;
