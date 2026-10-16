@@ -281,7 +281,7 @@ public static class Dialogs
         await ShowAsync(d);
     }
 
-    public static async Task JobLog(XamlRoot? root, GitHubApi api, RepoRef repo, CheckContext check)
+    public static async Task JobLog(XamlRoot? root, GitHubApi api, RepoRef repo, CheckContext check, Action? fix = null)
     {
         if (root is null || check.DatabaseId is not { } id) return;
         var html = new HtmlView { Height = 560 };
@@ -296,13 +296,30 @@ public static class Dialogs
         errorsOnly.Unchecked += (_, _) => Render();
         var toolbar = Ui.H(8, Ui.Glyph(Palette.CheckGlyph(check.Outcome), 14, Palette.CheckKey(check.Outcome)), errorsOnly);
         if (check.Link is { } link) toolbar.Children.Add(Ui.Link(L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(link), 13));
+        var fixRequested = false;
+        ContentDialog? dialog = null;
+        var top = new Grid();
+        top.Children.Add(toolbar);
+        if (fix is not null && check.Outcome == CheckOutcome.Failure)
+        {
+            var fixButton = Ui.Button(L.T("Fix_Button", "Fix with Claude Code"), () =>
+            {
+                fixRequested = true;
+                dialog?.Hide();
+            }, glyph: "\uE945");
+            fixButton.Background = Palette.Brush("coral");
+            fixButton.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
+            fixButton.HorizontalAlignment = HorizontalAlignment.Right;
+            top.Children.Add(fixButton);
+        }
         var panel = new Grid { RowSpacing = 8, MinWidth = 900 };
         panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        panel.Children.Add(toolbar);
+        panel.Children.Add(top);
         Grid.SetRow(html, 1);
         panel.Children.Add(html);
         var d = Create(root, check.FullTitle, panel, L.T("Log_Copy", "Copy"), close: L.T("Common_Close", "Close"), maxWidth: 1100);
+        dialog = d;
         d.IsPrimaryButtonEnabled = false;
         d.PrimaryButtonClick += (_, args) =>
         {
@@ -315,11 +332,11 @@ public static class Dialogs
             try
             {
                 var raw = await api.JobLog(repo, id);
-                return Clean(raw);
+                return CiLog.Clean(raw);
             }
             catch (Exception e)
             {
-                return "\u0000" + e.Message;
+                return "\u0000" + CiFailures.DescribeLogError(e);
             }
         }).ContinueWith(t => html.DispatcherQueue.TryEnqueue(() =>
         {
@@ -334,20 +351,7 @@ public static class Dialogs
             Render();
         }), TaskScheduler.Default).Forget();
         await ShowAsync(d);
-    }
-
-    public static string Clean(string raw)
-    {
-        var lines = raw.Replace("\r\n", "\n").Split('\n');
-        for (var i = 0; i < lines.Length; i++)
-        {
-            var l = lines[i];
-            if (l.Length > 0 && l[0] == '﻿') l = l[1..];
-            var space = l.IndexOf(' ');
-            if (l.Length > 29 && l.Length > 4 && l[4] == '-' && space >= 20 && space <= 34) l = l[(space + 1)..];
-            lines[i] = l;
-        }
-        return string.Join("\n", lines);
+        if (fixRequested) fix?.Invoke();
     }
 
     public static string FilterErrors(string s)
@@ -378,21 +382,36 @@ public static class Dialogs
         return sb.ToString();
     }
 
-    public static async Task FixWithClaude(XamlRoot? root, PRDetailViewModel model)
+    public static Task FixWithClaude(XamlRoot? root, PRDetailViewModel model) => ShowFix(root, model, null, null);
+
+    public static Task FixCi(XamlRoot? root, PRDetailViewModel model, CheckContext? only = null)
+    {
+        var failing = model.FailingChecks;
+        if (only is not null && failing.All(c => c.Id != only.Id)) failing.Insert(0, only);
+        return failing.Count == 0 ? Task.CompletedTask : ShowFix(root, model, failing, only);
+    }
+
+    private static async Task ShowFix(XamlRoot? root, PRDetailViewModel model, List<CheckContext>? ciChecks, CheckContext? ciOnly)
     {
         if (root is null || model.Pr is not { } pr) return;
+        var ci = ciChecks is not null;
         var app = AppViewModel.Shared;
-        var threads = pr.ReviewThreads.Items.Where(t => !t.IsResolved).ToList();
-        var general = FixPrompt.GeneralFeedback(pr);
-        var found = FixPromptExtractor.Latest(pr);
+        var threads = ci ? new List<ReviewThread>() : pr.ReviewThreads.Items.Where(t => !t.IsResolved).ToList();
+        var general = ci ? new List<GeneralFeedback>() : FixPrompt.GeneralFeedback(pr);
+        var found = ci ? null : FixPromptExtractor.Latest(pr);
         var options = new FixOptions();
+        var ciSelected = ciChecks is null ? new HashSet<string>() : ciOnly is not null ? new HashSet<string> { ciOnly.Id } : ciChecks.Select(c => c.Id).ToHashSet();
+        var ciResults = new Dictionary<string, CiFailure>();
+        var ciCaptions = new Dictionary<string, TextBlock>();
+        var ciCollecting = false;
+        var cts = new CancellationTokenSource();
         var useReviewer = found is not null;
         var selected = threads.Where(t => !t.IsOutdated).Select(t => t.Id).ToHashSet();
         if (selected.Count == 0) selected = threads.Select(t => t.Id).ToHashSet();
         string? custom = null;
         string? folder = null;
 
-        var promptBox = Editor("", minHeight: 220, mono: true);
+        var promptBox = Editor(ci ? L.T("CiFix_Collecting", "Collecting failure logs…") : "", minHeight: 220, mono: true);
         promptBox.FontSize = 11.5;
         promptBox.MaxHeight = 260;
         var editedChip = Ui.Chip(L.T("Fix_Edited", "edited"), "amber");
@@ -403,6 +422,11 @@ public static class Dialogs
 
         string Generated()
         {
+            if (ciChecks is not null)
+            {
+                var picked = ciChecks.Where(c => ciSelected.Contains(c.Id) && ciResults.ContainsKey(c.Id)).Select(c => ciResults[c.Id]).ToList();
+                return picked.Count == 0 || ciCollecting ? "" : CiFixPrompt.Build(pr, model.Ref.Repo, picked, options);
+            }
             if (useReviewer && found is not null) return FixPromptExtractor.Wrap(found, pr, options);
             var chosen = threads.Where(t => selected.Contains(t.Id)).ToList();
             return FixPrompt.Build(pr, model.Ref.Repo, chosen, general, options);
@@ -438,7 +462,11 @@ public static class Dialogs
 
         var threadPanel = Ui.V(4);
         var composedBox = Ui.V(4);
-        if (found is not null)
+        if (ciChecks is not null)
+        {
+            panel.Children.Add(Ui.H(6, Ui.Glyph("\uEA39", 12, "red"), Ui.Text(L.F("CiFix_Intro", "{0} failing on {1} — job logs, annotations and check output go into the prompt", Fmt.Plural(ciChecks.Count, "check", "checks"), pr.HeadRefOid.Length > 7 ? pr.HeadRefOid[..7] : pr.HeadRefOid), 13, "muted")));
+        }
+        else if (found is not null)
         {
             var bar = new SelectorBar();
             var reviewer = new SelectorBarItem { Text = L.F("Fix_PromptBy", "Fix prompt by @{0}", found.Author) + (found.Date is { } fd ? " · " + Fmt.Rel(fd) : "") };
@@ -487,12 +515,42 @@ public static class Dialogs
             foreach (var (cb, _) in boxes) cb.IsChecked = on;
         }
         composedBox.Children.Add(new ScrollViewer { Content = threadPanel, MaxHeight = 130 });
-        composedBox.Visibility = useReviewer ? Visibility.Collapsed : Visibility.Visible;
+        composedBox.Visibility = useReviewer || ci ? Visibility.Collapsed : Visibility.Visible;
         panel.Children.Add(composedBox);
+
+        var ciSpinner = Ui.Spinner(14);
+        ciSpinner.Visibility = Visibility.Collapsed;
+        var ciError = Ui.Text("", 12, "red", wrap: true);
+        ciError.Visibility = Visibility.Collapsed;
+        var ciBoxes = new List<(CheckBox Box, string Id)>();
+        if (ciChecks is not null)
+        {
+            var ciPanel = Ui.V(4);
+            foreach (var c in ciChecks)
+            {
+                var caption = Ui.Text("", 12, "dim");
+                ciCaptions[c.Id] = caption;
+                var label = Ui.H(6, Ui.Glyph(Palette.CheckGlyph(c.Outcome), 12, Palette.CheckKey(c.Outcome)), Ui.Text(c.FullTitle, 12, "text"), caption);
+                var cb = new CheckBox { Content = label, IsChecked = ciSelected.Contains(c.Id) };
+                ciBoxes.Add((cb, c.Id));
+                ciPanel.Children.Add(cb);
+            }
+            var ciBox = Ui.V(4);
+            ciBox.Children.Add(Ui.Columns((Ui.H(6, Ui.Text(L.T("CiFix_FailingChecks", "Failing checks"), 12, "muted", FontWeights.SemiBold), ciSpinner), Ui.Star),
+                (Ui.H(8, Ui.Link(L.T("Fix_All", "All"), () => SetAllCi(true)), Ui.Link(L.T("Fix_None", "None"), () => SetAllCi(false))), Ui.Auto)));
+            ciBox.Children.Add(new ScrollViewer { Content = ciPanel, MaxHeight = 150 });
+            ciBox.Children.Add(Ui.Text(L.T("CiFix_Untrusted", "Log excerpts are marked as untrusted data in the prompt, so the agent treats them as information, not instructions."), 12, "dim", wrap: true));
+            ciBox.Children.Add(ciError);
+            panel.Children.Add(ciBox);
+        }
+        void SetAllCi(bool on)
+        {
+            foreach (var (cb, _) in ciBoxes) cb.IsChecked = on;
+        }
 
         var commit = new CheckBox { Content = L.T("Fix_Commit", "Commit"), IsChecked = options.Commit };
         var push = new CheckBox { Content = L.T("Fix_Push", "Push"), IsChecked = options.Push };
-        var resolve = new CheckBox { Content = L.T("Fix_ReplyResolve", "Reply & resolve threads"), IsChecked = options.ReplyAndResolve, IsEnabled = options.Push };
+        var resolve = new CheckBox { Content = L.T("Fix_ReplyResolve", "Reply & resolve threads"), IsChecked = options.ReplyAndResolve, IsEnabled = options.Push, Visibility = ci ? Visibility.Collapsed : Visibility.Visible };
         commit.Checked += (_, _) => { options.Commit = true; custom = null; Regenerate(); };
         commit.Unchecked += (_, _) => { options.Commit = false; custom = null; Regenerate(); };
         push.Checked += (_, _) => { options.Push = true; resolve.IsEnabled = true; custom = null; Regenerate(); };
@@ -554,16 +612,79 @@ public static class Dialogs
         {
             var t = Target();
             d.PrimaryButtonText = t == ClaudeTarget.Copy ? L.T("Fix_Copy", "Copy") : L.T("Fix_Launch", "Launch");
-            d.IsPrimaryButtonEnabled = promptBox.Text.Trim().Length > 0 && (t == ClaudeTarget.Copy || folder is not null);
+            d.IsPrimaryButtonEnabled = promptBox.Text.Trim().Length > 0 && (t == ClaudeTarget.Copy || folder is not null) && !(ci && (ciCollecting || ciSelected.Count == 0));
+        }
+
+        string CiCaption(CheckContext c)
+        {
+            if (!ciResults.TryGetValue(c.Id, out var f)) return ciSelected.Contains(c.Id) && ciCollecting ? L.T("CiFix_Loading", "loading…") : "";
+            var parts = new List<string>();
+            if (f.Log is { } log) parts.Add(L.F("CiFix_LogSize", "log {0} KB", Math.Max(1, log.Text.Length / 1024)));
+            if (f.LogError is { } err) parts.Add(L.F("CiFix_NoLog", "no log: {0}", err));
+            if (f.Annotations.Count > 0) parts.Add(L.F("CiFix_Annotations", "{0} annotations", f.Annotations.Count));
+            if (f.Output is not null) parts.Add(L.T("CiFix_Summary", "check summary"));
+            if (parts.Count == 0) parts.Add(L.T("CiFix_LinkOnly", "link only"));
+            return "· " + string.Join(" · ", parts);
+        }
+
+        void UpdateCi()
+        {
+            if (ciChecks is null) return;
+            ciSpinner.Visibility = ciCollecting ? Visibility.Visible : Visibility.Collapsed;
+            foreach (var c in ciChecks) ciCaptions[c.Id].Text = CiCaption(c);
+            Regenerate();
+            Validate();
+        }
+
+        async Task CollectCi()
+        {
+            if (ciChecks is null) return;
+            if (ciCollecting)
+            {
+                UpdateCi();
+                return;
+            }
+            ciCollecting = true;
+            ciError.Visibility = Visibility.Collapsed;
+            try
+            {
+                while (ciChecks.Where(c => ciSelected.Contains(c.Id) && !ciResults.ContainsKey(c.Id)).ToList() is { Count: > 0 } need)
+                {
+                    UpdateCi();
+                    foreach (var f in await model.CollectCiFailures(need, cts.Token)) ciResults[f.Check.Id] = f;
+                    if (!need.All(c => ciResults.ContainsKey(c.Id))) break;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception e)
+            {
+                ciError.Text = e.Message;
+                ciError.Visibility = Visibility.Visible;
+            }
+            finally
+            {
+                ciCollecting = false;
+            }
+            UpdateCi();
         }
 
         targets.SelectionChanged += (_, _) => Validate();
         promptBox.TextChanged += (_, _) => Validate();
+        var picking = false;
+        d.Closed += (_, _) =>
+        {
+            if (!picking) cts.Cancel();
+        };
         choose.Click += async (_, _) =>
         {
             if (App.MainWindow is null) return;
+            picking = true;
             d.Hide();
             var picked = await WindowInterop.PickFolder(App.MainWindow);
+            picking = false;
             if (picked is not null)
             {
                 LocalRepoStore.Save(model.Ref.Repo, picked);
@@ -576,10 +697,11 @@ public static class Dialogs
         {
             var prompt = promptBox.Text;
             var t = Target();
-            var name = $"Fix PR #{pr.Number}: {pr.Title}";
+            var name = ci ? $"Fix CI on PR #{pr.Number}: {pr.Title}" : $"Fix PR #{pr.Number}: {pr.Title}";
             if (t == ClaudeTarget.App && folder is not null)
             {
-                app.Claude.NewSession(folder, prompt, name);
+                var tab = app.Claude.NewSession(folder, prompt, name);
+                if (ci) model.CiFixTab = tab;
                 app.Section = Section.Claude;
                 return;
             }
@@ -594,7 +716,13 @@ public static class Dialogs
                 args.Cancel = true;
             }
         };
+        foreach (var (cb, id) in ciBoxes)
+        {
+            cb.Checked += (_, _) => { ciSelected.Add(id); custom = null; CollectCi().Forget(); };
+            cb.Unchecked += (_, _) => { ciSelected.Remove(id); custom = null; UpdateCi(); };
+        }
         DetectFolder().Forget();
+        CollectCi().Forget();
         async Task DetectFolder()
         {
             var f = await LocalRepoStore.Detect(model.Ref.Repo);

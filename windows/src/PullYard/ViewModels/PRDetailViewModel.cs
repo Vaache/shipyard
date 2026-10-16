@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using PullYard.Core.Api;
+using PullYard.Core.Claude;
 using PullYard.Core.Html;
 using PullYard.Core.Util;
 using PullYard.Services;
@@ -37,6 +38,7 @@ public sealed partial class PRDetailViewModel : ObservableObject
     [ObservableProperty] private string? filesError;
     [ObservableProperty] private string? scrollTarget;
     [ObservableProperty] private int diffVersion;
+    [ObservableProperty] private ClaudeTab? ciFixTab;
 
     public HashSet<string> ViewedPaths { get; private set; } = new();
     public HashSet<string> Collapsed { get; private set; } = new();
@@ -61,6 +63,7 @@ public sealed partial class PRDetailViewModel : ObservableObject
     private int mergeRechecks;
     private Dictionary<string, List<ReviewThread>> threadIndex = new();
     private Dictionary<string, List<ReviewThread>> outdatedByPath = new();
+    private readonly Dictionary<string, CiFailure> ciFailures = new();
 
     public PRDetailViewModel(ItemRef r, GitHubApi api)
     {
@@ -511,9 +514,35 @@ public sealed partial class PRDetailViewModel : ObservableObject
         await Run(() => Api.Mutate(viewed ? Q.UnmarkViewed : Q.MarkViewed, GitHubApiVars.Of(("id", pr.Id), ("p", path))), reload: false);
     }
 
+    public List<CheckContext> FailingChecks => CiFailures.Failing(Pr?.Checks ?? new());
+
+    public int FailedRuns => FailingChecks.Where(c => c.RunId is not null).Select(c => c.RunId).Distinct().Count();
+
+    private static string CiKey(CheckContext c) => $"{c.Id}|{c.Conclusion ?? c.State}|{c.CompletedAt?.ToUnixTimeSeconds()}";
+
+    public CiFailure? CachedCiFailure(CheckContext c)
+    {
+        lock (ciFailures) return ciFailures.TryGetValue(CiKey(c), out var f) ? f : null;
+    }
+
+    public async Task<List<CiFailure>> CollectCiFailures(IReadOnlyList<CheckContext> checks, CancellationToken ct)
+    {
+        var missing = checks.Where(c => CachedCiFailure(c) is null).ToList();
+        if (missing.Count > 0)
+        {
+            var fetched = await Task.Run(() => CiFailures.Collect(Api, Ref.Repo, missing, ct), ct);
+            lock (ciFailures)
+            {
+                if (ciFailures.Count > 60) ciFailures.Clear();
+                foreach (var f in fetched) ciFailures[CiKey(f.Check)] = f;
+            }
+        }
+        return checks.Select(CachedCiFailure).OfType<CiFailure>().ToList();
+    }
+
     public Task<bool> RerunFailed()
     {
-        var runs = (Pr?.Checks ?? new()).Where(c => c.Outcome == CheckOutcome.Failure && c.RunId is not null).Select(c => c.RunId!.Value).Distinct().ToList();
+        var runs = FailingChecks.Where(c => c.RunId is not null).Select(c => c.RunId!.Value).Distinct().ToList();
         return Run(async () =>
         {
             foreach (var id in runs) await Api.RerunFailedJobs(Ref.Repo, id);

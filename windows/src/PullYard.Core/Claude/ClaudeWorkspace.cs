@@ -321,7 +321,7 @@ public sealed partial class ClaudeWorkspace : ObservableObject
         var args = new List<string> { "--session-id", sessionId };
         var viaShim = ClaudeLauncher.Command?.UsesCmdShell == true;
         if (!string.IsNullOrEmpty(name)) args.AddRange(new[] { "-n", viaShim ? ClaudeLauncher.SanitizeName(name) : name });
-        if (!viaShim && !string.IsNullOrEmpty(prompt)) args.Add(prompt);
+        if (!viaShim && !string.IsNullOrEmpty(prompt)) args.Add(ClaudeLauncher.FitCommandLine(prompt));
         var t = MakeTab(folder, ClaudeTabKind.Terminal, title, sessionId);
         LaunchTerminal(t, args, mode);
         return t;

@@ -1,0 +1,245 @@
+﻿2026-09-07T00:02:00.0000000Z Current runner version: '2.328.0'
+2026-09-07T00:02:00.1370000Z ##[group]Runner Image Provisioner
+2026-09-07T00:02:00.2740000Z Hosted Compute Agent
+2026-09-07T00:02:00.4110000Z ##[endgroup]
+2026-09-07T00:02:00.5480000Z ##[group]Run actions/checkout@v4
+2026-09-07T00:02:00.6850000Z with:
+2026-09-07T00:02:00.8220000Z   repository: octo/widgets
+2026-09-07T00:02:00.9590000Z   continue-on-error: false
+2026-09-07T00:02:01.0960000Z   fetch-depth: 1
+2026-09-07T00:02:01.2330000Z ##[endgroup]
+2026-09-07T00:02:01.3700000Z [1m[92m   Compiling[0m crate-0 v0.0.0
+2026-09-07T00:02:01.5070000Z [1m[92m   Compiling[0m crate-1 v0.1.0
+2026-09-07T00:02:01.6440000Z [1m[92m   Compiling[0m crate-2 v0.2.0
+2026-09-07T00:02:01.7810000Z [1m[92m   Compiling[0m crate-3 v0.3.0
+2026-09-07T00:02:01.9180000Z [1m[92m   Compiling[0m crate-4 v0.4.0
+2026-09-07T00:02:02.0550000Z [1m[92m   Compiling[0m crate-5 v0.5.0
+2026-09-07T00:02:02.1920000Z [1m[92m   Compiling[0m crate-6 v0.6.0
+2026-09-07T00:02:02.3290000Z [1m[92m   Compiling[0m crate-7 v0.7.0
+2026-09-07T00:02:02.4660000Z [1m[92m   Compiling[0m crate-8 v0.8.0
+2026-09-07T00:02:02.6030000Z [1m[92m   Compiling[0m crate-9 v0.9.0
+2026-09-07T00:02:02.7400000Z [1m[92m   Compiling[0m crate-10 v0.10.0
+2026-09-07T00:02:02.8770000Z [1m[92m   Compiling[0m crate-11 v0.11.0
+2026-09-07T00:02:03.0140000Z [1m[92m   Compiling[0m crate-12 v0.12.0
+2026-09-07T00:02:03.1510000Z [1m[92m   Compiling[0m crate-13 v0.13.0
+2026-09-07T00:02:03.2880000Z [1m[92m   Compiling[0m crate-14 v0.14.0
+2026-09-07T00:02:03.4250000Z [1m[92m   Compiling[0m crate-15 v0.15.0
+2026-09-07T00:02:03.5620000Z [1m[92m   Compiling[0m crate-16 v0.16.0
+2026-09-07T00:02:03.6990000Z [1m[92m   Compiling[0m crate-17 v0.17.0
+2026-09-07T00:02:03.8360000Z [1m[92m   Compiling[0m crate-18 v0.18.0
+2026-09-07T00:02:03.9730000Z [1m[92m   Compiling[0m crate-19 v0.19.0
+2026-09-07T00:02:04.1100000Z [1m[92m   Compiling[0m crate-20 v0.20.0
+2026-09-07T00:02:04.2470000Z [1m[92m   Compiling[0m crate-21 v0.21.0
+2026-09-07T00:02:04.3840000Z [1m[92m   Compiling[0m crate-22 v0.22.0
+2026-09-07T00:02:04.5210000Z [1m[92m   Compiling[0m crate-23 v0.23.0
+2026-09-07T00:02:04.6580000Z [1m[92m   Compiling[0m crate-24 v0.24.0
+2026-09-07T00:02:04.7950000Z [1m[92m   Compiling[0m crate-25 v0.25.0
+2026-09-07T00:02:04.9320000Z [1m[92m   Compiling[0m crate-26 v0.26.0
+2026-09-07T00:02:05.0690000Z [1m[92m   Compiling[0m crate-27 v0.27.0
+2026-09-07T00:02:05.2060000Z [1m[92m   Compiling[0m crate-28 v0.28.0
+2026-09-07T00:02:05.3430000Z [1m[92m   Compiling[0m crate-29 v0.29.0
+2026-09-07T00:02:05.4800000Z [1m[92m   Compiling[0m crate-30 v0.30.0
+2026-09-07T00:02:05.6170000Z [1m[92m   Compiling[0m crate-31 v0.31.0
+2026-09-07T00:02:05.7540000Z [1m[92m   Compiling[0m crate-32 v0.32.0
+2026-09-07T00:02:05.8910000Z [1m[92m   Compiling[0m crate-33 v0.33.0
+2026-09-07T00:02:06.0280000Z [1m[92m   Compiling[0m crate-34 v0.34.0
+2026-09-07T00:02:06.1650000Z [1m[92m   Compiling[0m crate-35 v0.35.0
+2026-09-07T00:02:06.3020000Z [1m[92m   Compiling[0m crate-36 v0.36.0
+2026-09-07T00:02:06.4390000Z [1m[92m   Compiling[0m crate-37 v0.37.0
+2026-09-07T00:02:06.5760000Z [1m[92m   Compiling[0m crate-38 v0.38.0
+2026-09-07T00:02:06.7130000Z [1m[92m   Compiling[0m crate-39 v0.39.0
+2026-09-07T00:02:06.8500000Z [1m[92m   Compiling[0m crate-40 v0.40.0
+2026-09-07T00:02:06.9870000Z [1m[92m   Compiling[0m crate-41 v0.41.0
+2026-09-07T00:02:07.1240000Z [1m[92m   Compiling[0m crate-42 v0.42.0
+2026-09-07T00:02:07.2610000Z [1m[92m   Compiling[0m crate-43 v0.43.0
+2026-09-07T00:02:07.3980000Z [1m[92m   Compiling[0m crate-44 v0.44.0
+2026-09-07T00:02:07.5350000Z [1m[92m   Compiling[0m crate-45 v0.45.0
+2026-09-07T00:02:07.6720000Z [1m[92m   Compiling[0m crate-46 v0.46.0
+2026-09-07T00:02:07.8090000Z [1m[92m   Compiling[0m crate-47 v0.47.0
+2026-09-07T00:02:07.9460000Z [1m[92m   Compiling[0m crate-48 v0.48.0
+2026-09-07T00:02:08.0830000Z [1m[92m   Compiling[0m crate-49 v0.49.0
+2026-09-07T00:02:08.2200000Z [1m[92m   Compiling[0m crate-50 v0.50.0
+2026-09-07T00:02:08.3570000Z [1m[92m   Compiling[0m crate-51 v0.51.0
+2026-09-07T00:02:08.4940000Z [1m[92m   Compiling[0m crate-52 v0.52.0
+2026-09-07T00:02:08.6310000Z [1m[92m   Compiling[0m crate-53 v0.53.0
+2026-09-07T00:02:08.7680000Z [1m[92m   Compiling[0m crate-54 v0.54.0
+2026-09-07T00:02:08.9050000Z [1m[92m   Compiling[0m crate-55 v0.55.0
+2026-09-07T00:02:09.0420000Z [1m[92m   Compiling[0m crate-56 v0.56.0
+2026-09-07T00:02:09.1790000Z [1m[92m   Compiling[0m crate-57 v0.57.0
+2026-09-07T00:02:09.3160000Z [1m[92m   Compiling[0m crate-58 v0.58.0
+2026-09-07T00:02:09.4530000Z [1m[92m   Compiling[0m crate-59 v0.59.0
+2026-09-07T00:02:09.5900000Z [1m[92m   Compiling[0m crate-60 v0.60.0
+2026-09-07T00:02:09.7270000Z [1m[92m   Compiling[0m crate-61 v0.61.0
+2026-09-07T00:02:09.8640000Z [1m[92m   Compiling[0m crate-62 v0.62.0
+2026-09-07T00:02:10.0010000Z [1m[92m   Compiling[0m crate-63 v0.63.0
+2026-09-07T00:02:10.1380000Z [1m[92m   Compiling[0m crate-64 v0.64.0
+2026-09-07T00:02:10.2750000Z [1m[92m   Compiling[0m crate-65 v0.65.0
+2026-09-07T00:02:10.4120000Z [1m[92m   Compiling[0m crate-66 v0.66.0
+2026-09-07T00:02:10.5490000Z [1m[92m   Compiling[0m crate-67 v0.67.0
+2026-09-07T00:02:10.6860000Z [1m[92m   Compiling[0m crate-68 v0.68.0
+2026-09-07T00:02:10.8230000Z [1m[92m   Compiling[0m crate-69 v0.69.0
+2026-09-07T00:02:10.9600000Z [1m[92m   Compiling[0m crate-70 v0.70.0
+2026-09-07T00:02:11.0970000Z [1m[92m   Compiling[0m crate-71 v0.71.0
+2026-09-07T00:02:11.2340000Z [1m[92m   Compiling[0m crate-72 v0.72.0
+2026-09-07T00:02:11.3710000Z [1m[92m   Compiling[0m crate-73 v0.73.0
+2026-09-07T00:02:11.5080000Z [1m[92m   Compiling[0m crate-74 v0.74.0
+2026-09-07T00:02:11.6450000Z [1m[92m   Compiling[0m crate-75 v0.75.0
+2026-09-07T00:02:11.7820000Z [1m[92m   Compiling[0m crate-76 v0.76.0
+2026-09-07T00:02:11.9190000Z [1m[92m   Compiling[0m crate-77 v0.77.0
+2026-09-07T00:02:12.0560000Z [1m[92m   Compiling[0m crate-78 v0.78.0
+2026-09-07T00:02:12.1930000Z [1m[92m   Compiling[0m crate-79 v0.79.0
+2026-09-07T00:02:12.3300000Z [1m[92m   Compiling[0m crate-80 v0.80.0
+2026-09-07T00:02:12.4670000Z [1m[92m   Compiling[0m crate-81 v0.81.0
+2026-09-07T00:02:12.6040000Z [1m[92m   Compiling[0m crate-82 v0.82.0
+2026-09-07T00:02:12.7410000Z [1m[92m   Compiling[0m crate-83 v0.83.0
+2026-09-07T00:02:12.8780000Z [1m[92m   Compiling[0m crate-84 v0.84.0
+2026-09-07T00:02:13.0150000Z [1m[92m   Compiling[0m crate-85 v0.85.0
+2026-09-07T00:02:13.1520000Z [1m[92m   Compiling[0m crate-86 v0.86.0
+2026-09-07T00:02:13.2890000Z [1m[92m   Compiling[0m crate-87 v0.87.0
+2026-09-07T00:02:13.4260000Z [1m[92m   Compiling[0m crate-88 v0.88.0
+2026-09-07T00:02:13.5630000Z [1m[92m   Compiling[0m crate-89 v0.89.0
+2026-09-07T00:02:13.7000000Z [1m[92m   Compiling[0m crate-90 v0.90.0
+2026-09-07T00:02:13.8370000Z [1m[92m   Compiling[0m crate-91 v0.91.0
+2026-09-07T00:02:13.9740000Z [1m[92m   Compiling[0m crate-92 v0.92.0
+2026-09-07T00:02:14.1110000Z [1m[92m   Compiling[0m crate-93 v0.93.0
+2026-09-07T00:02:14.2480000Z [1m[92m   Compiling[0m crate-94 v0.94.0
+2026-09-07T00:02:14.3850000Z [1m[92m   Compiling[0m crate-95 v0.95.0
+2026-09-07T00:02:14.5220000Z [1m[92m   Compiling[0m crate-96 v0.96.0
+2026-09-07T00:02:14.6590000Z [1m[92m   Compiling[0m crate-97 v0.97.0
+2026-09-07T00:02:14.7960000Z [1m[92m   Compiling[0m crate-98 v0.98.0
+2026-09-07T00:02:14.9330000Z [1m[92m   Compiling[0m crate-99 v0.99.0
+2026-09-07T00:02:15.0700000Z [1m[92m   Compiling[0m crate-100 v0.100.0
+2026-09-07T00:02:15.2070000Z [1m[92m   Compiling[0m crate-101 v0.101.0
+2026-09-07T00:02:15.3440000Z [1m[92m   Compiling[0m crate-102 v0.102.0
+2026-09-07T00:02:15.4810000Z [1m[92m   Compiling[0m crate-103 v0.103.0
+2026-09-07T00:02:15.6180000Z [1m[92m   Compiling[0m crate-104 v0.104.0
+2026-09-07T00:02:15.7550000Z [1m[92m   Compiling[0m crate-105 v0.105.0
+2026-09-07T00:02:15.8920000Z [1m[92m   Compiling[0m crate-106 v0.106.0
+2026-09-07T00:02:16.0290000Z [1m[92m   Compiling[0m crate-107 v0.107.0
+2026-09-07T00:02:16.1660000Z [1m[92m   Compiling[0m crate-108 v0.108.0
+2026-09-07T00:02:16.3030000Z [1m[92m   Compiling[0m crate-109 v0.109.0
+2026-09-07T00:02:16.4400000Z [1m[92m   Compiling[0m crate-110 v0.110.0
+2026-09-07T00:02:16.5770000Z [1m[92m   Compiling[0m crate-111 v0.111.0
+2026-09-07T00:02:16.7140000Z [1m[92m   Compiling[0m crate-112 v0.112.0
+2026-09-07T00:02:16.8510000Z [1m[92m   Compiling[0m crate-113 v0.113.0
+2026-09-07T00:02:16.9880000Z [1m[92m   Compiling[0m crate-114 v0.114.0
+2026-09-07T00:02:17.1250000Z [1m[92m   Compiling[0m crate-115 v0.115.0
+2026-09-07T00:02:17.2620000Z [1m[92m   Compiling[0m crate-116 v0.116.0
+2026-09-07T00:02:17.3990000Z [1m[92m   Compiling[0m crate-117 v0.117.0
+2026-09-07T00:02:17.5360000Z [1m[92m   Compiling[0m crate-118 v0.118.0
+2026-09-07T00:02:17.6730000Z [1m[92m   Compiling[0m crate-119 v0.119.0
+2026-09-07T00:02:17.8100000Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 41.20s
+2026-09-07T00:02:17.9470000Z [1m[92m     Running[0m unittests src/lib.rs (target/debug/deps/widgets-1a2b3c)
+2026-09-07T00:02:18.0840000Z 
+2026-09-07T00:02:18.2210000Z running 42 tests
+2026-09-07T00:02:18.3580000Z test parser::tests::case_00 ... ok
+2026-09-07T00:02:18.4950000Z test parser::tests::case_01 ... ok
+2026-09-07T00:02:18.6320000Z test parser::tests::case_02 ... ok
+2026-09-07T00:02:18.7690000Z test parser::tests::case_03 ... ok
+2026-09-07T00:02:18.9060000Z test parser::tests::case_04 ... ok
+2026-09-07T00:02:19.0430000Z test parser::tests::case_05 ... ok
+2026-09-07T00:02:19.1800000Z test parser::tests::case_06 ... ok
+2026-09-07T00:02:19.3170000Z test parser::tests::case_07 ... ok
+2026-09-07T00:02:19.4540000Z test parser::tests::case_08 ... ok
+2026-09-07T00:02:19.5910000Z test parser::tests::case_09 ... ok
+2026-09-07T00:02:19.7280000Z test parser::tests::case_10 ... ok
+2026-09-07T00:02:19.8650000Z test parser::tests::case_11 ... ok
+2026-09-07T00:02:20.0020000Z test parser::tests::case_12 ... ok
+2026-09-07T00:02:20.1390000Z test parser::tests::case_13 ... ok
+2026-09-07T00:02:20.2760000Z test parser::tests::case_14 ... ok
+2026-09-07T00:02:20.4130000Z test parser::tests::case_15 ... ok
+2026-09-07T00:02:20.5500000Z test parser::tests::case_16 ... ok
+2026-09-07T00:02:20.6870000Z test parser::tests::case_17 ... ok
+2026-09-07T00:02:20.8240000Z test parser::tests::case_18 ... ok
+2026-09-07T00:02:20.9610000Z test parser::tests::case_19 ... ok
+2026-09-07T00:02:21.0980000Z test parser::tests::case_20 ... ok
+2026-09-07T00:02:21.2350000Z test parser::tests::case_21 ... ok
+2026-09-07T00:02:21.3720000Z test parser::tests::case_22 ... ok
+2026-09-07T00:02:21.5090000Z test parser::tests::case_23 ... ok
+2026-09-07T00:02:21.6460000Z test parser::tests::case_24 ... ok
+2026-09-07T00:02:21.7830000Z test parser::tests::case_25 ... ok
+2026-09-07T00:02:21.9200000Z test parser::tests::case_26 ... ok
+2026-09-07T00:02:22.0570000Z test parser::tests::case_27 ... ok
+2026-09-07T00:02:22.1940000Z test parser::tests::case_28 ... ok
+2026-09-07T00:02:22.3310000Z test parser::tests::case_29 ... ok
+2026-09-07T00:02:22.4680000Z test parser::tests::case_30 ... ok
+2026-09-07T00:02:22.6050000Z test parser::tests::case_31 ... ok
+2026-09-07T00:02:22.7420000Z test parser::tests::case_32 ... ok
+2026-09-07T00:02:22.8790000Z test parser::tests::case_33 ... ok
+2026-09-07T00:02:23.0160000Z test parser::tests::case_34 ... ok
+2026-09-07T00:02:23.1530000Z test parser::tests::case_35 ... ok
+2026-09-07T00:02:23.2900000Z test parser::tests::case_36 ... ok
+2026-09-07T00:02:23.4270000Z test parser::tests::case_37 ... ok
+2026-09-07T00:02:23.5640000Z test parser::tests::case_38 ... ok
+2026-09-07T00:02:23.7010000Z test parser::tests::case_39 ... ok
+2026-09-07T00:02:23.8380000Z test parser::tests::case_40 ... ok
+2026-09-07T00:02:23.9750000Z test parser::tests::case_41 ... ok
+2026-09-07T00:02:24.1120000Z test parser::tests::case_42 ... ok
+2026-09-07T00:02:24.2490000Z test parser::tests::case_43 ... ok
+2026-09-07T00:02:24.3860000Z test parser::tests::case_44 ... ok
+2026-09-07T00:02:24.5230000Z test parser::tests::case_45 ... ok
+2026-09-07T00:02:24.6600000Z test parser::tests::case_46 ... ok
+2026-09-07T00:02:24.7970000Z test parser::tests::case_47 ... ok
+2026-09-07T00:02:24.9340000Z test parser::tests::case_48 ... ok
+2026-09-07T00:02:25.0710000Z test parser::tests::case_49 ... ok
+2026-09-07T00:02:25.2080000Z test parser::tests::case_50 ... ok
+2026-09-07T00:02:25.3450000Z test parser::tests::case_51 ... ok
+2026-09-07T00:02:25.4820000Z test parser::tests::case_52 ... ok
+2026-09-07T00:02:25.6190000Z test parser::tests::case_53 ... ok
+2026-09-07T00:02:25.7560000Z test parser::tests::case_54 ... ok
+2026-09-07T00:02:25.8930000Z test parser::tests::case_55 ... ok
+2026-09-07T00:02:26.0300000Z test parser::tests::case_56 ... ok
+2026-09-07T00:02:26.1670000Z test parser::tests::case_57 ... ok
+2026-09-07T00:02:26.3040000Z test parser::tests::case_58 ... ok
+2026-09-07T00:02:26.4410000Z test parser::tests::case_59 ... ok
+2026-09-07T00:02:26.5780000Z test parser::tests::handles_empty_input ... [31mFAILED[0m
+2026-09-07T00:02:26.7150000Z 
+2026-09-07T00:02:26.8520000Z failures:
+2026-09-07T00:02:26.9890000Z 
+2026-09-07T00:02:27.1260000Z ---- parser::tests::handles_empty_input stdout ----
+2026-09-07T00:02:27.2630000Z thread 'parser::tests::handles_empty_input' panicked at src/parser.rs:88:9:
+2026-09-07T00:02:27.4000000Z assertion `left == right` failed
+2026-09-07T00:02:27.5370000Z   left: Some(Token::Eof)
+2026-09-07T00:02:27.6740000Z  right: None
+2026-09-07T00:02:27.8110000Z note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+2026-09-07T00:02:27.9480000Z 
+2026-09-07T00:02:28.0850000Z 
+2026-09-07T00:02:28.2220000Z failures:
+2026-09-07T00:02:28.3590000Z     parser::tests::handles_empty_input
+2026-09-07T00:02:28.4960000Z 
+2026-09-07T00:02:28.6330000Z test result: [31mFAILED[0m. 41 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+2026-09-07T00:02:28.7700000Z 
+2026-09-07T00:02:28.9070000Z [1m[91merror[0m[1m:[0m test failed, to rerun pass `--lib`
+2026-09-07T00:02:29.0440000Z ##[error]Process completed with exit code 101.
+2026-09-07T00:02:29.1810000Z Post job cleanup.
+2026-09-07T00:02:29.3180000Z [command]/usr/bin/git config --local --unset-all http.extraheader-0
+2026-09-07T00:02:29.4550000Z [command]/usr/bin/git config --local --unset-all http.extraheader-1
+2026-09-07T00:02:29.5920000Z [command]/usr/bin/git config --local --unset-all http.extraheader-2
+2026-09-07T00:02:29.7290000Z [command]/usr/bin/git config --local --unset-all http.extraheader-3
+2026-09-07T00:02:29.8660000Z [command]/usr/bin/git config --local --unset-all http.extraheader-4
+2026-09-07T00:02:30.0030000Z [command]/usr/bin/git config --local --unset-all http.extraheader-5
+2026-09-07T00:02:30.1400000Z [command]/usr/bin/git config --local --unset-all http.extraheader-6
+2026-09-07T00:02:30.2770000Z [command]/usr/bin/git config --local --unset-all http.extraheader-7
+2026-09-07T00:02:30.4140000Z [command]/usr/bin/git config --local --unset-all http.extraheader-8
+2026-09-07T00:02:30.5510000Z [command]/usr/bin/git config --local --unset-all http.extraheader-9
+2026-09-07T00:02:30.6880000Z [command]/usr/bin/git config --local --unset-all http.extraheader-10
+2026-09-07T00:02:30.8250000Z [command]/usr/bin/git config --local --unset-all http.extraheader-11
+2026-09-07T00:02:30.9620000Z [command]/usr/bin/git config --local --unset-all http.extraheader-12
+2026-09-07T00:02:31.0990000Z [command]/usr/bin/git config --local --unset-all http.extraheader-13
+2026-09-07T00:02:31.2360000Z [command]/usr/bin/git config --local --unset-all http.extraheader-14
+2026-09-07T00:02:31.3730000Z [command]/usr/bin/git config --local --unset-all http.extraheader-15
+2026-09-07T00:02:31.5100000Z [command]/usr/bin/git config --local --unset-all http.extraheader-16
+2026-09-07T00:02:31.6470000Z [command]/usr/bin/git config --local --unset-all http.extraheader-17
+2026-09-07T00:02:31.7840000Z [command]/usr/bin/git config --local --unset-all http.extraheader-18
+2026-09-07T00:02:31.9210000Z [command]/usr/bin/git config --local --unset-all http.extraheader-19
+2026-09-07T00:02:32.0580000Z [command]/usr/bin/git config --local --unset-all http.extraheader-20
+2026-09-07T00:02:32.1950000Z [command]/usr/bin/git config --local --unset-all http.extraheader-21
+2026-09-07T00:02:32.3320000Z [command]/usr/bin/git config --local --unset-all http.extraheader-22
+2026-09-07T00:02:32.4690000Z [command]/usr/bin/git config --local --unset-all http.extraheader-23
+2026-09-07T00:02:32.6060000Z [command]/usr/bin/git config --local --unset-all http.extraheader-24
+2026-09-07T00:02:32.7430000Z [command]/usr/bin/git config --local --unset-all http.extraheader-25
+2026-09-07T00:02:32.8800000Z [command]/usr/bin/git config --local --unset-all http.extraheader-26
+2026-09-07T00:02:33.0170000Z [command]/usr/bin/git config --local --unset-all http.extraheader-27
+2026-09-07T00:02:33.1540000Z [command]/usr/bin/git config --local --unset-all http.extraheader-28
+2026-09-07T00:02:33.2910000Z [command]/usr/bin/git config --local --unset-all http.extraheader-29
+2026-09-07T00:02:33.4280000Z Cleaning up orphan processes

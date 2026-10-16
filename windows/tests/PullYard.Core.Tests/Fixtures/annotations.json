@@ -1,0 +1,6 @@
+[
+  {"path": ".github", "start_line": 5, "end_line": 5, "annotation_level": "warning", "title": "", "message": "Node.js 20 actions are deprecated.", "raw_details": ""},
+  {"path": ".github", "start_line": 233, "end_line": 233, "annotation_level": "failure", "title": "", "message": "Process completed with exit code 101.", "raw_details": ""},
+  {"path": "src/parser.rs", "start_line": 88, "end_line": 88, "annotation_level": "failure", "title": "handles_empty_input", "message": "assertion `left == right` failed", "raw_details": "left: Some(Token::Eof)\nright: None"},
+  {"path": "src/lib.rs", "start_line": 3, "end_line": 3, "annotation_level": "notice", "title": "", "message": "Consider documenting this module", "raw_details": ""}
+]
