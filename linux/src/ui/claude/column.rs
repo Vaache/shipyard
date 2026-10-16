@@ -345,7 +345,7 @@ impl Column {
                 self.list.append(&lb);
             }
         }
-        if ws.projects.borrow().is_empty() && !ws.loading_projects.get() {
+        if ws.projects.borrow().is_empty() && ws.tabs.borrow().is_empty() && !ws.loading_projects.get() {
             let l = label_with("No Claude Code sessions yet", &["sy-muted"]);
             margins(&l, 10, 12, 10, 12);
             self.list.append(&l);

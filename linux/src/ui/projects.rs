@@ -251,6 +251,18 @@ struct Board {
     stack: gtk::Stack,
     status: Rc<RefreshStatus>,
     syncing: Cell<bool>,
+    rendered: Cell<Option<u64>>,
+    dragging: Cell<bool>,
+    pending_render: Cell<bool>,
+}
+
+struct HashWriter<'a>(&'a mut std::collections::hash_map::DefaultHasher);
+
+impl std::fmt::Write for HashWriter<'_> {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        std::hash::Hasher::write(self.0, s.as_bytes());
+        Ok(())
+    }
 }
 
 struct Column {
@@ -324,6 +336,16 @@ impl Board {
             return;
         }
         self.stack.set_visible_child_name("board");
+        if self.dragging.get() {
+            self.pending_render.set(true);
+            return;
+        }
+        let signature = self.signature();
+        if self.rendered.get() == Some(signature) {
+            return;
+        }
+        self.rendered.set(Some(signature));
+        let _span = crate::diagnostics::ui_span("projects.render");
         let fields = self.group_fields();
         self.syncing.set(true);
         let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
@@ -342,6 +364,12 @@ impl Board {
         for col in self.columns_for() {
             self.columns.append(&self.column_widget(col, &options));
         }
+    }
+
+    fn signature(&self) -> u64 {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        let _ = std::fmt::Write::write_fmt(&mut HashWriter(&mut h), format_args!("{:?}\u{1}{:?}\u{1}{:?}\u{1}{}", self.detail.borrow(), self.items.borrow(), self.field_id.borrow(), self.filter.borrow()));
+        std::hash::Hasher::finish(&h)
     }
 
     fn column_widget(self: &Rc<Self>, col: Column, options: &[ProjectOption]) -> gtk::Box {
@@ -427,6 +455,20 @@ impl Board {
         drag.set_actions(gdk::DragAction::MOVE);
         let id = item.id.clone();
         drag.connect_prepare(move |_, _, _| Some(gdk::ContentProvider::for_value(&id.to_value())));
+        let w = Rc::downgrade(self);
+        drag.connect_drag_begin(move |_, _| {
+            if let Some(me) = w.upgrade() {
+                me.dragging.set(true);
+            }
+        });
+        let w = Rc::downgrade(self);
+        drag.connect_drag_end(move |_, _, _| {
+            let Some(me) = w.upgrade() else { return };
+            me.dragging.set(false);
+            if me.pending_render.replace(false) {
+                glib::idle_add_local_once(move || me.render());
+            }
+        });
         card.add_controller(drag);
         let w = Rc::downgrade(self);
         let opts: Vec<ProjectOption> = options.to_vec();
@@ -579,6 +621,9 @@ pub fn board_page(project: &ProjectRef) -> adw::NavigationPage {
         stack: stack.clone(),
         status,
         syncing: Cell::new(false),
+        rendered: Cell::new(None),
+        dragging: Cell::new(false),
+        pending_render: Cell::new(false),
     });
     *holder.borrow_mut() = Some(Rc::downgrade(&me));
     let w = Rc::downgrade(&me);
