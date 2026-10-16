@@ -88,6 +88,7 @@ pub struct SearchModel {
     cursor: RefCell<Option<String>>,
     has_more: Cell<bool>,
     loading_more: Cell<bool>,
+    unconfirmed: Cell<bool>,
     current_query: RefCell<String>,
     generation: Cell<u64>,
     pub changed: crate::signal::Signal<()>,
@@ -105,6 +106,7 @@ impl SearchModel {
             cursor: RefCell::new(None),
             has_more: Cell::new(false),
             loading_more: Cell::new(false),
+            unconfirmed: Cell::new(false),
             current_query: RefCell::new(String::new()),
             generation: Cell::new(0),
             changed: crate::signal::Signal::new(),
@@ -133,6 +135,7 @@ impl SearchModel {
         if switching {
             *self.current_query.borrow_mut() = query.clone();
             *self.error.borrow_mut() = None;
+            self.unconfirmed.set(snap.is_some());
             match snap {
                 Some(snap) => {
                     self.apply(&snap);
@@ -166,7 +169,8 @@ impl SearchModel {
                     crate::list_cache::store(&account, entry);
                 }
                 let current_len = self.items.borrow().len();
-                if !switching && current_len > r.nodes.len() {
+                let confirmed = !self.unconfirmed.replace(false);
+                if !switching && confirmed && current_len > r.nodes.len() {
                     let fresh: HashSet<String> = r.nodes.iter().map(|n| n.url.clone()).collect();
                     let rest: Vec<SearchItem> = self.items.borrow().iter().skip(r.nodes.len()).filter(|i| !fresh.contains(&i.url)).cloned().collect();
                     merged.extend(rest);
