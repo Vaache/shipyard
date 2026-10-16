@@ -23,6 +23,7 @@ public sealed class ShellView : Grid
     private readonly NavigationView nav = new();
     private readonly Grid body = new();
     private readonly ContentControl listHost = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch, IsTabStop = false };
+    private readonly Border listBackground = new();
     private readonly Grid detailArea = new();
     private readonly ContentControl detailHost = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch, IsTabStop = false };
     private readonly Border clipboardBanner = new();
@@ -82,7 +83,7 @@ public sealed class ShellView : Grid
 
     private void UpdateBackground()
     {
-        listHost.Background = ThemeService.IsBrand ? Palette.Brush("list") : null;
+        listBackground.Background = ThemeService.IsBrand ? Palette.Brush("list") : null;
         detailArea.Background = ThemeService.IsBrand ? Palette.Brush("panel") : null;
         nav.Resources["NavigationViewExpandedPaneBackground"] = ThemeService.IsBrand ? Palette.Brush("sidebar") : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
     }
@@ -204,7 +205,9 @@ public sealed class ShellView : Grid
         body.ColumnDefinitions.Add(listColumn);
         body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1) });
         body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(listBackground, 0);
         Grid.SetColumn(listHost, 0);
+        body.Children.Add(listBackground);
         body.Children.Add(listHost);
 
         var splitter = new Border { Background = Palette.Brush("text", 0.08), Width = 1 };
