@@ -64,6 +64,15 @@ public static class WindowInterop
         return files?.Select(f => f.Path).ToList() ?? new List<string>();
     }
 
+    public static async Task<string?> PickSaveFile(Window window, string suggestedName, string typeName, string extension)
+    {
+        var picker = new FileSavePicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary, SuggestedFileName = suggestedName };
+        picker.FileTypeChoices.Add(typeName, new List<string> { extension });
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, Handle(window));
+        var file = await picker.PickSaveFileAsync();
+        return file?.Path;
+    }
+
     public static void Copy(string text)
     {
         try

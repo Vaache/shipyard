@@ -174,4 +174,5 @@ public static class Keys
     public const string LocalRepoPaths = "localRepoPaths";
     public const string CloseToTray = "window.closeToTray";
     public const string WindowBounds = "window.bounds";
+    public const string DiagnosticsEnabled = "diagnosticsEnabled";
 }

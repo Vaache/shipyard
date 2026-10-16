@@ -4,15 +4,15 @@ public static class Q
 {
     public static readonly string PrItemFragment = @"fragment PRItem on PullRequest { number title url prState: state isDraft createdAt updatedAt baseRefName author { login avatarUrl } repository { nameWithOwner defaultBranchRef { name } } reviewDecision additions deletions comments { totalCount } labels(first: 6) { nodes { name color } } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }";
 
-    public static readonly string PrItem = @"query($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { pullRequest(number: $num) { __typename ...PRItem } } }" + PrItemFragment;
+    public static readonly string PrItem = @"query PrItem($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { pullRequest(number: $num) { __typename ...PRItem } } }" + PrItemFragment;
 
-    public static readonly string RepoPullRequests = @"query($o: String!, $n: String!, $b: String, $states: [PullRequestState!], $first: Int!) { repository(owner: $o, name: $n) { pullRequests(headRefName: $b, states: $states, first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { __typename ...PRItem } } } }" + PrItemFragment;
+    public static readonly string RepoPullRequests = @"query RepoPullRequests($o: String!, $n: String!, $b: String, $states: [PullRequestState!], $first: Int!) { repository(owner: $o, name: $n) { pullRequests(headRefName: $b, states: $states, first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { __typename ...PRItem } } } }" + PrItemFragment;
 
     public const string StackNode = "fragment StackPR on PullRequest { number title state isDraft headRefName baseRefName }";
 
-    public static readonly string PrStack = @"query($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { defaultBranchRef { name } pullRequest(number: $num) { ...StackPR stack { entries(first: 30) { nodes { position pullRequest { ...StackPR } } } } } } }" + StackNode;
+    public static readonly string PrStack = @"query PrStack($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { defaultBranchRef { name } pullRequest(number: $num) { ...StackPR stack { entries(first: 30) { nodes { position pullRequest { ...StackPR } } } } } } }" + StackNode;
 
-    public static readonly string PrStackNeighbors = @"query($o: String!, $n: String!, $head: String!, $base: String!) { repository(owner: $o, name: $n) {
+    public static readonly string PrStackNeighbors = @"query PrStackNeighbors($o: String!, $n: String!, $head: String!, $base: String!) { repository(owner: $o, name: $n) {
   parents: pullRequests(headRefName: $base, states: [OPEN, MERGED], first: 3, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...StackPR } }
   children: pullRequests(baseRefName: $head, states: [OPEN, MERGED], first: 5, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...StackPR } }
 } }" + StackNode;
@@ -20,9 +20,9 @@ public static class Q
     public static readonly string ItemFragments = @"fragment PRItem on PullRequest { number title url prState: state isDraft createdAt updatedAt baseRefName author { login avatarUrl } repository { nameWithOwner defaultBranchRef { name } } reviewDecision additions deletions comments { totalCount } labels(first: 6) { nodes { name color } } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
 fragment IssueItem on Issue { number title url issueState: state stateReason createdAt updatedAt author { login avatarUrl } repository { nameWithOwner defaultBranchRef { name } } comments { totalCount } labels(first: 6) { nodes { name color } } }";
 
-    public static readonly string Search = @"query($q: String!, $after: String) { search(query: $q, type: ISSUE, first: 40, after: $after) { issueCount pageInfo { hasNextPage endCursor } nodes { __typename ...PRItem ...IssueItem } } }" + ItemFragments;
+    public static readonly string Search = @"query Search($q: String!, $after: String) { search(query: $q, type: ISSUE, first: 40, after: $after) { issueCount pageInfo { hasNextPage endCursor } nodes { __typename ...PRItem ...IssueItem } } }" + ItemFragments;
 
-    public static readonly string Badges = @"query {
+    public static readonly string Badges = @"query Badges {
   rr: search(query: ""is:pr is:open review-requested:@me archived:false sort:updated-desc"", type: ISSUE, first: 10) { issueCount nodes { __typename ...PRItem ...IssueItem } }
   mine: search(query: ""is:pr is:open author:@me archived:false sort:updated-desc"", type: ISSUE, first: 10) { issueCount nodes { __typename ...PRItem ...IssueItem } }
 }" + ItemFragments;
@@ -45,7 +45,7 @@ fragment IssueItem on Issue { number title url issueState: state stateReason cre
 ... on ConvertToDraftEvent {{ actor {Actor} createdAt }}
 ... on ReviewRequestedEvent {{ actor {Actor} createdAt requestedReviewer {{ __typename ... on User {{ login avatarUrl }} ... on Team {{ name }} }} }}";
 
-    public static readonly string PullRequest = $@"query($owner: String!, $name: String!, $number: Int!) {{
+    public static readonly string PullRequest = $@"query PullRequest($owner: String!, $name: String!, $number: Int!) {{
   viewer {{ login }}
   repository(owner: $owner, name: $name) {{
     viewerPermission mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed deleteBranchOnMerge autoMergeAllowed viewerDefaultMergeMethod
@@ -77,7 +77,7 @@ fragment IssueItem on Issue { number title url issueState: state stateReason cre
   }}
 }}";
 
-    public static readonly string Issue = $@"query($owner: String!, $name: String!, $number: Int!) {{
+    public static readonly string Issue = $@"query Issue($owner: String!, $name: String!, $number: Int!) {{
   viewer {{ login }}
   repository(owner: $owner, name: $name) {{
     issueOrPullRequest(number: $number) {{ __typename
@@ -91,21 +91,21 @@ fragment IssueItem on Issue { number title url issueState: state stateReason cre
   }}
 }}";
 
-    public static readonly string Repos = @"query($after: String) { viewer { repositories(first: 50, after: $after, orderBy: {field: PUSHED_AT, direction: DESC}, ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
+    public static readonly string Repos = @"query Repos($after: String) { viewer { repositories(first: 50, after: $after, orderBy: {field: PUSHED_AT, direction: DESC}, ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
   totalCount pageInfo { hasNextPage endCursor }
   nodes { nameWithOwner description isPrivate isFork isArchived stargazerCount pushedAt url primaryLanguage { name color } pullRequests(states: OPEN) { totalCount } issues(states: OPEN) { totalCount } }
 } } }";
 
-    public static readonly string RepoInfo = @"query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { nameWithOwner description url isPrivate stargazerCount forkCount defaultBranchRef { name } pullRequests(states: OPEN) { totalCount } issues(states: OPEN) { totalCount } } }";
+    public static readonly string RepoInfo = @"query RepoInfo($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { nameWithOwner description url isPrivate stargazerCount forkCount defaultBranchRef { name } pullRequests(states: OPEN) { totalCount } issues(states: OPEN) { totalCount } } }";
 
     public static readonly string ProjectFragment = @"fragment ProjectItem on ProjectV2 { id number title url closed updatedAt shortDescription items { totalCount } owner { ... on User { login } ... on Organization { login } } }";
 
-    public static readonly string Projects = @"query { viewer {
+    public static readonly string Projects = @"query Projects { viewer {
   projectsV2(first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...ProjectItem } }
   organizations(first: 30) { nodes { login projectsV2(first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...ProjectItem } } } }
 } }" + ProjectFragment;
 
-    public static readonly string Project = @"query($id: ID!, $after: String) { node(id: $id) { ... on ProjectV2 { id title url
+    public static readonly string Project = @"query Project($id: ID!, $after: String) { node(id: $id) { ... on ProjectV2 { id title url
   fields(first: 50) { nodes { __typename
     ... on ProjectV2SingleSelectField { id name options { id name color } }
     ... on ProjectV2Field { id name }
@@ -121,43 +121,43 @@ fragment IssueItem on Issue { number title url issueState: state stateReason cre
   } }
 } } }";
 
-    public static readonly string MoveProjectItem = @"mutation($p: ID!, $i: ID!, $f: ID!, $o: String!) { updateProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $f, value: {singleSelectOptionId: $o}}) { projectV2Item { id } } }";
+    public static readonly string MoveProjectItem = @"mutation MoveProjectItem($p: ID!, $i: ID!, $f: ID!, $o: String!) { updateProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $f, value: {singleSelectOptionId: $o}}) { projectV2Item { id } } }";
 
-    public static readonly string ClearProjectItem = @"mutation($p: ID!, $i: ID!, $f: ID!) { clearProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $f}) { projectV2Item { id } } }";
+    public static readonly string ClearProjectItem = @"mutation ClearProjectItem($p: ID!, $i: ID!, $f: ID!) { clearProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $f}) { projectV2Item { id } } }";
 
-    public const string AddComment = "mutation($id: ID!, $b: String!) { addComment(input: {subjectId: $id, body: $b}) { clientMutationId } }";
+    public const string AddComment = "mutation AddComment($id: ID!, $b: String!) { addComment(input: {subjectId: $id, body: $b}) { clientMutationId } }";
 
-    public const string AddReview = "mutation($id: ID!, $e: PullRequestReviewEvent!, $b: String, $th: [DraftPullRequestReviewThread]) { addPullRequestReview(input: {pullRequestId: $id, event: $e, body: $b, threads: $th}) { clientMutationId } }";
+    public const string AddReview = "mutation AddReview($id: ID!, $e: PullRequestReviewEvent!, $b: String, $th: [DraftPullRequestReviewThread]) { addPullRequestReview(input: {pullRequestId: $id, event: $e, body: $b, threads: $th}) { clientMutationId } }";
 
-    public const string ReplyThread = "mutation($id: ID!, $b: String!) { addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $id, body: $b}) { clientMutationId } }";
+    public const string ReplyThread = "mutation ReplyThread($id: ID!, $b: String!) { addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $id, body: $b}) { clientMutationId } }";
 
-    public const string ResolveThread = "mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { clientMutationId } }";
+    public const string ResolveThread = "mutation ResolveThread($id: ID!) { resolveReviewThread(input: {threadId: $id}) { clientMutationId } }";
 
-    public const string UnresolveThread = "mutation($id: ID!) { unresolveReviewThread(input: {threadId: $id}) { clientMutationId } }";
+    public const string UnresolveThread = "mutation UnresolveThread($id: ID!) { unresolveReviewThread(input: {threadId: $id}) { clientMutationId } }";
 
-    public const string Merge = "mutation($id: ID!, $m: PullRequestMergeMethod!, $t: String, $b: String) { mergePullRequest(input: {pullRequestId: $id, mergeMethod: $m, commitHeadline: $t, commitBody: $b}) { clientMutationId } }";
+    public const string Merge = "mutation Merge($id: ID!, $m: PullRequestMergeMethod!, $t: String, $b: String) { mergePullRequest(input: {pullRequestId: $id, mergeMethod: $m, commitHeadline: $t, commitBody: $b}) { clientMutationId } }";
 
-    public const string EnableAutoMerge = "mutation($id: ID!, $m: PullRequestMergeMethod!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $m}) { clientMutationId } }";
+    public const string EnableAutoMerge = "mutation EnableAutoMerge($id: ID!, $m: PullRequestMergeMethod!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $m}) { clientMutationId } }";
 
-    public const string DisableAutoMerge = "mutation($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId } }";
+    public const string DisableAutoMerge = "mutation DisableAutoMerge($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId } }";
 
-    public const string ClosePR = "mutation($id: ID!) { closePullRequest(input: {pullRequestId: $id}) { clientMutationId } }";
+    public const string ClosePR = "mutation ClosePR($id: ID!) { closePullRequest(input: {pullRequestId: $id}) { clientMutationId } }";
 
-    public const string ReopenPR = "mutation($id: ID!) { reopenPullRequest(input: {pullRequestId: $id}) { clientMutationId } }";
+    public const string ReopenPR = "mutation ReopenPR($id: ID!) { reopenPullRequest(input: {pullRequestId: $id}) { clientMutationId } }";
 
-    public const string ReadyForReview = "mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { clientMutationId } }";
+    public const string ReadyForReview = "mutation ReadyForReview($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { clientMutationId } }";
 
-    public const string ConvertToDraft = "mutation($id: ID!) { convertPullRequestToDraft(input: {pullRequestId: $id}) { clientMutationId } }";
+    public const string ConvertToDraft = "mutation ConvertToDraft($id: ID!) { convertPullRequestToDraft(input: {pullRequestId: $id}) { clientMutationId } }";
 
-    public const string UpdateBranch = "mutation($id: ID!) { updatePullRequestBranch(input: {pullRequestId: $id}) { clientMutationId } }";
+    public const string UpdateBranch = "mutation UpdateBranch($id: ID!) { updatePullRequestBranch(input: {pullRequestId: $id}) { clientMutationId } }";
 
-    public const string EditPR = "mutation($id: ID!, $t: String!, $b: String!) { updatePullRequest(input: {pullRequestId: $id, title: $t, body: $b}) { clientMutationId } }";
+    public const string EditPR = "mutation EditPR($id: ID!, $t: String!, $b: String!) { updatePullRequest(input: {pullRequestId: $id, title: $t, body: $b}) { clientMutationId } }";
 
-    public const string MarkViewed = "mutation($id: ID!, $p: String!) { markFileAsViewed(input: {pullRequestId: $id, path: $p}) { clientMutationId } }";
+    public const string MarkViewed = "mutation MarkViewed($id: ID!, $p: String!) { markFileAsViewed(input: {pullRequestId: $id, path: $p}) { clientMutationId } }";
 
-    public const string UnmarkViewed = "mutation($id: ID!, $p: String!) { unmarkFileAsViewed(input: {pullRequestId: $id, path: $p}) { clientMutationId } }";
+    public const string UnmarkViewed = "mutation UnmarkViewed($id: ID!, $p: String!) { unmarkFileAsViewed(input: {pullRequestId: $id, path: $p}) { clientMutationId } }";
 
-    public const string CloseIssue = "mutation($id: ID!) { closeIssue(input: {issueId: $id}) { clientMutationId } }";
+    public const string CloseIssue = "mutation CloseIssue($id: ID!) { closeIssue(input: {issueId: $id}) { clientMutationId } }";
 
-    public const string ReopenIssue = "mutation($id: ID!) { reopenIssue(input: {issueId: $id}) { clientMutationId } }";
+    public const string ReopenIssue = "mutation ReopenIssue($id: ID!) { reopenIssue(input: {issueId: $id}) { clientMutationId } }";
 }

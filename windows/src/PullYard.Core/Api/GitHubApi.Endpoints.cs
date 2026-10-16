@@ -271,7 +271,7 @@ public sealed partial class GitHubApi
         return await Plain(target, ct).ConfigureAwait(false);
     }
 
-    public static readonly string GitObjectQuery = @"query($owner: String!, $name: String!, $expr: String!) { repository(owner: $owner, name: $name) { object(expression: $expr) { __typename
+    public static readonly string GitObjectQuery = @"query GitObject($owner: String!, $name: String!, $expr: String!) { repository(owner: $owner, name: $name) { object(expression: $expr) { __typename
   ... on Tree { entries { name path type object { ... on Blob { byteSize isBinary } } } }
   ... on Blob { byteSize isBinary isTruncated text }
 } } }";

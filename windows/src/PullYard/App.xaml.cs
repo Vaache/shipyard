@@ -41,6 +41,7 @@ public partial class App : Application
             if (action == "update") AppViewModel.Shared.Updater.Present();
         });
         Notifications.Register();
+        DiagnosticsService.Restore();
         AppViewModel.Shared.Initialize();
         MainWindow = new MainWindow();
         MainWindow.Activate();

@@ -29,12 +29,13 @@ public static class Releases
         using var req = new HttpRequestMessage(HttpMethod.Get, AppInfo.LatestReleaseApi);
         req.Headers.Accept.ParseAdd("application/vnd.github+json");
         req.Headers.UserAgent.ParseAdd(AppInfo.UserAgent);
-        using var response = await Http.SendAsync(req, ct).ConfigureAwait(false);
+        var (response, data) = await RecordedHttp.Send(Http, req, ct).ConfigureAwait(false);
+        using var _ = response;
         var code = (int)response.StatusCode;
         if (code == 404) throw new UpdateException("No releases found.");
         if (code is < 200 or >= 300)
             throw new UpdateException(code is 403 or 429 ? "GitHub rate limit reached. Try again later." : $"GitHub responded with error {code}.");
-        return Parse(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false), Arch);
+        return Parse(System.Text.Encoding.UTF8.GetString(data), Arch);
     }
 
     public static Release Parse(string json, string arch)
@@ -92,15 +93,40 @@ public static class Releases
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.UserAgent.ParseAdd(AppInfo.UserAgent);
         req.Headers.Accept.ParseAdd("application/octet-stream");
-        using var response = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        var probe = RequestProbe.Start();
+        var name = probe.Active ? Diagnostics.RestName(req.Method, req.RequestUri) : "";
+        var path = probe.Active ? Diagnostics.RawPath(req.RequestUri) : "";
+        HttpResponseMessage? response = null;
+        long received = 0;
+        try
+        {
+            response = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            received = await Save(response, destination, expectedSize, progress, ct).ConfigureAwait(false);
+            if (probe.Active) probe.Finish(Diagnostics.KindRest, name, path, response, received, null);
+        }
+        catch (Exception e)
+        {
+            if (probe.Active) probe.Finish(Diagnostics.KindRest, name, path, response, received, e);
+            throw;
+        }
+        finally
+        {
+            response?.Dispose();
+        }
+        progress?.Report(1);
+        return destination;
+    }
+
+    private static async Task<long> Save(HttpResponseMessage response, string destination, long expectedSize, IProgress<double>? progress, CancellationToken ct)
+    {
         if (!response.IsSuccessStatusCode) throw new UpdateException($"Couldn't download the update: HTTP {(int)response.StatusCode}");
         var total = response.Content.Headers.ContentLength ?? expectedSize;
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        long written = 0;
         await using (var input = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
         await using (var output = File.Create(destination))
         {
             var buffer = new byte[81920];
-            long written = 0;
             double last = -1;
             int read;
             while ((read = await input.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
@@ -118,7 +144,6 @@ public static class Releases
                 }
             }
         }
-        progress?.Report(1);
-        return destination;
+        return written;
     }
 }
