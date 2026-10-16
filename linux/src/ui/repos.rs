@@ -353,7 +353,8 @@ pub struct CodeModel {
     dir_cache: RefCell<HashMap<String, Vec<TreeEntry>>>,
     readme_cache: RefCell<HashMap<String, Option<String>>>,
     pub blame_on: Cell<bool>,
-    blame_cache: RefCell<HashMap<String, BlameState>>,
+    blame_cache: RefCell<Vec<(String, BlameState)>>,
+    blame_epoch: Cell<u64>,
     pub changed: crate::signal::Signal<()>,
 }
 
@@ -379,6 +380,7 @@ fn has_readme(entries: &[TreeEntry]) -> bool {
 
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tiff", "svg"];
 const MARKDOWN_EXTS: &[&str] = &["md", "markdown", "mdx"];
+const BLAME_CACHE_SIZE: usize = 50;
 
 impl CodeModel {
     pub fn new(repo: RepoRef, api: GitHubApi) -> Rc<Self> {
@@ -405,7 +407,8 @@ impl CodeModel {
             dir_cache: RefCell::new(HashMap::new()),
             readme_cache: RefCell::new(HashMap::new()),
             blame_on: Cell::new(false),
-            blame_cache: RefCell::new(HashMap::new()),
+            blame_cache: RefCell::new(vec![]),
+            blame_epoch: Cell::new(0),
             changed: crate::signal::Signal::new(),
         })
     }
@@ -617,7 +620,26 @@ impl CodeModel {
             let me = self.clone();
             crate::rt::spawn_local(async move { me.load_branches().await });
         }
+        let parent = util::parent_path(&path);
+        let empty = self.entries.borrow().is_empty() && !self.loading_dir.get();
+        if (switching || empty) && parent == *self.dir.borrow() {
+            *self.selected_file.borrow_mut() = Some(path.clone());
+            *self.file.borrow_mut() = None;
+            *self.file_error.borrow_mut() = None;
+            self.clone().open_dir(parent).await;
+        }
         self.reveal(path).await;
+    }
+
+    pub async fn refresh(self: Rc<Self>) {
+        self.blame_cache.borrow_mut().clear();
+        self.blame_epoch.set(self.blame_epoch.get() + 1);
+        let d = self.dir.borrow().clone();
+        let file = self.selected_file.borrow().clone();
+        self.clone().open_dir(d).await;
+        if let Some(path) = file.filter(|p| self.selected_file.borrow().as_deref() == Some(p.as_str())) {
+            self.open_file(path).await;
+        }
     }
 
     pub async fn reveal(self: Rc<Self>, path: String) {
@@ -700,9 +722,23 @@ impl CodeModel {
         format!("{}|{}", self.git_ref.borrow(), path)
     }
 
+    fn cached_blame(&self, key: &str) -> Option<BlameState> {
+        self.blame_cache.borrow().iter().find(|(k, _)| k == key).map(|(_, s)| s.clone())
+    }
+
+    fn store_blame(&self, key: String, state: BlameState) {
+        let mut cache = self.blame_cache.borrow_mut();
+        cache.retain(|(k, _)| *k != key);
+        cache.push((key, state));
+        if cache.len() > BLAME_CACHE_SIZE {
+            let excess = cache.len() - BLAME_CACHE_SIZE;
+            cache.drain(..excess);
+        }
+    }
+
     pub fn blame_state(&self) -> Option<BlameState> {
         let path = self.selected_file.borrow().clone()?;
-        self.blame_cache.borrow().get(&self.blame_key(&path)).cloned()
+        self.cached_blame(&self.blame_key(&path))
     }
 
     pub fn set_blame(self: &Rc<Self>, on: bool) {
@@ -717,8 +753,8 @@ impl CodeModel {
     pub fn retry_blame(self: &Rc<Self>) {
         let Some(path) = self.selected_file.borrow().clone() else { return };
         let key = self.blame_key(&path);
-        if matches!(self.blame_cache.borrow().get(&key), Some(BlameState::Failed)) {
-            self.blame_cache.borrow_mut().remove(&key);
+        if matches!(self.cached_blame(&key), Some(BlameState::Failed)) {
+            self.blame_cache.borrow_mut().retain(|(k, _)| *k != key);
         }
         self.ensure_blame();
         self.changed.emit(&());
@@ -734,10 +770,11 @@ impl CodeModel {
         }
         let git_ref = self.git_ref.borrow().clone();
         let key = self.blame_key(&path);
-        if self.blame_cache.borrow().contains_key(&key) {
+        if self.cached_blame(&key).is_some() {
             return;
         }
-        self.blame_cache.borrow_mut().insert(key.clone(), BlameState::Loading);
+        self.store_blame(key.clone(), BlameState::Loading);
+        let epoch = self.blame_epoch.get();
         let me = self.clone();
         crate::rt::spawn_local(async move {
             let api = me.api.clone();
@@ -747,7 +784,10 @@ impl CodeModel {
                 Ok(Some(ranges)) if !ranges.is_empty() => BlameState::Ready(Rc::new(ranges)),
                 _ => BlameState::Failed,
             };
-            me.blame_cache.borrow_mut().insert(key.clone(), state);
+            if me.blame_epoch.get() != epoch {
+                return;
+            }
+            me.store_blame(key.clone(), state);
             let current = me.selected_file.borrow().as_ref().map(|p| me.blame_key(p)) == Some(key);
             if current {
                 me.changed.emit(&());
@@ -1204,6 +1244,9 @@ impl CodeBrowser {
 
     fn render_file_content(self: &Rc<Self>) {
         let m = &self.model;
+        if m.blame_on.get() && matches!(m.file.borrow().as_ref(), Some(FileContent::Markdown(..))) {
+            self.markdown_source.set(true);
+        }
         let selected = m.selected_file.borrow().clone();
         if selected.is_none() && self.content.is_mapped() {
             m.ensure_readme();
@@ -1334,7 +1377,11 @@ impl CodeBrowser {
             source.connect_toggled(move |t| {
                 if let Some(me) = w.upgrade() {
                     me.markdown_source.set(t.is_active());
-                    me.render_content();
+                    if !t.is_active() && me.model.blame_on.get() {
+                        me.model.set_blame(false);
+                    } else {
+                        me.render_content();
+                    }
                 }
             });
             toggles.append(&preview);
@@ -1842,8 +1889,7 @@ pub fn detail_page(repo: &RepoRef) -> adw::NavigationPage {
         Some(me) => {
             if me.tabs.active() == "code" {
                 let m = me.code_model.clone();
-                let d = m.dir.borrow().clone();
-                crate::rt::spawn_local(async move { m.open_dir(d).await });
+                crate::rt::spawn_local(async move { m.refresh().await });
             } else {
                 me.reload_list(false);
             }

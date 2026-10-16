@@ -396,7 +396,7 @@ impl GitHubApi {
 
     pub async fn blame(&self, repo: &RepoRef, git_ref: &str, path: &str) -> ApiResult<Option<Vec<BlameRange>>> {
         let r: BlameResponse = self.graphql("Blame", q::BLAME, json!({ "owner": repo.owner, "name": repo.name, "ref": git_ref, "path": path }), true).await?;
-        Ok(r.repository.and_then(|r| r.object).and_then(|o| o.blame).map(|b| b.ranges))
+        Ok(r.repository.and_then(|r| r.object).and_then(|o| o.ranges()))
     }
 
     pub async fn branches(&self, repo: &RepoRef) -> ApiResult<Vec<BranchInfo>> {

@@ -1529,6 +1529,17 @@ pub struct BlameRanges {
 pub struct BlameObject {
     #[serde(default)]
     pub blame: Option<BlameRanges>,
+    #[serde(default)]
+    pub target: Option<Box<BlameObject>>,
+}
+
+impl BlameObject {
+    pub fn ranges(self) -> Option<Vec<BlameRange>> {
+        match self.blame {
+            Some(b) => Some(b.ranges),
+            None => self.target.and_then(|t| t.blame).map(|b| b.ranges),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1613,8 +1624,16 @@ mod tests {
             {"startingLine":3,"endingLine":3,"age":1,"commit":{"oid":"bbbb","abbreviatedOid":"bb","messageHeadline":"Fix","committedDate":"2026-01-01T00:00:00Z","url":"u","author":{"name":"Bob","user":{"login":"bob","avatarUrl":null}}}}
         ]}}}}"#;
         let r: BlameResponse = serde_json::from_str(json).unwrap();
-        let ranges = r.repository.unwrap().object.unwrap().blame.unwrap().ranges;
+        let ranges = r.repository.unwrap().object.unwrap().ranges().unwrap();
         assert_eq!(ranges.len(), 2);
+        let tag = r#"{"repository":{"object":{"__typename":"Tag","target":{"__typename":"Commit","blame":{"ranges":[
+            {"startingLine":1,"endingLine":1,"age":3,"commit":{"oid":"cccc","abbreviatedOid":"cc","messageHeadline":"Tagged","committedDate":null,"url":"u","author":null}}
+        ]}}}}}"#;
+        let r: BlameResponse = serde_json::from_str(tag).unwrap();
+        let ranges = r.repository.unwrap().object.unwrap().ranges().unwrap();
+        assert_eq!(ranges[0].commit.author_name(), "unknown");
+        let tree: BlameResponse = serde_json::from_str(r#"{"repository":{"object":{"__typename":"Tree"}}}"#).unwrap();
+        assert!(tree.repository.unwrap().object.unwrap().ranges().is_none());
         assert_eq!(ranges[0].commit.author_name(), "Ann");
         assert_eq!(ranges[1].commit.author_name(), "bob");
     }

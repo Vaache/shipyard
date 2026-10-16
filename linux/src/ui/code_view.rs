@@ -109,7 +109,7 @@ impl CodeView {
         let lang = sourceview5::LanguageManager::default().guess_language(Some(filename), None);
         self.buffer.set_language(lang.as_ref());
         let shown = if text.len() > 2_000_000 { &text[..text.char_indices().take_while(|(i, _)| *i < 2_000_000).last().map(|(i, _)| i).unwrap_or(0)] } else { text };
-        self.buffer.set_text(shown);
+        self.buffer.set_text(&blame::display_text(shown));
         self.buffer.place_cursor(&self.buffer.start_iter());
         self.apply_scheme();
     }

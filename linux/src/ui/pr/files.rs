@@ -41,9 +41,8 @@ enum RowKey {
 }
 
 fn blame_target(m: &PrModel) -> Option<(RepoRef, String)> {
-    let pr = m.pr.borrow();
-    let pr = pr.as_ref()?;
-    Some((m.r.repo.clone(), pr.head_ref_oid.clone())).filter(|(_, oid)| !oid.is_empty())
+    let oid = m.files_oid.borrow().clone().or_else(|| m.pr.borrow().as_ref().map(|p| p.head_ref_oid.clone()))?;
+    Some((m.r.repo.clone(), oid)).filter(|(_, oid)| !oid.is_empty())
 }
 
 fn status_label(f: &DiffFile) -> gtk::Label {
@@ -437,10 +436,12 @@ impl FilesTab {
         let id = f.id.clone();
         menu.item("Copy path", move || util::copy(&id));
         if f.status != "removed" {
-            if let Some((repo, git_ref)) = blame_target(m) {
-                let id = f.id.clone();
-                menu.item("Blame", move || crate::ui::repos::open_blame(repo.clone(), git_ref.clone(), id.clone()));
-            }
+            let mm = m.clone();
+            let id = f.id.clone();
+            menu.item("Blame", move || match blame_target(&mm) {
+                Some((repo, git_ref)) => crate::ui::repos::open_blame(repo, git_ref, id.clone()),
+                None => crate::app::toast("Blame unavailable for this file"),
+            });
         }
         let side = self.side.clone();
         menu.item(if self.side.is_visible() { "Hide file list" } else { "Show file list" }, move || side.set_visible(!side.is_visible()));

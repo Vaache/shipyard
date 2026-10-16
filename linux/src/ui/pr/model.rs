@@ -107,7 +107,7 @@ pub struct PrModel {
     stack_fresh: Cell<bool>,
     reload_files: Cell<bool>,
     files_stale: Cell<bool>,
-    files_oid: RefCell<Option<String>>,
+    pub files_oid: RefCell<Option<String>>,
     merge_rechecks: Cell<u32>,
     recheck_pending: Cell<bool>,
     pub changed: Signal<Change>,

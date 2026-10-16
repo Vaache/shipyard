@@ -19,6 +19,22 @@ pub fn line_map(ranges: &[(i64, i64)], line_count: usize) -> Vec<u32> {
     map
 }
 
+pub fn display_text(text: &str) -> std::borrow::Cow<'_, str> {
+    if !text.contains(['\r', '\u{2029}']) {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\r' if chars.peek() != Some(&'\n') => out.push('\u{240D}'),
+            '\u{2029}' => out.push('\u{00B6}'),
+            c => out.push(c),
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 pub fn heat(age: i64) -> f64 {
     let age = age.clamp(1, 10) as f64;
     0.15 + 0.85 * (10.0 - age) / 9.0
@@ -102,6 +118,16 @@ mod tests {
         let same = Blame::new(Rc::new(vec![range(1, 2, "a"), range(3, 4, "a"), range(6, 6, "b")]), 7);
         let starts: Vec<u32> = (0..7).filter(|&l| same.starts_range(l)).collect();
         assert_eq!(starts, vec![0, 5]);
+    }
+
+    #[test]
+    fn display_text_keeps_github_lines() {
+        assert!(matches!(display_text("a\nb\r\nc"), std::borrow::Cow::Borrowed(_)));
+        assert_eq!(display_text("a\rb\r\nc\u{2029}d"), "a\u{240D}b\r\nc\u{00B6}d");
+        assert_eq!(display_text("x\r"), "x\u{240D}");
+        let shown = display_text("1\r2\n3\u{2029}4\r\n5");
+        assert_eq!(shown.matches('\n').count() + 1, 3);
+        assert!(!shown.contains(['\u{2029}']));
     }
 
     #[test]
