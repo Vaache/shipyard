@@ -147,7 +147,7 @@ impl PrPage {
         let w = Rc::downgrade(&me);
         app::on_live_visible(&toolbar, move |_| match w.upgrade() {
             Some(me) => {
-                me.model.load(false);
+                me.model.refresh_live();
                 true
             }
             None => false,
@@ -169,7 +169,12 @@ impl PrPage {
 
     fn on_change(self: &Rc<Self>, c: &Change) {
         match c {
-            Change::Pr => self.render(),
+            Change::Pr => {
+                self.render();
+                if self.model.tab.get() == PrTab::Files {
+                    self.model.ensure_files();
+                }
+            }
             Change::Busy => {
                 self.busy.set_visible(self.model.busy.get());
                 self.status.update(self.model.last_updated.get(), self.model.loading.get(), self.model.refresh_error.borrow().clone());
@@ -243,8 +248,7 @@ impl PrPage {
         }
         self.tab_stack.set_visible_child_name(tab.id());
         if tab == PrTab::Files {
-            let m = self.model.clone();
-            crate::rt::spawn_local(async move { m.load_files(false).await });
+            self.model.ensure_files();
         }
     }
 

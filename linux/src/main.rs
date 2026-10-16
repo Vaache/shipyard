@@ -11,6 +11,7 @@ mod fix_prompt;
 mod fixtures;
 mod host;
 mod icons;
+mod list_cache;
 mod local_repo;
 mod rt;
 mod secret;

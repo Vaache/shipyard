@@ -376,6 +376,7 @@ pub fn on_live_visible(widget: &impl IsA<gtk::Widget>, f: impl Fn(&()) -> bool +
 fn reset_session_caches() {
     crate::api::reset_rate_limit();
     crate::api::endpoints::reset_caches();
+    ui::lists::reset_cache();
 }
 
 pub fn on_badges(f: impl Fn(&()) -> bool + 'static) {
@@ -525,6 +526,9 @@ impl App {
     pub fn logout(self: &Rc<Self>) {
         if let Some(id) = self.poll.borrow_mut().take() {
             id.remove();
+        }
+        if let Some(login) = self.state.borrow().user.as_ref().map(|u| u.login.clone()) {
+            crate::list_cache::clear(&login);
         }
         reset_session_caches();
         {

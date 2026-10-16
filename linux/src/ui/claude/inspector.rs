@@ -673,6 +673,9 @@ impl PrDetail {
                 if matches!(c, Change::Pr | Change::Files | Change::Busy | Change::Stack) {
                     me.render();
                 }
+                if matches!(c, Change::Pr) && me.show_files.get() {
+                    me.model.ensure_files();
+                }
                 true
             }
             None => false,
@@ -681,7 +684,11 @@ impl PrDetail {
             let w = Rc::downgrade(&me);
             let f = move |_: &()| match w.upgrade() {
                 Some(me) => {
-                    me.model.load(sig == 0);
+                    if sig == 0 {
+                        me.model.load(true);
+                    } else {
+                        me.model.refresh_live();
+                    }
                     true
                 }
                 None => false,
@@ -844,8 +851,7 @@ impl PrDetail {
             if let Some(me) = w.upgrade() {
                 me.show_files.set(e.is_expanded());
                 if e.is_expanded() {
-                    let m = me.model.clone();
-                    crate::rt::spawn_local(async move { m.load_files(false).await });
+                    me.model.ensure_files();
                 }
             }
         });

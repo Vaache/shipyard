@@ -1,6 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -9,10 +10,12 @@ use serde_json::json;
 use crate::api::models::*;
 use crate::api::queries as q;
 use crate::api::endpoints::StackRefs;
-use crate::api::{ApiError, GitHubApi};
+use crate::api::{ApiError, ErrorKind, GitHubApi};
 use crate::conversation_html::{self, Look};
 use crate::diff::{DiffAnchor, DiffFile};
 use crate::signal::Signal;
+
+static LIGHT_UNSUPPORTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PrTab {
@@ -100,8 +103,10 @@ pub struct PrModel {
     outdated_by_path: RefCell<HashMap<String, Vec<ReviewThread>>>,
     active: Cell<bool>,
     queued: Cell<bool>,
+    want_full: Cell<bool>,
     stack_fresh: Cell<bool>,
     reload_files: Cell<bool>,
+    files_stale: Cell<bool>,
     files_oid: RefCell<Option<String>>,
     merge_rechecks: Cell<u32>,
     recheck_pending: Cell<bool>,
@@ -138,8 +143,10 @@ impl PrModel {
             outdated_by_path: RefCell::new(HashMap::new()),
             active: Cell::new(false),
             queued: Cell::new(false),
+            want_full: Cell::new(false),
             stack_fresh: Cell::new(false),
             reload_files: Cell::new(false),
+            files_stale: Cell::new(false),
             files_oid: RefCell::new(None),
             merge_rechecks: Cell::new(0),
             recheck_pending: Cell::new(false),
@@ -239,6 +246,19 @@ impl PrModel {
             self.stack_fresh.set(true);
             self.reload_files.set(true);
         }
+        self.want_full.set(true);
+        self.start();
+    }
+
+    pub fn refresh_live(self: &Rc<Self>) {
+        self.start();
+    }
+
+    fn light_ready(&self) -> bool {
+        !LIGHT_UNSUPPORTED.load(Ordering::Relaxed) && self.pr.borrow().as_ref().is_some_and(|p| p.light.is_known())
+    }
+
+    fn start(self: &Rc<Self>) {
         if self.active.get() {
             self.queued.set(true);
             return;
@@ -248,13 +268,46 @@ impl PrModel {
             loop {
                 me.active.set(true);
                 me.queued.set(false);
-                me.clone().fetch().await;
+                let full = me.want_full.replace(false) || !me.light_ready();
+                if full {
+                    me.clone().fetch().await;
+                } else {
+                    me.clone().check().await;
+                }
                 me.active.set(false);
-                if !me.queued.get() {
+                if !me.queued.get() || (full && !me.want_full.get()) {
+                    me.queued.set(false);
                     break;
                 }
             }
         });
+    }
+
+    async fn check(self: Rc<Self>) {
+        self.loading.set(true);
+        self.emit(Change::Busy);
+        let api = self.api.clone();
+        let r = self.r.clone();
+        let res = crate::rt::run(async move { api.pull_request_light(&r).await }).await;
+        self.loading.set(false);
+        let current = self.pr.borrow().as_ref().map(|p| p.light.clone());
+        match res {
+            Ok(Some(light)) if current.as_ref() == Some(&light) => {
+                *self.refresh_error.borrow_mut() = None;
+                self.last_updated.set(Some(Utc::now()));
+                self.emit(Change::Busy);
+                self.schedule_merge_recheck(light.merge_unknown());
+            }
+            Ok(_) => self.fetch().await,
+            Err(e) if e.kind == ErrorKind::Schema => {
+                LIGHT_UNSUPPORTED.store(true, Ordering::Relaxed);
+                self.fetch().await
+            }
+            Err(e) => {
+                *self.refresh_error.borrow_mut() = Some(e.message);
+                self.emit(Change::Busy);
+            }
+        }
     }
 
     async fn fetch(self: Rc<Self>) {
@@ -288,6 +341,10 @@ impl PrModel {
                     base: pr.base_ref_name.clone(),
                 };
                 let recheck = pr.is_open() && (pr.merge_state_status.as_deref() == Some("UNKNOWN") || pr.mergeable == "UNKNOWN");
+                let files_stale = self.reload_files.replace(false) || self.files_oid.borrow().as_ref().is_some_and(|o| *o != head);
+                if files_stale && self.files_loaded.get() {
+                    self.files_stale.set(true);
+                }
                 *self.repo.borrow_mut() = Some(repo);
                 *self.pr.borrow_mut() = Some(pr);
                 *self.error.borrow_mut() = None;
@@ -297,15 +354,6 @@ impl PrModel {
                 let me = self.clone();
                 crate::rt::spawn_local(async move { me.load_stack(refs).await });
                 self.schedule_merge_recheck(recheck);
-                let stale = self.reload_files.get() || self.files_oid.borrow().as_ref().map(|o| *o != head).unwrap_or(false);
-                self.reload_files.set(false);
-                if self.files_loaded.get() && stale {
-                    let me = self.clone();
-                    crate::rt::spawn_local(async move { me.load_files(true).await });
-                } else if !self.files_loaded.get() && !self.files_loading.get() {
-                    let me = self.clone();
-                    crate::rt::spawn_local(async move { me.load_files(false).await });
-                }
             }
             Err(e) => {
                 if self.pr.borrow().is_none() {
@@ -340,7 +388,7 @@ impl PrModel {
         gtk::glib::timeout_add_local_once(Duration::from_secs(delay), move || {
             if let Some(me) = weak.upgrade() {
                 me.recheck_pending.set(false);
-                me.load(false);
+                me.refresh_live();
             }
         });
     }
@@ -357,11 +405,20 @@ impl PrModel {
         }
     }
 
+    pub fn ensure_files(self: &Rc<Self>) {
+        if self.files_loading.get() || (self.files_loaded.get() && !self.files_stale.get()) {
+            return;
+        }
+        let me = self.clone();
+        crate::rt::spawn_local(async move { me.load_files(true).await });
+    }
+
     pub async fn load_files(self: Rc<Self>, force: bool) {
         if !force && (self.files_loaded.get() || self.files_loading.get()) {
             return;
         }
         self.files_loading.set(true);
+        self.files_stale.set(false);
         let oid = self.pr.borrow().as_ref().map(|p| p.head_ref_oid.clone());
         let api = self.api.clone();
         let r = self.r.clone();
@@ -466,8 +523,7 @@ impl PrModel {
         self.collapsed.borrow_mut().remove(path);
         self.emit(Change::Diff);
         self.emit(Change::Reveal(path.to_string()));
-        let me = self.clone();
-        crate::rt::spawn_local(async move { me.load_files(false).await });
+        self.ensure_files();
     }
 
     pub async fn run<F, Fut>(self: &Rc<Self>, reload: bool, op: F) -> bool
