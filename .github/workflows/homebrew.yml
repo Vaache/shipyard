@@ -1,0 +1,96 @@
+name: Homebrew
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version to publish to the tap (e.g. 2.8.0)
+        required: true
+
+concurrency:
+  group: homebrew-tap
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TAP_REPOSITORY: pullyard/homebrew-tap
+      CASK_PATH: Casks/pullyard.rb
+    steps:
+      - name: Check tap token
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::error title=HOMEBREW_TAP_TOKEN missing::Add repository secret HOMEBREW_TAP_TOKEN: a fine-grained personal access token with Contents read and write access to $TAP_REPOSITORY."
+            exit 1
+          fi
+
+      - name: Resolve version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${INPUT_VERSION:-$RELEASE_TAG}"
+          version="${version#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version '$version'"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Download DMG
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset="PullYard-$VERSION.dmg"
+          for attempt in 1 2 3 4 5; do
+            if gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$RUNNER_TEMP" --clobber; then
+              break
+            fi
+            if [ "$attempt" = 5 ]; then
+              echo "::error::Could not download $asset from release v$VERSION"
+              exit 1
+            fi
+            sleep 20
+          done
+          sha=$(sha256sum "$RUNNER_TEMP/$asset" | cut -d' ' -f1)
+          echo "SHA256=$sha" >> "$GITHUB_ENV"
+          echo "$asset sha256 $sha"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ env.TAP_REPOSITORY }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Update cask
+        working-directory: tap
+        run: |
+          sed -i -E \
+            -e "s/^  version \"[^\"]*\"$/  version \"$VERSION\"/" \
+            -e "s/^  sha256 \"[^\"]*\"$/  sha256 \"$SHA256\"/" \
+            "$CASK_PATH"
+          grep -qx "  version \"$VERSION\"" "$CASK_PATH"
+          grep -qx "  sha256 \"$SHA256\"" "$CASK_PATH"
+          git diff -- "$CASK_PATH"
+
+      - name: Push
+        working-directory: tap
+        run: |
+          if git diff --quiet -- "$CASK_PATH"; then
+            echo "Cask already at $VERSION"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "pullyard $VERSION" -- "$CASK_PATH"
+          git push origin HEAD
