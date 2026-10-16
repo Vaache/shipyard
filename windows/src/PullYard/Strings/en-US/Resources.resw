@@ -168,7 +168,9 @@
   <data name="Diagnostics_Requests" xml:space="preserve"><value>Requests</value></data>
   <data name="Diagnostics_SlowUi" xml:space="preserve"><value>Slow UI (over {0} ms): {1}, max {2} ms</value></data>
   <data name="Diagnostics_SlowUiNone" xml:space="preserve"><value>Slow UI (over {0} ms): none</value></data>
+  <data name="Diagnostics_TickAverage" xml:space="preserve"><value>avg {0} ms, {1} requests over {2} ticks</value></data>
   <data name="Diagnostics_Ticks" xml:space="preserve"><value>Live ticks (duration/requests, newest first): {0}</value></data>
+  <data name="Diagnostics_TicksSummary" xml:space="preserve"><value>Live ticks with requests: {0}</value></data>
   <data name="Diagnostics_Totals" xml:space="preserve"><value>{0} requests · {1} · avg {2} ms · p95 {3} ms</value></data>
   <data name="Diagnostics_WindowTitle" xml:space="preserve"><value>{0} Diagnostics</value></data>
   <data name="Edit_Body" xml:space="preserve"><value>Description (Markdown)</value></data>

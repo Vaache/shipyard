@@ -28,7 +28,7 @@ public static class SmokeTour
         {
             if (window.AppWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
             Log("start");
-            DiagnosticsService.Enabled = true;
+            DiagnosticsService.SetRecording(true);
             await Step("launch", 9000);
             if (app.Phase != Phase.LoggedIn)
             {

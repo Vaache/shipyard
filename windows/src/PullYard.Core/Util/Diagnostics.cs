@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -9,11 +10,13 @@ public sealed record RequestEntry(
     DateTimeOffset Timestamp,
     string Kind,
     string Name,
+    string Path,
     string Origin,
     double DurationMs,
     long Bytes,
     int Status,
     string? Error,
+    string? Note,
     int? RateLimitRemaining,
     long? RateLimitReset,
     string? RateLimitResource);
@@ -31,82 +34,131 @@ public sealed record DiagnosticsSummary(
     long TotalBytes,
     double AvgMs,
     double P95Ms,
-    RateLimitState? LastRateLimit,
     IReadOnlyList<RateLimitState> RateLimits,
     IReadOnlyList<TickEntry> RecentTicks,
+    int TickCount,
+    double TickAvgMs,
+    double TickAvgRequests,
     int SlowUiCount,
     double SlowUiMaxMs);
 
 public sealed class LiveTick
 {
+    internal static TimeSpan SettleDelay = TimeSpan.FromMilliseconds(300);
+    internal static TimeSpan MaxOpen = TimeSpan.FromSeconds(30);
+
+    private readonly object gate = new();
     private readonly long started = Stopwatch.GetTimestamp();
-    private long ended;
+    private long lastEnd;
     private int pending = 1;
     private int requests;
+    private int generation;
+    private bool finished;
 
     internal LiveTick(LiveTick? previous)
     {
         Previous = previous;
+        Task.Delay(MaxOpen).ContinueWith(_ => ForceFinish(), TaskScheduler.Default);
     }
 
     internal LiveTick? Previous { get; }
 
     public DateTimeOffset Timestamp { get; } = DateTimeOffset.Now;
 
-    internal void Enter()
+    internal bool Enter()
     {
-        Interlocked.Increment(ref requests);
-        Interlocked.Increment(ref pending);
+        lock (gate)
+        {
+            if (finished) return false;
+            requests++;
+            pending++;
+            return true;
+        }
     }
 
     internal void Leave()
     {
-        if (Interlocked.Decrement(ref pending) == 0) Volatile.Write(ref ended, Stopwatch.GetTimestamp());
+        int gen;
+        lock (gate)
+        {
+            if (finished) return;
+            pending--;
+            lastEnd = Stopwatch.GetTimestamp();
+            if (pending > 0) return;
+            gen = ++generation;
+        }
+        Task.Delay(SettleDelay).ContinueWith(_ => Settle(gen), TaskScheduler.Default);
+    }
+
+    private void Settle(int gen)
+    {
+        lock (gate)
+        {
+            if (!finished && pending == 0 && gen == generation) finished = true;
+        }
+    }
+
+    private void ForceFinish()
+    {
+        lock (gate)
+        {
+            if (finished) return;
+            if (pending > 0) lastEnd = Stopwatch.GetTimestamp();
+            finished = true;
+        }
     }
 
     public TickEntry Snapshot()
     {
-        var end = Volatile.Read(ref ended);
-        var finished = end != 0;
-        var ms = Stopwatch.GetElapsedTime(started, finished ? end : Stopwatch.GetTimestamp()).TotalMilliseconds;
-        return new TickEntry(Timestamp, ms, Volatile.Read(ref requests), finished);
+        lock (gate)
+        {
+            var end = finished ? lastEnd : Stopwatch.GetTimestamp();
+            return new TickEntry(Timestamp, Stopwatch.GetElapsedTime(started, end).TotalMilliseconds, requests, finished);
+        }
     }
 }
 
 public readonly struct RequestProbe
 {
     private readonly long started;
+    private readonly DateTimeOffset startedAt;
     private readonly LiveTick? tick;
+    private readonly bool liveTick;
 
-    private RequestProbe(long started, LiveTick? tick)
+    private RequestProbe(long started, DateTimeOffset startedAt, LiveTick? tick, bool liveTick)
     {
         this.started = started;
+        this.startedAt = startedAt;
         this.tick = tick;
+        this.liveTick = liveTick;
     }
 
     public bool Active => started != 0;
 
+    public double ElapsedMs => started == 0 ? 0 : Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+
     public static RequestProbe Start()
     {
         if (!Diagnostics.Enabled) return default;
-        var tick = Diagnostics.CurrentTick;
-        tick?.Enter();
-        return new RequestProbe(Stopwatch.GetTimestamp(), tick);
+        var current = Diagnostics.CurrentTick;
+        var counted = current is not null && current.Enter() ? current : null;
+        return new RequestProbe(Stopwatch.GetTimestamp(), DateTimeOffset.Now, counted, current is not null);
     }
 
-    public void Finish(string kind, string name, HttpResponseMessage? response, long bytes, Exception? error)
+    public void Finish(string kind, string name, string path, HttpResponseMessage? response, long bytes, Exception? exception, string? note = null, double? durationMs = null, string? error = null)
     {
         if (started == 0) return;
-        var ms = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         var entry = new RequestEntry(
-            DateTimeOffset.Now,
+            startedAt,
             kind,
             name,
-            tick is null ? Diagnostics.OriginUser : Diagnostics.OriginLiveTick,
-            ms,
+            path,
+            liveTick ? Diagnostics.OriginLiveTick : Diagnostics.OriginUser,
+            durationMs ?? ElapsedMs,
             bytes,
             response is null ? 0 : (int)response.StatusCode,
-            error is null ? null : Diagnostics.Describe(error),
+            error ?? (exception is null ? null : Diagnostics.Describe(exception)),
+            note,
             response is null ? null : Diagnostics.IntHeader(response, "X-RateLimit-Remaining"),
             response is null ? null : Diagnostics.LongHeader(response, "X-RateLimit-Reset"),
             response is null ? null : Diagnostics.Header(response, "X-RateLimit-Resource"));
@@ -130,6 +182,9 @@ public sealed class Diagnostics
     private static volatile bool enabled;
     private static readonly AsyncLocal<LiveTick?> currentTick = new();
     private static readonly Regex OperationRx = new(@"^\s*(?:query|mutation|subscription)\s+([A-Za-z_][A-Za-z0-9_]*)", RegexOptions.Compiled);
+    private static readonly Regex QueryRx = new(@"\?[^\s)'""]*", RegexOptions.Compiled);
+    private static readonly Regex HexRx = new(@"^[0-9a-fA-F]{7,64}$", RegexOptions.Compiled);
+    private static readonly Regex GuidRx = new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", RegexOptions.Compiled);
 
     public static bool Enabled
     {
@@ -215,21 +270,107 @@ public sealed class Diagnostics
         var m = OperationRx.Match(query);
         if (m.Success) return m.Groups[1].Value;
         if (caller.Length == 0) return KindGraphQL;
-        return char.ToLowerInvariant(caller[0]) + caller[1..];
+        return char.ToUpperInvariant(caller[0]) + caller[1..];
     }
 
-    public static string RestName(HttpMethod method, Uri? uri) => uri is null ? method.Method : method.Method + " " + (uri.IsAbsoluteUri ? uri.AbsolutePath : uri.OriginalString.Split('?', 2)[0]);
+    public static string RawPath(Uri? uri) => uri is null ? "" : uri.IsAbsoluteUri ? uri.AbsolutePath : uri.OriginalString.Split('?', 2)[0];
 
-    internal static string Describe(Exception e) => e is OperationCanceledException ? "cancelled" : $"{e.GetType().Name}: {e.Message}";
+    public static string RestName(HttpMethod method, Uri? uri)
+    {
+        if (uri is null) return method.Method;
+        var github = uri.IsAbsoluteUri && uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase);
+        return method.Method + " " + NormalizePath(RawPath(uri), github);
+    }
+
+    public static string NormalizePath(string path, bool ownerRepoFirst = false)
+    {
+        var segs = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var output = new List<string>(segs.Length);
+        var i = 0;
+        if (segs.Length >= 3 && segs[0] == "repos")
+        {
+            output.AddRange(new[] { "repos", "{owner}", "{repo}" });
+            i = 3;
+        }
+        else if (segs.Length >= 2 && segs[0] is "users" or "orgs")
+        {
+            output.AddRange(new[] { segs[0], "{owner}" });
+            i = 2;
+        }
+        else if (ownerRepoFirst && segs.Length >= 2)
+        {
+            output.AddRange(new[] { "{owner}", "{repo}" });
+            i = 2;
+        }
+        for (; i < segs.Length; i++)
+        {
+            var seg = segs[i];
+            var prev = i > 0 ? segs[i - 1] : "";
+            if (prev is "contents" or "readme")
+            {
+                output.Add("{path}");
+                break;
+            }
+            if (prev is "heads" or "tags" && i >= 2 && segs[i - 2] is "refs" or "ref")
+            {
+                output.Add(prev == "heads" ? "{branch}" : "{tag}");
+                break;
+            }
+            if (prev == "download" && i >= 2 && segs[i - 2] == "releases")
+            {
+                output.Add("{tag}");
+                continue;
+            }
+            if (prev is "commits" or "trees" or "blobs" or "statuses" or "check-runs" && !seg.All(char.IsDigit))
+            {
+                output.Add("{sha}");
+                continue;
+            }
+            output.Add(NormalizeSegment(seg));
+        }
+        return "/" + string.Join('/', output);
+    }
+
+    private static string NormalizeSegment(string seg)
+    {
+        if (seg.Length > 0 && seg.All(char.IsDigit)) return "{n}";
+        if (GuidRx.IsMatch(seg)) return "{id}";
+        if (HexRx.IsMatch(seg) && seg.Any(char.IsDigit)) return "{sha}";
+        if (seg.Length >= 20 && seg.Any(char.IsDigit) && seg.Any(char.IsLetter) && !seg.Contains('.')) return "{id}";
+        return seg;
+    }
+
+    public static (string? Error, string? Note) GraphQLOutcome(byte[] data)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(data);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("errors", out var errors) || errors.ValueKind != JsonValueKind.Array || errors.GetArrayLength() == 0) return (null, null);
+            var hasData = root.TryGetProperty("data", out var d) && d.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined);
+            return hasData ? (null, "partial") : ("graphql error", null);
+        }
+        catch
+        {
+            return (null, null);
+        }
+    }
+
+    public static string Describe(Exception e) => e switch
+    {
+        TaskCanceledException { InnerException: TimeoutException } => "timeout",
+        OperationCanceledException => "cancelled",
+        _ => $"{e.GetType().Name}: {QueryRx.Replace(e.Message, "")}"
+    };
 
     internal static string? Header(HttpResponseMessage response, string name) =>
         response.Headers.TryGetValues(name, out var values) ? values.FirstOrDefault() : null;
 
     internal static int? IntHeader(HttpResponseMessage response, string name) =>
-        int.TryParse(Header(response, name), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : null;
+        int.TryParse(Header(response, name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : null;
 
     internal static long? LongHeader(HttpResponseMessage response, string name) =>
-        long.TryParse(Header(response, name), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : null;
+        long.TryParse(Header(response, name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : null;
 
     public static double Percentile(IEnumerable<double> values, double p)
     {
@@ -239,26 +380,32 @@ public sealed class Diagnostics
         return sorted[Math.Clamp(rank - 1, 0, sorted.Count - 1)];
     }
 
-    public static DiagnosticsSummary Summarize(IReadOnlyList<RequestEntry> requests, IReadOnlyList<TickEntry> ticks, IReadOnlyList<SlowUiEntry> slow, int recentTicks = 10)
+    public static List<RateLimitState> RateLimits(IEnumerable<RequestEntry> requests)
     {
         var limits = new Dictionary<string, RateLimitState>();
-        RateLimitState? last = null;
-        foreach (var r in requests.OrderByDescending(r => r.Timestamp))
+        foreach (var r in requests.OrderByDescending(r => r.Timestamp.AddMilliseconds(r.DurationMs)))
         {
             if (r.RateLimitRemaining is not { } remaining) continue;
             var reset = r.RateLimitReset is { } s ? DateTimeOffset.FromUnixTimeSeconds(s) : (DateTimeOffset?)null;
-            var state = new RateLimitState(r.RateLimitResource ?? "", remaining, reset);
-            last ??= state;
-            limits.TryAdd(state.Resource, state);
+            limits.TryAdd(r.RateLimitResource ?? "", new RateLimitState(r.RateLimitResource ?? "", remaining, reset));
         }
+        return limits.Values.OrderBy(l => l.Resource, StringComparer.Ordinal).ToList();
+    }
+
+    public static DiagnosticsSummary Summarize(IReadOnlyList<RequestEntry> requests, IReadOnlyList<TickEntry> ticks, IReadOnlyList<SlowUiEntry> slow, int recentTicks = 10)
+    {
+        var finished = ticks.Where(t => t.Finished).OrderByDescending(t => t.Timestamp).ToList();
+        var active = finished.Where(t => t.Requests > 0).ToList();
         return new DiagnosticsSummary(
             requests.Count,
             requests.Sum(r => r.Bytes),
             requests.Count == 0 ? 0 : requests.Average(r => r.DurationMs),
             Percentile(requests.Select(r => r.DurationMs), 95),
-            last,
-            limits.Values.OrderBy(l => l.Resource, StringComparer.Ordinal).ToList(),
-            ticks.Where(t => t.Finished).OrderByDescending(t => t.Timestamp).Take(recentTicks).ToList(),
+            RateLimits(requests),
+            finished.Take(recentTicks).ToList(),
+            active.Count,
+            active.Count == 0 ? 0 : active.Average(t => t.DurationMs),
+            active.Count == 0 ? 0 : active.Average(t => t.Requests),
             slow.Count,
             slow.Count == 0 ? 0 : slow.Max(s => s.DurationMs));
     }
@@ -282,18 +429,18 @@ public sealed class Diagnostics
                 w.WriteString("ts", Timestamp(r.Timestamp));
                 w.WriteString("kind", r.Kind);
                 w.WriteString("name", r.Name);
+                w.WriteString("path", r.Path);
                 w.WriteString("origin", r.Origin);
                 w.WriteNumber("durationMs", Math.Round(r.DurationMs, 1));
                 w.WriteNumber("bytes", r.Bytes);
                 w.WriteNumber("status", r.Status);
-                if (r.Error is { } e) w.WriteString("error", e);
-                else w.WriteNull("error");
+                WriteOptional(w, "error", r.Error);
+                WriteOptional(w, "note", r.Note);
                 if (r.RateLimitRemaining is { } rem) w.WriteNumber("rateLimitRemaining", rem);
                 else w.WriteNull("rateLimitRemaining");
                 if (r.RateLimitReset is { } reset) w.WriteNumber("rateLimitReset", reset);
                 else w.WriteNull("rateLimitReset");
-                if (r.RateLimitResource is { } res) w.WriteString("rateLimitResource", res);
-                else w.WriteNull("rateLimitResource");
+                WriteOptional(w, "rateLimitResource", r.RateLimitResource);
             })));
         foreach (var t in ticks.Where(t => t.Finished))
             lines.Add((t.Timestamp, Line(w =>
@@ -315,7 +462,13 @@ public sealed class Diagnostics
         return sb.ToString();
     }
 
-    private static string Timestamp(DateTimeOffset ts) => ts.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+    private static void WriteOptional(Utf8JsonWriter w, string name, string? value)
+    {
+        if (value is null) w.WriteNull(name);
+        else w.WriteString(name, value);
+    }
+
+    private static string Timestamp(DateTimeOffset ts) => ts.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
     private static string Line(Action<Utf8JsonWriter> write)
     {
@@ -333,7 +486,7 @@ public sealed class Diagnostics
 
     public static string SummaryText(IReadOnlyList<RequestEntry> requests, IReadOnlyList<TickEntry> ticks, IReadOnlyList<SlowUiEntry> slow)
     {
-        var c = System.Globalization.CultureInfo.InvariantCulture;
+        var c = CultureInfo.InvariantCulture;
         var s = Summarize(requests, ticks, slow);
         var sb = new StringBuilder();
         sb.Append(c, $"{AppInfo.DisplayName} {AppInfo.Version} diagnostics, {DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", c)}\n");
@@ -342,8 +495,10 @@ public sealed class Diagnostics
         sb.Append(c, $"Origin: {string.Join(", ", origins)}\n");
         if (s.RateLimits.Count > 0)
             sb.Append(c, $"Rate limit: {string.Join(", ", s.RateLimits.Select(l => $"{(l.Resource.Length == 0 ? "?" : l.Resource)} {l.Remaining}{(l.Reset is { } r ? " (resets " + r.ToLocalTime().ToString("HH:mm:ss", c) + ")" : "")}"))}\n");
+        if (s.TickCount > 0)
+            sb.Append(c, $"Live ticks with requests: {s.TickCount}, avg {s.TickAvgMs:0} ms, avg {s.TickAvgRequests:0.#} requests\n");
         if (s.RecentTicks.Count > 0)
-            sb.Append(c, $"Live ticks (newest first): {string.Join(", ", s.RecentTicks.Select(t => $"{t.DurationMs:0} ms/{t.Requests} req"))}\n");
+            sb.Append(c, $"Recent live ticks (newest first): {string.Join(", ", s.RecentTicks.Select(t => $"{t.DurationMs:0} ms/{t.Requests} req"))}\n");
         sb.Append(c, $"Slow UI: {s.SlowUiCount}{(s.SlowUiCount > 0 ? $", max {s.SlowUiMaxMs:0} ms" : "")}\n");
         var groups = Group(requests);
         if (groups.Count > 0)

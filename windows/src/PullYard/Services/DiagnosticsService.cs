@@ -1,15 +1,17 @@
 using System.Diagnostics;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Windowing;
 using PullYard.Core.Util;
 
 namespace PullYard.Services;
 
 public static class DiagnosticsService
 {
-    public const double SlowUiThresholdMs = 32;
+    public const double SlowUiThresholdMs = 16;
     private static readonly TimeSpan ProbeInterval = TimeSpan.FromMilliseconds(50);
     private static DispatcherQueueTimer? probe;
     private static long lastProbe;
+    private static bool skipNext;
 
     public static event Action? Changed;
 
@@ -19,18 +21,25 @@ public static class DiagnosticsService
         set
         {
             Settings.Shared.Set(Keys.DiagnosticsEnabled, value);
-            Apply(value);
-            Changed?.Invoke();
+            SetRecording(value);
         }
     }
 
-    public static void Restore() => Apply(Settings.Shared.GetBool(Keys.DiagnosticsEnabled, false));
+    public static void Restore() => SetRecording(Settings.Shared.GetBool(Keys.DiagnosticsEnabled, false));
 
-    private static void Apply(bool on)
+    public static void SetRecording(bool on)
     {
         Diagnostics.Enabled = on;
         if (on) StartProbe();
         else StopProbe();
+        Changed?.Invoke();
+    }
+
+    private static bool MainWindowShown()
+    {
+        if (App.MainWindow?.AppWindow is not { } window) return true;
+        if (!window.IsVisible) return false;
+        return window.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized };
     }
 
     private static void StartProbe()
@@ -40,15 +49,28 @@ public static class DiagnosticsService
         timer.Interval = ProbeInterval;
         timer.IsRepeating = true;
         lastProbe = Stopwatch.GetTimestamp();
-        timer.Tick += (_, _) =>
-        {
-            var now = Stopwatch.GetTimestamp();
-            var late = Stopwatch.GetElapsedTime(lastProbe, now).TotalMilliseconds - ProbeInterval.TotalMilliseconds;
-            lastProbe = now;
-            if (late > SlowUiThresholdMs && late < 10000) Diagnostics.Shared.AddSlowUi(late);
-        };
+        skipNext = true;
+        timer.Tick += (_, _) => OnProbe();
         timer.Start();
         probe = timer;
+    }
+
+    private static void OnProbe()
+    {
+        var now = Stopwatch.GetTimestamp();
+        var late = Stopwatch.GetElapsedTime(lastProbe, now).TotalMilliseconds - ProbeInterval.TotalMilliseconds;
+        lastProbe = now;
+        if (!MainWindowShown())
+        {
+            skipNext = true;
+            return;
+        }
+        if (skipNext)
+        {
+            skipNext = false;
+            return;
+        }
+        if (late > SlowUiThresholdMs) Diagnostics.Shared.AddSlowUi(late);
     }
 
     private static void StopProbe()

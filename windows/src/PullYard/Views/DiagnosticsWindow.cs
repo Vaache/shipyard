@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
@@ -20,8 +21,10 @@ public sealed class DiagnosticsWindow : Window
     private readonly ListView list = ListSupport.Create("GenericRowTemplate", ListViewSelectionMode.None);
     private readonly TextBox filter = new() { PlaceholderText = L.T("Diagnostics_Filter", "Filter by name"), MinWidth = 220 };
     private readonly DispatcherQueueTimer timer;
+    private readonly ObservableCollection<object> items = new();
     private long shownVersion = -1;
     private bool grouped;
+    private RequestEntry? newestShown;
 
     public static void Show()
     {
@@ -65,14 +68,14 @@ public sealed class DiagnosticsWindow : Window
         mode.SelectionChanged += (s, _) =>
         {
             grouped = s.SelectedItem?.Tag is true;
-            Render(true);
+            Render(true, true);
         };
-        filter.TextChanged += (_, _) => Render(true);
+        filter.TextChanged += (_, _) => Render(true, true);
         var tools = Ui.H(8,
             Ui.Button(L.T("Diagnostics_Clear", "Clear"), () =>
             {
                 Diagnostics.Shared.Clear();
-                Render(true);
+                Render(true, true);
             }, glyph: ""),
             Ui.Button(L.T("Diagnostics_Export", "Export"), () => Export().Forget(), glyph: ""),
             Ui.Button(L.T("Diagnostics_CopySummary", "Copy summary"), () => WindowInterop.Copy(Diagnostics.Shared.SummaryText()), glyph: ""));
@@ -86,6 +89,7 @@ public sealed class DiagnosticsWindow : Window
         Grid.SetRow(columns, 2);
         root.Children.Add(columns);
 
+        list.ItemsSource = items;
         Grid.SetRow(list, 3);
         root.Children.Add(list);
 
@@ -105,13 +109,13 @@ public sealed class DiagnosticsWindow : Window
             ThemeService.Changed -= OnThemeChanged;
             DiagnosticsService.Changed -= OnEnabledChanged;
         };
-        Render(true);
+        Render(true, true);
     }
 
     private void OnThemeChanged()
     {
         ApplyTheme();
-        Render(true);
+        Render(true, true);
     }
 
     private void OnEnabledChanged() => Render(true);
@@ -127,27 +131,50 @@ public sealed class DiagnosticsWindow : Window
         root.Background = ThemeService.IsBrand ? Palette.Brush("window") : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
     }
 
-    private void Render(bool force)
+    private void Render(bool force, bool rebuild = false)
     {
         var version = Diagnostics.Shared.Version;
         if (!force && version == shownVersion) return;
         shownVersion = version;
         var requests = Diagnostics.Shared.Requests();
-        var ticks = Diagnostics.Shared.Ticks();
-        var slow = Diagnostics.Shared.SlowUi();
-        RenderHeader(Diagnostics.Summarize(requests, ticks, slow));
+        RenderHeader(Diagnostics.Summarize(requests, Diagnostics.Shared.Ticks(), Diagnostics.Shared.SlowUi()));
         var q = filter.Text.Trim();
-        var shown = q.Length == 0 ? requests : requests.Where(r => r.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
-        if (grouped)
+        var shown = q.Length == 0 ? requests : requests.Where(r => r.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || r.Path.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (rebuild)
         {
-            columns.Child = GroupRowItem.Header();
-            list.ItemsSource = Diagnostics.Group(shown).Select(g => (object)new GroupRowItem(g)).ToList();
+            columns.Child = grouped ? GroupRowItem.Header() : RequestRowItem.Header();
+            items.Clear();
+            newestShown = null;
+        }
+        if (grouped) SyncGroups(Diagnostics.Group(shown));
+        else SyncRequests(shown);
+    }
+
+    private void SyncRequests(List<RequestEntry> shown)
+    {
+        var known = newestShown is null ? -1 : shown.FindIndex(r => ReferenceEquals(r, newestShown));
+        if (known < 0)
+        {
+            items.Clear();
+            foreach (var r in shown) items.Add(new RequestRowItem(r));
         }
         else
         {
-            columns.Child = RequestRowItem.Header();
-            list.ItemsSource = shown.Select(r => (object)new RequestRowItem(r)).ToList();
+            for (var i = known - 1; i >= 0; i--) items.Insert(0, new RequestRowItem(shown[i]));
+            while (items.Count > shown.Count) items.RemoveAt(items.Count - 1);
         }
+        newestShown = shown.FirstOrDefault();
+    }
+
+    private void SyncGroups(List<RequestGroup> groups)
+    {
+        for (var i = 0; i < groups.Count; i++)
+        {
+            var row = new GroupRowItem(groups[i]);
+            if (i >= items.Count) items.Add(row);
+            else if (!row.Equals(items[i])) items[i] = row;
+        }
+        while (items.Count > groups.Count) items.RemoveAt(items.Count - 1);
     }
 
     private void RenderHeader(DiagnosticsSummary s)
@@ -161,6 +188,8 @@ public sealed class DiagnosticsWindow : Window
             : string.Join("   ", s.RateLimits.Select(l => L.F("Diagnostics_RateLimitEntry", "{0}: {1} left, resets {2}", l.Resource.Length == 0 ? "?" : l.Resource, l.Remaining, l.Reset is { } r ? r.ToLocalTime().ToString("HH:mm:ss", Fmt.Culture) : "—")));
         header.Children.Add(Ui.Text(L.F("Diagnostics_RateLimit", "Rate limit: {0}", limits), 12.5, "muted", wrap: true));
         var ticks = s.RecentTicks.Count == 0 ? "—" : string.Join(", ", s.RecentTicks.Select(t => $"{Ms(t.DurationMs)} ms/{t.Requests}"));
+        var average = s.TickCount == 0 ? "—" : L.F("Diagnostics_TickAverage", "avg {0} ms, {1} requests over {2} ticks", Ms(s.TickAvgMs), s.TickAvgRequests.ToString("0.#", Fmt.Culture), s.TickCount);
+        header.Children.Add(Ui.Text(L.F("Diagnostics_TicksSummary", "Live ticks with requests: {0}", average), 12.5, "muted", wrap: true));
         header.Children.Add(Ui.Text(L.F("Diagnostics_Ticks", "Live ticks (duration/requests, newest first): {0}", ticks), 12.5, "muted", wrap: true));
         header.Children.Add(Ui.Text(s.SlowUiCount == 0
             ? L.F("Diagnostics_SlowUiNone", "Slow UI (over {0} ms): none", Ms(DiagnosticsService.SlowUiThresholdMs))
@@ -202,10 +231,10 @@ public sealed record RequestRowItem(RequestEntry Entry) : IRowContent
     {
         var e = Entry;
         var failed = e.Error is not null || e.Status is 0 or >= 400;
-        var status = Ui.Text(e.Error is null ? e.Status.ToString(Fmt.Culture) : L.T("Diagnostics_Error", "error"), 12, failed ? "red" : "green", mono: true);
-        if (e.Error is { } err) Ui.Tip(status, err);
+        var status = Ui.Text(e.Error is null ? e.Status.ToString(Fmt.Culture) : L.T("Diagnostics_Error", "error"), 12, failed ? "red" : e.Note is null ? "green" : "amber", mono: true);
+        if ((e.Error ?? e.Note) is { } detail) Ui.Tip(status, detail);
         var name = Ui.Text(e.Name, 12, "text", mono: true, maxLines: 1);
-        Ui.Tip(name, e.Name);
+        Ui.Tip(name, e.Path.Length == 0 || e.Path == e.Name ? e.Name : e.Name + "\n" + e.Path);
         var row = Row(
             Ui.Text(e.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff", Fmt.Culture), 12, "muted", mono: true),
             Ui.Text(e.Kind, 12, e.Kind == Diagnostics.KindGraphQL ? "violet" : "sky"),
