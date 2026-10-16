@@ -92,7 +92,7 @@ extension GitHubAPI {
         req.setValue(accept, forHTTPHeaderField: "Accept")
         req.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         req.setValue("PullYard-macOS", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await Diagnostics.track(.rest, Diagnostics.restName("GET", req.url)) { try await URLSession.shared.data(for: req) }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 404 { return nil }
         guard (200..<300).contains(status) else { throw APIError(message: "GitHub \(status)", status: status) }

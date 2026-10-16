@@ -113,6 +113,7 @@ final class AppModel {
 
     init() {
         URLCache.shared = URLCache(memoryCapacity: 40 << 20, diskCapacity: 200 << 20)
+        Diagnostics.shared.start()
         Task { await restore() }
     }
 
@@ -302,6 +303,7 @@ final class AppModel {
     }
 
     private func tickLive() {
+        Diagnostics.shared.beginTick()
         lastLiveRefresh = Date()
         liveTick += 1
         Task { await refreshBadges() }

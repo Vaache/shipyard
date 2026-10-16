@@ -84,12 +84,12 @@ final class GitHubAPI {
         throw APIError(message: "GitHub \(http.statusCode): \(msg)", status: http.statusCode)
     }
 
-    func graphQL<T: Decodable>(_ query: String, _ variables: [String: Any?] = [:], strict: Bool = false) async throws -> T {
+    func graphQL<T: Decodable>(_ query: String, _ variables: [String: Any?] = [:], strict: Bool = false, caller: String = #function) async throws -> T {
         var req = request(URL(string: "https://api.github.com/graphql")!, method: "POST")
         let vars = variables.compactMapValues { $0 }
         req.httpBody = try JSONSerialization.data(withJSONObject: ["query": query, "variables": vars])
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await session.data(for: req)
+        let (data, response) = try await Diagnostics.track(.graphql, Diagnostics.graphQLName(query, caller: caller)) { try await session.data(for: req) }
         try check(response, data)
         let decoded: GraphQLResponse<T>
         do {
@@ -139,14 +139,14 @@ final class GitHubAPI {
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        let (data, response) = try await session.data(for: req)
+        let (data, response) = try await Diagnostics.track(.rest, Diagnostics.restName(method, req.url)) { try await session.data(for: req) }
         try check(response, data)
         return (data, response as! HTTPURLResponse)
     }
 
     func redirectTarget(_ path: String) async throws -> URL {
         let req = request(url(path), method: "GET")
-        let (data, response) = try await session.data(for: req, delegate: NoRedirect())
+        let (data, response) = try await Diagnostics.track(.rest, Diagnostics.restName("GET", req.url)) { try await session.data(for: req, delegate: NoRedirect()) }
         guard let http = response as? HTTPURLResponse else { throw APIError(message: "No response") }
         if (300..<400).contains(http.statusCode), let loc = http.value(forHTTPHeaderField: "Location"), let u = URL(string: loc) {
             return u
@@ -156,7 +156,7 @@ final class GitHubAPI {
     }
 
     func plain(_ url: URL) async throws -> String {
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await Diagnostics.track(.rest, Diagnostics.restName("GET", url)) { try await URLSession.shared.data(from: url) }
         try check(response, data)
         return String(decoding: data, as: UTF8.self)
     }

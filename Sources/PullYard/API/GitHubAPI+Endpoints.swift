@@ -194,8 +194,8 @@ extension GitHubAPI {
         try await send("PUT", "/notifications", body: ["read": true])
     }
 
-    func mutate(_ query: String, _ vars: [String: Any?]) async throws {
-        let _: EmptyData = try await graphQL(query, vars, strict: true)
+    func mutate(_ query: String, _ vars: [String: Any?], caller: String = #function) async throws {
+        let _: EmptyData = try await graphQL(query, vars, strict: true, caller: caller)
     }
 
     func addComment(subject: String, body: String) async throws {
