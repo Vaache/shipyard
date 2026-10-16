@@ -468,10 +468,26 @@ struct PRPulse: Decodable, Equatable {
     struct Target: Decodable, Equatable { let oid: String? }
     struct BaseRef: Decodable, Equatable { let target: Target? }
     struct AutoMerge: Decodable, Equatable { let enabledAt: Date? }
-    struct StateCount: Decodable, Equatable { let state: String; let count: Int }
+    struct Context: Decodable, Equatable {
+        let typename: String
+        let databaseId: Int?
+        let name: String?
+        let status: String?
+        let conclusion: String?
+        let completedAt: Date?
+        let context: String?
+        let state: String?
+
+        enum CodingKeys: String, CodingKey { case typename = "__typename", databaseId, name, status, conclusion, completedAt, context, state }
+    }
     struct Contexts: Decodable, Equatable {
-        let checkRunCountsByState: [StateCount]?
-        let statusContextCountsByState: [StateCount]?
+        let totalCount: Int
+        let nodes: [Context?]
+    }
+    struct Requested: Decodable, Equatable { let requestedReviewer: Reviewer? }
+    struct Requests: Decodable, Equatable {
+        let totalCount: Int
+        let nodes: [Requested?]
     }
     struct Rollup: Decodable, Equatable {
         let state: String
@@ -503,7 +519,7 @@ struct PRPulse: Decodable, Equatable {
     let autoMergeRequest: AutoMerge?
     let pulseComments: Count
     let pulseReviews: Count
-    let pulseRequests: Count
+    let pulseRequests: Requests
     let pulseThreads: Threads
     let pulseCommit: Commits
 }

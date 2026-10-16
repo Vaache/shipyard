@@ -63,12 +63,12 @@ final class SearchListModel {
         var cached = false
         let key = "\(account ?? "")|\(query)"
         let diskKey = "search|\(query)"
-        if query != currentQuery {
+        if key != currentKey {
             switched = true
             currentQuery = query
             currentKey = key
             error = nil
-            if let snap = Self.cache[key] ?? (persist ? ListCache.load(Snapshot.self, account: account, key: diskKey)?.value : nil) {
+            if let snap = Self.cache[key] {
                 cached = true
                 apply(snap, mode: typing ? .silent : .cascade)
             } else {
@@ -82,8 +82,15 @@ final class SearchListModel {
         let gen = generation
         if !silent || switched { loading = true }
         refreshing = true
+        async let fetched = api.search(query)
+        if switched, !cached, persist, let snap = await ListCache.load(Snapshot.self, account: account, key: diskKey)?.value {
+            guard gen == generation else { return }
+            cached = true
+            showingCached = true
+            apply(snap, mode: typing ? .silent : .cascade)
+        }
         do {
-            let r = try await api.search(query)
+            let r = try await fetched
             guard gen == generation else { return }
             var merged = r.nodes
             var nextCursor = r.pageInfo?.endCursor
@@ -127,16 +134,17 @@ final class SearchListModel {
     func loadMore(api: GitHubAPI?) async {
         guard let api, hasMore, !loadingMore, let cursor else { return }
         let query = currentQuery
+        let key = currentKey
         loadingMore = true
         defer { loadingMore = false }
-        if let r = try? await api.search(query, after: cursor), query == currentQuery {
+        if let r = try? await api.search(query, after: cursor), key == currentKey {
             let known = Set(items.map(\.id))
             let added = r.nodes.filter { !known.contains($0.id) }
             rows.ingest(added.map(\.id), mode: .append)
             items += added
             self.cursor = r.pageInfo?.endCursor
             hasMore = r.pageInfo?.hasNextPage ?? false
-            Self.cache[currentKey] = Snapshot(items: items, total: total, cursor: self.cursor, hasMore: hasMore, updated: lastUpdated ?? Date())
+            Self.cache[key] = Snapshot(items: items, total: total, cursor: self.cursor, hasMore: hasMore, updated: lastUpdated ?? Date())
         }
     }
 
@@ -259,7 +267,7 @@ struct SearchListView: View {
         .searchable(text: $text, placement: .toolbar, prompt: "Filter: text, repo:org/name, label:bug")
         .navigationTitle(title)
         .navigationSubtitle(model.total > 0 ? "\(model.total)" : "")
-        .task(id: "\(query)|\(app.api != nil)") {
+        .task(id: "\(query)|\(app.cacheAccount ?? "")|\(app.api != nil)") {
             if !text.isEmpty { try? await Task.sleep(nanoseconds: 350_000_000) }
             guard !Task.isCancelled else { return }
             let typing = text != loadedText

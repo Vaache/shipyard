@@ -69,7 +69,7 @@ enum Q {
     """
 
     static let prPulseFragment = """
-    fragment PRPulse on PullRequest { updatedAt headRefOid state isDraft merged mergeable mergeStateStatus reviewDecision baseRef { target { oid } } autoMergeRequest { enabledAt } pulseComments: comments { totalCount } pulseReviews: reviews { totalCount } pulseRequests: reviewRequests { totalCount } pulseThreads: reviewThreads(first: 100) { totalCount nodes { isResolved } } pulseCommit: commits(last: 1) { totalCount nodes { commit { oid statusCheckRollup { state contexts(first: 1) { checkRunCountsByState { state count } statusContextCountsByState { state count } } } } } } }
+    fragment PRPulse on PullRequest { updatedAt headRefOid state isDraft merged mergeable mergeStateStatus reviewDecision baseRef { target { oid } } autoMergeRequest { enabledAt } pulseComments: comments { totalCount } pulseReviews: reviews { totalCount } pulseRequests: reviewRequests(first: 20) { totalCount nodes { requestedReviewer { __typename ... on User { login } ... on Team { name } ... on Mannequin { login } } } } pulseThreads: reviewThreads(first: 100) { totalCount nodes { isResolved } } pulseCommit: commits(last: 1) { totalCount nodes { commit { oid statusCheckRollup { state contexts(first: 100) { totalCount nodes { __typename ... on CheckRun { databaseId name status conclusion completedAt } ... on StatusContext { context state } } } } } } } }
     """
 
     static let prPulse = """

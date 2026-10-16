@@ -12,6 +12,7 @@ struct ReposView: View {
     @State private var refreshing = false
     @State private var lastUpdated: Date?
     @State private var rows = RowAppearTracker.shared("repos")
+    @State private var loadedAccount: String?
 
     private var visible: [RepoSummary] {
         repos.filter { (!hideArchived || !$0.isArchived) && (text.isEmpty || $0.nameWithOwner.localizedCaseInsensitiveContains(text) || ($0.description ?? "").localizedCaseInsensitiveContains(text)) }
@@ -42,7 +43,15 @@ struct ReposView: View {
                     .help("Hide archived")
             }
         }
-        .task(id: app.api != nil) { if repos.isEmpty { await load(first: true) } }
+        .task(id: "\(app.cacheAccount ?? "")|\(app.api != nil)") {
+            if loadedAccount != app.cacheAccount {
+                repos = []
+                cursor = nil
+                hasMore = false
+                lastUpdated = nil
+            }
+            if repos.isEmpty { await load(first: true) }
+        }
         .onChange(of: app.refreshTick) { Task { await load() } }
         .onChange(of: text) { _, t in
             if !t.isEmpty, hasMore { Task { await loadAll() } }
@@ -51,25 +60,30 @@ struct ReposView: View {
 
     private func load(first: Bool = false) async {
         guard let api = app.api else { return }
+        let account = app.cacheAccount
         var cached = false
-        if first, repos.isEmpty, let snap = ListCache.load([RepoSummary].self, account: app.cacheAccount, key: "repos") {
-            cached = true
-            rows.ingest(snap.value.map(\.id), mode: .cascade)
-            repos = snap.value
-            lastUpdated = snap.saved
-        }
         loading = true
         refreshing = true
         defer {
             loading = false
             refreshing = false
         }
+        async let request = api.repos(after: nil)
+        if first, repos.isEmpty, let snap = await ListCache.load([RepoSummary].self, account: account, key: "repos"), repos.isEmpty, app.api === api {
+            cached = true
+            rows.ingest(snap.value.map(\.id), mode: .cascade)
+            repos = snap.value
+            loadedAccount = account
+            lastUpdated = snap.saved
+        }
         do {
-            let r = try await api.repos(after: nil)
-            let keep = repos.count > r.nodes.count ? Array(repos.dropFirst(r.nodes.count)).filter { n in !r.nodes.contains { $0.id == n.id } } : []
+            let r = try await request
+            guard app.api === api else { return }
+            let keep = !cached && loadedAccount == account && repos.count > r.nodes.count ? Array(repos.dropFirst(r.nodes.count)).filter { n in !r.nodes.contains { $0.id == n.id } } : []
             rows.ingest(r.nodes.map(\.id), mode: first && !cached ? .cascade : .refresh)
             repos = r.nodes + keep
-            ListCache.save(r.nodes, account: app.cacheAccount, key: "repos")
+            loadedAccount = account
+            ListCache.save(r.nodes, account: account, key: "repos")
             if keep.isEmpty {
                 cursor = r.pageInfo.endCursor
                 hasMore = r.pageInfo.hasNextPage
@@ -86,7 +100,7 @@ struct ReposView: View {
         guard let api = app.api, hasMore, !loading else { return }
         loading = true
         defer { loading = false }
-        if let r = try? await api.repos(after: cursor) {
+        if let r = try? await api.repos(after: cursor), app.api === api {
             let known = Set(repos.map(\.id))
             let added = r.nodes.filter { !known.contains($0.id) }
             rows.ingest(added.map(\.id), mode: .append)

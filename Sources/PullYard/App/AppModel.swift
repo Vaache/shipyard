@@ -152,6 +152,7 @@ final class AppModel {
         let api = makeAPI(token)
         let (user, scopes) = try await api.currentUser()
         if persist { try Keychain.save(token) }
+        if self.user?.login != user.login { SearchListModel.resetCache() }
         self.api = api
         self.user = Demo.isOn ? Demo.user : user
         self.scopes = scopes
@@ -225,7 +226,7 @@ final class AppModel {
         resumeTask?.cancel()
         rateLimitedUntil = nil
         Keychain.delete()
-        ListCache.forget(user?.login)
+        ListCache.forget(user?.login ?? ListCache.rememberedLogin)
         SearchListModel.resetCache()
         api = nil
         user = nil

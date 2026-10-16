@@ -997,8 +997,10 @@ struct InspectorPRDetail: View {
             }
         }
         .task(id: ref) {
+            model?.inspectorFilesVisible = false
             let m = app.prModel(ref)
             model = m
+            m?.inspectorFilesVisible = showFiles
             await m?.load()
         }
         .onLiveTick { await model?.load(live: true) }
@@ -1114,7 +1116,8 @@ struct InspectorPRDetail: View {
             } label: {
                 Text("Files changed · \(pr.changedFiles)").font(.caption.weight(.semibold))
             }
-            .onChange(of: showFiles) { _, open in if open { Task { await model?.loadFiles() } } }
+            .onChange(of: showFiles) { _, open in model?.inspectorFilesVisible = open }
+            .onDisappear { model?.inspectorFilesVisible = false }
         }
     }
 }
