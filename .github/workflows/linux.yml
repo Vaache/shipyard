@@ -266,7 +266,7 @@ jobs:
       options: --privileged
     env:
       MANIFEST: linux/packaging/flathub/io.github.pullyard.PullYard.yml
-      LOCAL_MANIFEST: linux/packaging/flathub/io.github.pullyard.PullYard.local.yml
+      LOCAL_MANIFEST: io.github.pullyard.PullYard.local.yml
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
