@@ -195,7 +195,7 @@ struct RepoDetailView: View {
             }
         }
         .onChange(of: app.liveTick) {
-            if tab != .code { Task { await model.load(api: app.api, query: query, silent: true) } }
+            if tab != .code { Diagnostics.liveTask { await model.load(api: app.api, query: query, silent: true) } }
         }
     }
 

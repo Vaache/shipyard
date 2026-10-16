@@ -319,7 +319,7 @@ final class Updater {
         req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         req.cachePolicy = .reloadIgnoringLocalCacheData
         req.timeoutInterval = 20
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await Diagnostics.track(.rest, Diagnostics.restName("GET", req.url), url: req.url, authenticated: false) { try await URLSession.shared.data(for: req) }
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         if code == 404 { throw UpdateError.noReleases }
         guard (200..<300).contains(code) else { throw UpdateError.http(code) }

@@ -64,6 +64,11 @@ struct PullYardApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.center)
 
+        Window("Diagnostics", id: "diagnostics") {
+            ThemedRoot { DiagnosticsView() }
+        }
+        .defaultSize(width: 980, height: 640)
+
         Settings {
             ThemedRoot { SettingsView().environment(app) }
         }

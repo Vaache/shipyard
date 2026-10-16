@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var loggingOut = false
     @State private var showAddProfile = false
     @AppStorage(Updater.autoCheckKey) private var autoCheckUpdates = true
+    @AppStorage(Diagnostics.enabledKey) private var diagnosticsEnabled = false
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -130,6 +131,19 @@ struct SettingsView: View {
                 }
             } header: {
                 SettingsHeader(title: "Updates", icon: "arrow.down.circle", color: .syGreen)
+            }
+            Section {
+                Toggle("Record network diagnostics", isOn: $diagnosticsEnabled)
+                    .onChange(of: diagnosticsEnabled) { Diagnostics.shared.setEnabled(diagnosticsEnabled) }
+                HStack {
+                    Text("Keeps the last 1000 GitHub requests in memory: timing, size, status and rate limit. No tokens or request bodies.")
+                        .font(.caption)
+                        .foregroundStyle(Color.syMuted)
+                    Spacer()
+                    Button("Open Diagnostics") { openWindow(id: "diagnostics") }
+                }
+            } header: {
+                SettingsHeader(title: "Diagnostics", icon: "gauge.with.dots.needle.33percent", color: .sySky)
             }
             Section {
                 TextField("Client ID", text: $clientID)
