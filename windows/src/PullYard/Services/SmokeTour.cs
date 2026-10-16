@@ -64,7 +64,7 @@ public static class SmokeTour
                 await Step("pr files", 12000);
                 await Shot("04-pr-files");
                 blameRef = model.Pr?.HeadRefOid;
-                blamePath = model.Files.Where(f => f.Status == "modified").OrderByDescending(f => f.Additions + f.Deletions).FirstOrDefault()?.Id;
+                blamePath = model.Files.Where(f => f.Status == "modified" && !f.Id.EndsWith(".md", StringComparison.OrdinalIgnoreCase)).OrderBy(f => f.Additions + f.Deletions).FirstOrDefault()?.Id;
                 model.Tab = PRTab.Commits;
                 await Step("pr commits", 3000);
                 await Shot("05-pr-commits");
