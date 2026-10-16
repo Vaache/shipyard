@@ -952,6 +952,7 @@ pub struct ChatComposer {
     completion_box: gtk::ListBox,
     completion: Cell<Option<Completion>>,
     items: RefCell<Vec<CompletionItem>>,
+    items_token: RefCell<String>,
     file_search: RefCell<Option<Rc<util::FuzzySearch>>>,
     loading_files: Cell<bool>,
     completion_timer: RefCell<Option<glib::SourceId>>,
@@ -1064,6 +1065,7 @@ impl ChatComposer {
             completion_box: completion_box.clone(),
             completion: Cell::new(None),
             items: RefCell::new(vec![]),
+            items_token: RefCell::new(String::new()),
             file_search: RefCell::new(None),
             loading_files: Cell::new(false),
             completion_timer: RefCell::new(None),
@@ -1219,6 +1221,9 @@ impl ChatComposer {
 
     fn handle_key(self: &Rc<Self>, key: gdk::Key, state: gdk::ModifierType) -> glib::Propagation {
         let shift = state.contains(gdk::ModifierType::SHIFT_MASK);
+        if matches!(key, gdk::Key::Return | gdk::Key::KP_Enter | gdk::Key::Tab | gdk::Key::ISO_Left_Tab) {
+            self.flush_file_completion();
+        }
         let completing = self.completion.get().is_some() && !self.items.borrow().is_empty();
         match key {
             gdk::Key::Escape => {
@@ -1304,7 +1309,7 @@ impl ChatComposer {
             self.completion.set(Some(Completion::File));
             if self.file_search.borrow().is_none() {
                 self.load_files();
-                self.show_completion(vec![]);
+                self.show_completion(&token, vec![]);
                 return;
             }
             let w = Rc::downgrade(self);
@@ -1328,26 +1333,55 @@ impl ChatComposer {
         let q = token[1..].to_lowercase();
         let mut f: Vec<(String, String)> = all.into_iter().filter(|(n, _)| q.is_empty() || n.to_lowercase().contains(&q)).collect();
         f.sort_by_key(|(n, _)| (if n.to_lowercase().starts_with(&q) { 0 } else { 1 }, n.clone()));
-        self.show_completion(f.into_iter().take(12).map(|(n, d)| CompletionItem { title: format!("/{n}"), detail: d, insert: format!("/{n} ") }).collect());
+        self.show_completion(&token, f.into_iter().take(12).map(|(n, d)| CompletionItem { title: format!("/{n}"), detail: d, insert: format!("/{n} ") }).collect());
+    }
+
+    fn current_token(&self) -> Option<String> {
+        let (start, end) = self.token_range()?;
+        Some(self.text().chars().skip(start).take(end - start).collect())
+    }
+
+    fn file_items(paths: Vec<String>) -> Vec<CompletionItem> {
+        paths.into_iter().map(|p| CompletionItem { title: util::last_component(&p), detail: p.clone(), insert: format!("@{p} ") }).collect()
+    }
+
+    fn flush_file_completion(self: &Rc<Self>) {
+        if self.completion.get() != Some(Completion::File) {
+            return;
+        }
+        let Some(token) = self.current_token() else { return };
+        let pending = self.completion_timer.borrow().is_some();
+        if !pending && *self.items_token.borrow() == token {
+            return;
+        }
+        if let Some(id) = self.completion_timer.take() {
+            id.remove();
+        }
+        let Some(search) = self.file_search.borrow().clone() else {
+            self.show_completion(&token, vec![]);
+            return;
+        };
+        let Some(query) = token.strip_prefix('@') else { return };
+        let paths = search.run_now(query, 12, "chat.mention");
+        self.show_completion(&token, Self::file_items(paths));
     }
 
     fn run_file_completion(self: &Rc<Self>) {
         let Some(search) = self.file_search.borrow().clone() else { return };
-        let Some((start, end)) = self.token_range() else { return };
-        let token: String = self.text().chars().skip(start).take(end - start).collect();
+        let Some(token) = self.current_token() else { return };
         let Some(query) = token.strip_prefix('@').map(str::to_string) else { return };
         let w = Rc::downgrade(self);
         crate::rt::spawn_local(async move {
             let Some(paths) = search.run(&query, 12, "chat.mention").await else { return };
             let Some(me) = w.upgrade() else { return };
-            if me.completion.get() != Some(Completion::File) {
+            if me.completion.get() != Some(Completion::File) || me.current_token().as_deref() != Some(token.as_str()) {
                 return;
             }
-            me.show_completion(paths.into_iter().map(|p| CompletionItem { title: util::last_component(&p), detail: p.clone(), insert: format!("@{p} ") }).collect());
+            me.show_completion(&token, Self::file_items(paths));
         });
     }
 
-    fn show_completion(&self, items: Vec<CompletionItem>) {
+    fn show_completion(&self, token: &str, items: Vec<CompletionItem>) {
         self.completion_box.remove_all();
         for it in &items {
             let row = hbox(8);
@@ -1362,6 +1396,7 @@ impl ChatComposer {
         }
         self.completion_box.set_visible(!items.is_empty());
         *self.items.borrow_mut() = items;
+        *self.items_token.borrow_mut() = token.to_string();
     }
 
     fn accept(self: &Rc<Self>, i: usize) {
@@ -1424,12 +1459,15 @@ impl ChatComposer {
                 list
             })
             .await;
-            let search = util::FuzzySearch::build(list).await;
-            if let Some(me) = w.upgrade() {
-                *me.file_search.borrow_mut() = Some(search);
+            let search = if list.is_empty() { None } else { Some(util::FuzzySearch::build(list).await) };
+            let Some(me) = w.upgrade() else { return };
+            let Some(search) = search else {
                 me.loading_files.set(false);
-                me.update_completion();
-            }
+                return;
+            };
+            *me.file_search.borrow_mut() = Some(search);
+            me.loading_files.set(false);
+            me.update_completion();
         });
     }
 

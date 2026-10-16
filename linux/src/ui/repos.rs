@@ -1106,10 +1106,12 @@ pub fn quick_open(model: Rc<CodeModel>) {
     let open = suggested("Open");
     sheet.footer.append(&open);
     let results: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(vec![]));
+    let results_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
     let show = {
         let list = list.clone();
         let results = results.clone();
-        Rc::new(move |r: Vec<String>| {
+        let results_query = results_query.clone();
+        Rc::new(move |query: String, r: Vec<String>| {
             let _span = crate::diagnostics::ui_span("quickopen.render");
             list.remove_all();
             for path in &r {
@@ -1126,25 +1128,53 @@ pub fn quick_open(model: Rc<CodeModel>) {
                 list.select_row(Some(&first));
             }
             *results.borrow_mut() = r;
+            *results_query.borrow_mut() = Some(query);
         })
     };
     let search: Rc<RefCell<Option<Rc<util::FuzzySearch>>>> = Rc::new(RefCell::new(None));
     let refresh = {
         let search = search.clone();
         let entry = entry.clone();
+        let show = show.clone();
         Rc::new(move || {
             let Some(s) = search.borrow().clone() else { return };
             let query = entry.text().to_string();
             let show = show.clone();
+            let search = search.clone();
             crate::rt::spawn_local(async move {
-                if let Some(r) = s.run(&query, 200, "quickopen.filter").await {
-                    show(r);
+                let Some(r) = s.run(&query, 200, "quickopen.filter").await else { return };
+                if search.borrow().as_ref().is_some_and(|current| Rc::ptr_eq(current, &s)) {
+                    show(query, r);
                 }
             });
         })
     };
+    let flush = {
+        let search = search.clone();
+        let entry = entry.clone();
+        let results_query = results_query.clone();
+        move || {
+            let Some(s) = search.borrow().clone() else { return };
+            let query = entry.text().to_string();
+            if results_query.borrow().as_deref() == Some(query.as_str()) {
+                return;
+            }
+            let r = s.run_now(&query, 200, "quickopen.filter");
+            show(query, r);
+        }
+    };
     let epoch = Rc::new(Cell::new(0u64));
     let building = Rc::new(Cell::new(false));
+    let release = {
+        let epoch = epoch.clone();
+        let building = building.clone();
+        let search = search.clone();
+        move || {
+            epoch.set(epoch.get() + 1);
+            building.set(false);
+            search.borrow_mut().take();
+        }
+    };
     let sync = {
         let model = model.clone();
         let stack = stack.clone();
@@ -1193,6 +1223,9 @@ pub fn quick_open(model: Rc<CodeModel>) {
         let results = results.clone();
         let list = list.clone();
         Rc::new(move |idx: Option<i32>| {
+            if idx.is_none() {
+                flush();
+            }
             let i = idx.or_else(|| list.selected_row().map(|r| r.index())).unwrap_or(0).max(0) as usize;
             if let Some(path) = results.borrow().get(i).cloned() {
                 d.close();
@@ -1213,7 +1246,10 @@ pub fn quick_open(model: Rc<CodeModel>) {
     let r = sync.clone();
     let closed = Rc::new(Cell::new(false));
     let c = closed.clone();
-    sheet.dialog.connect_closed(move |_| c.set(true));
+    sheet.dialog.connect_closed(move |_| {
+        c.set(true);
+        release();
+    });
     model.changed.connect(move |_| {
         if closed.get() {
             return false;

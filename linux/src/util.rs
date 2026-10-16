@@ -425,15 +425,40 @@ impl FuzzySearch {
         std::rc::Rc::new(FuzzySearch { index: std::sync::Arc::new(index), last: std::cell::RefCell::new(None), generation: std::cell::Cell::new(0) })
     }
 
+    fn candidates(&self, q: &str) -> Option<std::sync::Arc<Vec<u32>>> {
+        self.last.borrow().as_ref().filter(|(prev, _)| q.starts_with(prev.as_str())).map(|(_, m)| m.clone())
+    }
+
+    fn finish(&self, q: String, matched: Vec<u32>, top: Vec<u32>) -> Vec<String> {
+        *self.last.borrow_mut() = Some((q, std::sync::Arc::new(matched)));
+        top.into_iter().map(|i| self.index.path(i).to_string()).collect()
+    }
+
+    fn first(&self, limit: usize) -> Vec<String> {
+        *self.last.borrow_mut() = None;
+        self.index.paths.iter().take(limit).cloned().collect()
+    }
+
+    pub fn run_now(&self, query: &str, limit: usize, span: &'static str) -> Vec<String> {
+        self.generation.set(self.generation.get() + 1);
+        let q = fuzzy_query(query);
+        if q.is_empty() {
+            return self.first(limit);
+        }
+        let candidates = self.candidates(&q);
+        let _span = crate::diagnostics::ui_span(span);
+        let (matched, top) = self.index.search(&q, candidates.as_deref().map(|v| v.as_slice()), limit);
+        self.finish(q, matched, top)
+    }
+
     pub async fn run(&self, query: &str, limit: usize, span: &'static str) -> Option<Vec<String>> {
         let generation = self.generation.get() + 1;
         self.generation.set(generation);
         let q = fuzzy_query(query);
         if q.is_empty() {
-            *self.last.borrow_mut() = None;
-            return Some(self.index.paths.iter().take(limit).cloned().collect());
+            return Some(self.first(limit));
         }
-        let candidates = self.last.borrow().as_ref().filter(|(prev, _)| q.starts_with(prev.as_str())).map(|(_, m)| m.clone());
+        let candidates = self.candidates(&q);
         let size = candidates.as_ref().map(|c| c.len()).unwrap_or(self.index.len());
         let (matched, top) = if size >= FUZZY_WORKER_MIN {
             let index = self.index.clone();
@@ -446,8 +471,7 @@ impl FuzzySearch {
         if self.generation.get() != generation {
             return None;
         }
-        *self.last.borrow_mut() = Some((q, std::sync::Arc::new(matched)));
-        Some(top.into_iter().map(|i| self.index.path(i).to_string()).collect())
+        Some(self.finish(q, matched, top))
     }
 }
 
