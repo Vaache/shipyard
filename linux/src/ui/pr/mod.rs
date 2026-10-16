@@ -147,7 +147,7 @@ impl PrPage {
         let w = Rc::downgrade(&me);
         app::on_live_visible(&toolbar, move |_| match w.upgrade() {
             Some(me) => {
-                me.model.load_live();
+                me.model.load(false);
                 true
             }
             None => false,

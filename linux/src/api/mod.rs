@@ -20,6 +20,8 @@ use crate::diagnostics::{self, Probe};
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const RETRY_DELAY: Duration = Duration::from_millis(750);
 const RATE_LIMIT_FALLBACK_SECS: i64 = 60;
+const RATE_LIMIT_MAX_PAUSE_SECS: i64 = 3600;
+const LIVE_RESOURCES: [&str; 2] = ["core", "graphql"];
 const RETRY_NOTE: &str = "retry";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -65,15 +67,32 @@ impl fmt::Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
+fn connection_dropped(e: &reqwest::Error) -> bool {
+    let mut source = Some(e as &(dyn std::error::Error + 'static));
+    while let Some(err) = source {
+        if let Some(io) = err.downcast_ref::<std::io::Error>() {
+            if matches!(io.kind(), std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted | std::io::ErrorKind::BrokenPipe) {
+                return true;
+            }
+        }
+        let text = err.to_string().to_ascii_lowercase();
+        if text.contains("connection reset") || text.contains("connection closed before message completed") {
+            return true;
+        }
+        source = err.source();
+    }
+    false
+}
+
 impl From<reqwest::Error> for ApiError {
     fn from(e: reqwest::Error) -> Self {
-        if e.is_timeout() {
-            return ApiError::new("The request timed out").with_kind(ErrorKind::Network);
-        }
         if e.is_connect() {
-            return ApiError::new("Could not connect to GitHub").with_kind(ErrorKind::Network);
+            return ApiError::new(if e.is_timeout() { "The request timed out" } else { "Could not connect to GitHub" }).with_kind(ErrorKind::Network);
         }
-        let kind = if e.is_request() || e.is_body() { ErrorKind::Network } else { ErrorKind::Other };
+        if e.is_timeout() {
+            return ApiError::new("The request timed out");
+        }
+        let kind = if connection_dropped(&e) { ErrorKind::Network } else { ErrorKind::Other };
         ApiError::new(e.to_string()).with_kind(kind)
     }
 }
@@ -87,12 +106,18 @@ struct Polled {
     interval: Duration,
 }
 
+#[derive(Default)]
+struct PollCache {
+    generation: u64,
+    entries: HashMap<String, Polled>,
+}
+
 struct Inner {
     token: String,
     client: Client,
     no_redirect: Client,
     plain: Client,
-    polled: Mutex<HashMap<String, Polled>>,
+    polled: Mutex<PollCache>,
 }
 
 #[derive(Clone)]
@@ -118,8 +143,13 @@ pub fn rate_limited_until() -> Option<DateTime<Utc>> {
     }
 }
 
+pub fn reset_rate_limit() {
+    RATE_LIMITED_UNTIL.store(0, Ordering::Relaxed);
+}
+
 fn pause_until(ts: i64) {
     let now = Utc::now().timestamp();
+    let ts = ts.min(now + RATE_LIMIT_MAX_PAUSE_SECS);
     let _ = RATE_LIMITED_UNTIL.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| if cur > now && cur >= ts { None } else { Some(ts) });
 }
 
@@ -135,19 +165,30 @@ pub fn rate_limit_resume(status: u16, headers: &HeaderMap, body: &[u8], now: i64
     let remaining = header_i64(headers, "x-ratelimit-remaining");
     let reset = header_i64(headers, "x-ratelimit-reset").filter(|r| *r > now);
     let retry_after = header_i64(headers, "retry-after");
+    let live_resource = headers.get("x-ratelimit-resource").and_then(|v| v.to_str().ok()).is_none_or(|r| LIVE_RESOURCES.contains(&r.trim()));
+    let exhausted = remaining == Some(0);
+    if exhausted && !live_resource && retry_after.is_none() {
+        return None;
+    }
     let limited = match status {
         429 => true,
-        403 => remaining == Some(0) || retry_after.is_some() || mentions_rate_limit(body),
+        403 => exhausted || retry_after.is_some() || mentions_rate_limit(body),
         _ => false,
     };
-    if !limited {
-        return if remaining == Some(0) { reset } else { None };
-    }
-    Some(match (retry_after, remaining, reset) {
-        (Some(secs), _, _) => now + secs.max(1),
-        (None, Some(0), Some(r)) => r,
-        _ => now + RATE_LIMIT_FALLBACK_SECS,
-    })
+    let resume = if !limited {
+        if exhausted {
+            reset
+        } else {
+            None
+        }
+    } else {
+        Some(match (retry_after, exhausted, reset) {
+            (Some(secs), _, _) => now + secs.max(1),
+            (None, true, Some(r)) => r,
+            _ => now + RATE_LIMIT_FALLBACK_SECS,
+        })
+    };
+    resume.map(|ts| ts.min(now + RATE_LIMIT_MAX_PAUSE_SECS))
 }
 
 fn reason(status: StatusCode) -> String {
@@ -260,7 +301,7 @@ impl GitHubApi {
             .build()
             .expect("http client");
         let plain = Client::builder().user_agent(agent).connect_timeout(CONNECT_TIMEOUT).timeout(Duration::from_secs(60)).build().expect("http client");
-        GitHubApi { inner: Arc::new(Inner { token: token.to_string(), client, no_redirect, plain, polled: Mutex::new(HashMap::new()) }) }
+        GitHubApi { inner: Arc::new(Inner { token: token.to_string(), client, no_redirect, plain, polled: Mutex::new(PollCache::default()) }) }
     }
 
     fn auth(&self) -> String {
@@ -275,7 +316,7 @@ impl GitHubApi {
         }
     }
 
-    fn polled(&self) -> MutexGuard<'_, HashMap<String, Polled>> {
+    fn polled(&self) -> MutexGuard<'_, PollCache> {
         self.inner.polled.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -379,12 +420,12 @@ impl GitHubApi {
     }
 
     pub async fn rest_polled(&self, path: &str, force: bool) -> ApiResult<Vec<u8>> {
-        let (fresh, since) = {
+        let (generation, fresh, since) = {
             let polled = self.polled();
-            let entry = polled.get(path);
-            let fresh = entry.filter(|p| !force && p.checked.elapsed() < p.interval).map(|p| p.body.clone());
+            let entry = polled.entries.get(path).filter(|_| !force);
+            let fresh = entry.filter(|p| p.checked.elapsed() < p.interval).map(|p| p.body.clone());
             let since = entry.and_then(|p| p.last_modified.clone());
-            (fresh, since)
+            (polled.generation, fresh, since)
         };
         if let Some(body) = fresh {
             return Ok(body);
@@ -392,7 +433,7 @@ impl GitHubApi {
         let mut ex = self.exchange(Method::GET, path, None, since).await?;
         let interval = Duration::from_secs(header_i64(&ex.headers, "x-poll-interval").unwrap_or(0).clamp(0, 3600) as u64);
         if ex.status == StatusCode::NOT_MODIFIED {
-            let cached = self.polled().get_mut(path).map(|p| {
+            let cached = self.polled().entries.get_mut(path).map(|p| {
                 p.checked = Instant::now();
                 p.interval = interval;
                 p.body.clone()
@@ -404,12 +445,18 @@ impl GitHubApi {
             ex = self.exchange(Method::GET, path, None, None).await?;
         }
         let last_modified = ex.headers.get(LAST_MODIFIED).and_then(|v| v.to_str().ok()).map(str::to_string);
-        self.polled().insert(path.to_string(), Polled { last_modified, body: ex.bytes.clone(), checked: Instant::now(), interval });
+        let mut polled = self.polled();
+        if polled.generation == generation {
+            polled.entries.insert(path.to_string(), Polled { last_modified, body: ex.bytes.clone(), checked: Instant::now(), interval });
+        }
+        drop(polled);
         Ok(ex.bytes)
     }
 
     pub fn invalidate_polled(&self) {
-        self.polled().clear();
+        let mut polled = self.polled();
+        polled.generation += 1;
+        polled.entries.clear();
     }
 
     pub async fn send(&self, method: Method, path: &str, body: Option<Value>) -> ApiResult<()> {
@@ -532,6 +579,22 @@ mod tests {
     }
 
     #[test]
+    fn other_resources_do_not_pause_live_polling() {
+        let search = headers(&[("x-ratelimit-remaining", "0"), ("x-ratelimit-reset", "1000"), ("x-ratelimit-resource", "search")]);
+        assert_eq!(rate_limit_resume(403, &search, br#"{"message":"API rate limit exceeded"}"#, 900), None);
+        assert_eq!(rate_limit_resume(200, &search, b"", 900), None);
+        let graphql = headers(&[("x-ratelimit-remaining", "0"), ("x-ratelimit-reset", "1000"), ("x-ratelimit-resource", "graphql")]);
+        assert_eq!(rate_limit_resume(200, &graphql, b"", 900), Some(1000));
+    }
+
+    #[test]
+    fn pause_is_capped() {
+        let h = headers(&[("x-ratelimit-remaining", "0"), ("x-ratelimit-reset", "999999")]);
+        assert_eq!(rate_limit_resume(403, &h, b"", 900), Some(900 + RATE_LIMIT_MAX_PAUSE_SECS));
+        assert_eq!(rate_limit_resume(429, &headers(&[("retry-after", "86400")]), b"", 900), Some(900 + RATE_LIMIT_MAX_PAUSE_SECS));
+    }
+
+    #[test]
     fn ordinary_errors_do_not_pause() {
         let h = headers(&[("x-ratelimit-remaining", "4000"), ("x-ratelimit-reset", "1000")]);
         assert_eq!(rate_limit_resume(403, &h, br#"{"message":"Resource not accessible by integration"}"#, 900), None);
@@ -546,7 +609,7 @@ mod tests {
         assert_eq!(err.kind, ErrorKind::RateLimited);
         assert!(!err.is_transient());
         assert!(rate_limited_until().is_some());
-        RATE_LIMITED_UNTIL.store(0, Ordering::Relaxed);
+        reset_rate_limit();
     }
 
     #[test]

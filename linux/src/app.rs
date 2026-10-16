@@ -366,10 +366,16 @@ pub fn on_live_visible(widget: &impl IsA<gtk::Widget>, f: impl Fn(&()) -> bool +
         }
     });
     widget.connect_map(move |_| {
-        if stale.replace(false) {
+        if stale.get() && crate::api::rate_limited_until().is_none() {
+            stale.set(false);
             f(&());
         }
     });
+}
+
+fn reset_session_caches() {
+    crate::api::reset_rate_limit();
+    crate::api::endpoints::reset_caches();
 }
 
 pub fn on_badges(f: impl Fn(&()) -> bool + 'static) {
@@ -483,6 +489,7 @@ impl App {
     }
 
     pub async fn login(self: Rc<Self>, token: String, persist: bool) -> Result<(), crate::api::ApiError> {
+        reset_session_caches();
         let api = GitHubApi::new(&token);
         let a2 = api.clone();
         let (user, scopes) = crate::rt::run(async move { a2.current_user().await }).await?;
@@ -519,6 +526,7 @@ impl App {
         if let Some(id) = self.poll.borrow_mut().take() {
             id.remove();
         }
+        reset_session_caches();
         {
             let mut s = self.state.borrow_mut();
             s.api = None;

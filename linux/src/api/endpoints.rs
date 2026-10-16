@@ -17,8 +17,19 @@ const STACK_CACHE_LIMIT: usize = 200;
 static STACK_CACHE: LazyLock<Mutex<HashMap<String, (Instant, Vec<StackPr>)>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 static STACK_FIELD_MISSING: AtomicBool = AtomicBool::new(false);
 
-fn stack_key(r: &ItemRef, head: &str, base: &str) -> String {
-    format!("{}#{}|{head}|{base}", r.repo.full(), r.number)
+pub struct StackRefs {
+    pub head_owner: String,
+    pub head: String,
+    pub base: String,
+}
+
+fn stack_key(r: &ItemRef, refs: &StackRefs) -> String {
+    format!("{}#{}|{}:{}|{}", r.repo.full(), r.number, refs.head_owner, refs.head, refs.base)
+}
+
+pub fn reset_caches() {
+    STACK_CACHE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    STACK_FIELD_MISSING.store(false, Ordering::Relaxed);
 }
 
 const PATH_SET: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC.remove(b'-').remove(b'_').remove(b'.').remove(b'~');
@@ -178,25 +189,27 @@ impl GitHubApi {
         Ok(if chain.len() > 1 { chain } else { vec![] })
     }
 
-    pub fn cached_stack(r: &ItemRef, head: &str, base: &str, max_age: Option<Duration>) -> Option<Vec<StackPr>> {
+    fn cached_stack(r: &ItemRef, refs: &StackRefs) -> Option<Vec<StackPr>> {
         let cache = STACK_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-        let (at, stack) = cache.get(&stack_key(r, head, base))?;
-        if max_age.is_some_and(|age| at.elapsed() >= age) {
+        let (at, stack) = cache.get(&stack_key(r, refs))?;
+        if at.elapsed() >= STACK_TTL {
             return None;
         }
         Some(stack.clone())
     }
 
-    pub async fn pull_request_stack_cached(&self, r: &ItemRef, head: &str, base: &str, reuse: bool) -> ApiResult<Vec<StackPr>> {
-        if let Some(stack) = Self::cached_stack(r, head, base, if reuse { None } else { Some(STACK_TTL) }) {
-            return Ok(stack);
+    pub async fn pull_request_stack_cached(&self, r: &ItemRef, refs: &StackRefs, fresh: bool) -> ApiResult<Vec<StackPr>> {
+        if !fresh {
+            if let Some(stack) = Self::cached_stack(r, refs) {
+                return Ok(stack);
+            }
         }
         let stack = self.pull_request_stack(r).await?;
         let mut cache = STACK_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         if cache.len() >= STACK_CACHE_LIMIT {
             cache.retain(|_, (at, _)| at.elapsed() < STACK_TTL);
         }
-        cache.insert(stack_key(r, head, base), (Instant::now(), stack.clone()));
+        cache.insert(stack_key(r, refs), (Instant::now(), stack.clone()));
         Ok(stack)
     }
 

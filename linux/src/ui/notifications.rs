@@ -287,7 +287,7 @@ pub fn build() -> gtk::Widget {
         if let Some(v) = v.upgrade() {
             v.show_all.set(t.is_active());
             v.items.borrow_mut().clear();
-            v.load(false);
+            v.load(true);
         }
     });
     let bar = hbox(0);
@@ -346,7 +346,7 @@ pub fn build() -> gtk::Widget {
         }
         None => false,
     });
-    view.load(false);
+    view.load(true);
     keep_alive(&tv, view);
     tv.upcast()
 }
