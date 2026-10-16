@@ -129,7 +129,7 @@ public sealed partial class AppViewModel : ObservableObject
             return;
         }
         GitHubApi? early = null;
-        if (!Demo.IsOn && ListSnapshotStore.Shared.RememberedAccount(token) is { } remembered)
+        if (!Demo.IsOn && await Task.Run(() => ListSnapshotStore.Shared.RememberedAccount(token)) is { } remembered)
         {
             early = new GitHubApi(token);
             Account = remembered;
@@ -193,19 +193,17 @@ public sealed partial class AppViewModel : ObservableObject
 
     private static void Remember(string token, string login)
     {
-        if (!Demo.IsOn) Task.Run(() => ListSnapshotStore.Shared.RememberAccount(token, login)).Forget();
+        if (Demo.IsOn) return;
+        var generation = ListSnapshotStore.Shared.AccountGeneration;
+        Task.Run(() => ListSnapshotStore.Shared.RememberAccount(token, login, generation)).Forget();
     }
 
     public void Logout()
     {
         pollCts?.Cancel();
         CredentialStore.Delete();
-        var account = Account;
-        Task.Run(() =>
-        {
-            ListSnapshotStore.Shared.ForgetAccount();
-            ListSnapshotStore.Shared.Clear(account);
-        }).Forget();
+        ListSnapshotStore.Shared.ForgetAccount();
+        ListSnapshotStore.Shared.Clear(Account);
         SearchListViewModel.ClearCache();
         Account = null;
         Api = null;

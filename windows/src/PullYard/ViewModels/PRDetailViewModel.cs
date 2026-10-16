@@ -39,6 +39,9 @@ public sealed partial class PRDetailViewModel : ObservableObject
     public HashSet<string> ViewedPaths { get; private set; } = new();
     public HashSet<string> Collapsed { get; private set; } = new();
     public List<PendingComment> Pending { get; } = new();
+    public bool FilesInInspector { get; set; }
+
+    private bool FilesVisible => Tab == PRTab.Files || FilesInInspector;
 
     private Task? activeLoad;
     private Task? queuedLoad;
@@ -153,7 +156,11 @@ public sealed partial class PRDetailViewModel : ObservableObject
     {
         var live = !userLoad;
         userLoad = false;
-        if (live && !reloadFiles && !reloadStack && Pr is not null && signature is not null && !pulseUnsupported && await Unchanged()) return;
+        if (live && !reloadFiles && !reloadStack && Pr is not null && signature is not null && !pulseUnsupported && await Unchanged())
+        {
+            if (FilesVisible && (!FilesLoaded || filesOutdated || FilesError is not null)) LoadFiles().Forget();
+            return;
+        }
         Loading = true;
         try
         {
@@ -169,6 +176,9 @@ public sealed partial class PRDetailViewModel : ObservableObject
             ViewedPaths = (pr.Files?.Items ?? new()).Where(f => f.ViewerViewedState == "VIEWED").Select(f => f.Path).ToHashSet();
             IndexThreads(pr.ReviewThreads.Items);
             signature = PullRequestSignature.Of(pr);
+            if (FilesLoaded) filesOid ??= pr.HeadRefOid;
+            if (reloadFiles || (FilesLoaded && filesOid != pr.HeadRefOid)) filesOutdated = true;
+            reloadFiles = false;
             Pr = pr;
             if (newHtml != Html) Html = newHtml;
             Error = null;
@@ -179,9 +189,7 @@ public sealed partial class PRDetailViewModel : ObservableObject
             reloadStack = false;
             LoadStack(pr, live, forceStack).Forget();
             ScheduleMergeRecheck(pr);
-            if (reloadFiles || (filesOid is not null && filesOid != pr.HeadRefOid)) filesOutdated = true;
-            reloadFiles = false;
-            if (Tab == PRTab.Files && (filesOutdated || !FilesLoaded)) LoadFiles(filesOutdated).Forget();
+            if (FilesVisible && (filesOutdated || !FilesLoaded)) LoadFiles(filesOutdated).Forget();
             else if (FilesLoaded) DiffVersion++;
         }
         catch (OperationCanceledException)
@@ -286,8 +294,8 @@ public sealed partial class PRDetailViewModel : ObservableObject
             var raw = await Api.PullRequestFiles(Ref);
             var parsed = await Task.Run(() => raw.Select(f => new DiffFile(f)).ToList());
             if (!FilesLoaded) Collapsed = parsed.Where(f => ViewedPaths.Contains(f.Id) || f.Lines.Count > 1500).Select(f => f.Id).ToHashSet();
+            filesOid = oid ?? Pr?.HeadRefOid;
             Files = parsed;
-            filesOid = oid;
             FilesLoaded = true;
             FilesError = null;
             DiffVersion++;

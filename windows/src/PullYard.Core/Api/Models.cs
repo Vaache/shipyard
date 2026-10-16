@@ -370,8 +370,14 @@ public sealed class ReviewThread
     public bool ViewerCanUnresolve { get; set; }
     public bool ViewerCanReply { get; set; }
     public Nodes<ThreadComment> Comments { get; set; } = new();
+    public Nodes<EditMark>? EditedComments { get; set; }
 
     public string Location => (Line ?? OriginalLine) is { } l ? $"{Path}:{l}" : Path;
+}
+
+public sealed class EditMark
+{
+    public DateTimeOffset? LastEditedAt { get; set; }
 }
 
 public sealed class AutoMergeRequest
@@ -397,6 +403,8 @@ public sealed class PullRequestDetail
     public DateTimeOffset? UpdatedAt { get; set; }
     public Count? Comments { get; set; }
     public Count? Reviews { get; set; }
+    public Nodes<EditMark>? EditedComments { get; set; }
+    public Nodes<EditMark>? EditedReviews { get; set; }
     public Actor? Author { get; set; }
     public string HeadRefName { get; set; } = "";
     public string BaseRefName { get; set; } = "";

@@ -154,6 +154,47 @@ public class ListSnapshotStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task SkipsRewritingUnchangedContent()
+    {
+        var store = Store();
+        await store.Save("alice", "q", Snapshot(2, clock));
+        var file = Directory.EnumerateFiles(Path.Combine(root, "alice")).Single();
+        var stamp = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(file, stamp);
+        await store.Save("alice", "q", Snapshot(2, clock + TimeSpan.FromMinutes(1)));
+        Assert.Equal(stamp, File.GetLastWriteTimeUtc(file));
+        Assert.Equal(clock, store.Load("alice", "q")!.Updated);
+        await store.Save("alice", "q", Snapshot(3, clock + TimeSpan.FromMinutes(2)));
+        Assert.Equal(3, store.Load("alice", "q")!.Items.Count);
+        await store.Save("alice", "q", Snapshot(3, clock + ListSnapshotStore.RewriteAfter + TimeSpan.FromMinutes(3)));
+        Assert.Equal(clock + ListSnapshotStore.RewriteAfter + TimeSpan.FromMinutes(3), store.Load("alice", "q")!.Updated);
+    }
+
+    [Fact]
+    public async Task LockedFileIsKept()
+    {
+        var store = Store();
+        await store.Save("alice", "q", Snapshot(1, clock));
+        var file = Directory.EnumerateFiles(Path.Combine(root, "alice")).Single();
+        using (new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            Assert.Null(store.Load("alice", "q"));
+        Assert.True(File.Exists(file));
+        Assert.NotNull(store.Load("alice", "q"));
+    }
+
+    [Fact]
+    public void RememberQueuedBeforeForgetIsDropped()
+    {
+        var store = Store();
+        var generation = store.AccountGeneration;
+        store.ForgetAccount();
+        store.RememberAccount("token-a", "alice", generation);
+        Assert.Null(store.RememberedAccount("token-a"));
+        store.RememberAccount("token-a", "alice", store.AccountGeneration);
+        Assert.Equal("alice", store.RememberedAccount("token-a"));
+    }
+
+    [Fact]
     public void AccountKeyIsSanitized()
     {
         Assert.Equal("alice-b", ListSnapshotStore.AccountKey(" Alice-B "));

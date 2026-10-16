@@ -24,7 +24,7 @@ public sealed partial class SearchListViewModel : ObservableObject
     private string currentQuery = "";
     private string? currentKey;
     private int generation;
-    private bool settled;
+    private bool fetched;
 
     public HashSet<string> Fresh { get; } = new();
 
@@ -34,18 +34,18 @@ public sealed partial class SearchListViewModel : ObservableObject
 
     public static void ClearCache() => Cache.Clear();
 
-    public async Task Load(GitHubApi? api, string query, bool silent = false)
+    public async Task Load(GitHubApi? api, string query, bool silent = false, bool persist = true)
     {
         if (api is null) return;
-        var account = Account;
-        var key = CacheKey(account, query);
+        var account = persist ? Account : null;
+        var key = CacheKey(Account, query);
         var switched = false;
         if (key != currentKey)
         {
             switched = true;
             currentKey = key;
             currentQuery = query;
-            settled = false;
+            fetched = false;
             Error = null;
             if (Cache.TryGetValue(key, out var snap)) Apply(snap, false);
             else
@@ -53,7 +53,7 @@ public sealed partial class SearchListViewModel : ObservableObject
                 Items = new();
                 Total = 0;
                 LastUpdated = null;
-                ShowStored(account, query, key).Forget();
+                if (account is not null) ShowStored(account, query, key).Forget();
             }
         }
         var gen = ++generation;
@@ -75,7 +75,7 @@ public sealed partial class SearchListViewModel : ObservableObject
             }
             var snapshot = new Snapshot(merged, r.IssueCount, nextCursor, more, DateTimeOffset.Now);
             Cache[key] = snapshot;
-            settled = true;
+            fetched = true;
             Apply(snapshot, !switched);
             Error = null;
             if (account is not null && account == Account) ListSnapshotStore.Shared.Save(account, query, new ListSnapshot(r.Nodes, r.IssueCount, snapshot.Updated)).Forget();
@@ -83,7 +83,6 @@ public sealed partial class SearchListViewModel : ObservableObject
         catch (Exception e)
         {
             if (gen != generation) return;
-            settled = true;
             if (e is not OperationCanceledException) Error = e.Message;
         }
         finally
@@ -99,7 +98,7 @@ public sealed partial class SearchListViewModel : ObservableObject
     private async Task ShowStored(string? account, string query, string key)
     {
         var stored = await ListSnapshotStore.Shared.LoadAsync(account, query);
-        if (stored is null || settled || key != currentKey || Items.Count > 0) return;
+        if (stored is null || fetched || key != currentKey || Items.Count > 0) return;
         Apply(new Snapshot(stored.Items, stored.Total, null, false, stored.Updated), false);
         Loading = false;
     }

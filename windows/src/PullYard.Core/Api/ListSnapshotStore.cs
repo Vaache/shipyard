@@ -14,6 +14,7 @@ public sealed class ListSnapshotStore
     public const int MaxItems = 40;
     public const int MaxEntries = 60;
     public static readonly TimeSpan MaxAge = TimeSpan.FromDays(7);
+    public static readonly TimeSpan RewriteAfter = TimeSpan.FromMinutes(10);
 
     public static ListSnapshotStore Shared { get; } = new(Path.Combine(AppInfo.DataDirectory, "Cache", "Lists"));
 
@@ -29,6 +30,8 @@ public sealed class ListSnapshotStore
     private readonly Func<DateTimeOffset> now;
     private readonly object gate = new();
     private readonly Dictionary<string, long> generations = new();
+    private readonly Dictionary<string, (string Hash, DateTimeOffset At)> written = new();
+    private long accountGeneration;
 
     public ListSnapshotStore(string root, Func<DateTimeOffset>? now = null)
     {
@@ -75,7 +78,7 @@ public sealed class ListSnapshotStore
         try
         {
             if (!File.Exists(path)) return null;
-            var entry = JsonSerializer.Deserialize<Entry>(File.ReadAllBytes(path), Options);
+            var entry = JsonSerializer.Deserialize<Entry>(ReadShared(path), Options);
             if (entry is null || entry.V != Version || entry.Query != query) return null;
             if (now() - entry.Updated > MaxAge)
             {
@@ -84,12 +87,27 @@ public sealed class ListSnapshotStore
             }
             return new ListSnapshot(entry.Items, entry.Total, entry.Updated);
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
+        catch (JsonException)
         {
             TryDelete(path);
             return null;
         }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return null;
+        }
     }
+
+    private static byte[] ReadShared(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
+
+    private static string ContentHash(Entry entry) =>
+        Hash(Encoding.UTF8.GetString(JsonSerializer.SerializeToUtf8Bytes(new Entry { V = entry.V, Query = entry.Query, Total = entry.Total, Items = entry.Items }, Options)));
 
     public Task<ListSnapshot?> LoadAsync(string? account, string query) => Task.Run(() => Load(account, query));
 
@@ -107,12 +125,15 @@ public sealed class ListSnapshotStore
         try
         {
             var bytes = JsonSerializer.SerializeToUtf8Bytes(entry, Options);
+            var hash = ContentHash(entry);
             lock (gate)
             {
                 if (Generation(key) != generation) return;
+                if (written.TryGetValue(path, out var last) && last.Hash == hash && entry.Updated - last.At < RewriteAfter && File.Exists(path)) return;
                 var dir = Path.GetDirectoryName(path)!;
                 Directory.CreateDirectory(dir);
                 ReplaceFile(path, bytes);
+                written[path] = (hash, entry.Updated);
                 Trim(dir);
             }
         }
@@ -127,11 +148,7 @@ public sealed class ListSnapshotStore
         var tmp = $"{path}.{Guid.NewGuid():N}.tmp";
         try
         {
-            using (var stream = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                stream.Write(bytes, 0, bytes.Length);
-                stream.Flush(true);
-            }
+            File.WriteAllBytes(tmp, bytes);
             File.Move(tmp, path, true);
         }
         finally
@@ -153,6 +170,7 @@ public sealed class ListSnapshotStore
         lock (gate)
         {
             generations[key] = Generation(key) + 1;
+            foreach (var path in written.Keys.Where(p => p.StartsWith(AccountDirectory(key) + Path.DirectorySeparatorChar, StringComparison.Ordinal)).ToList()) written.Remove(path);
             try
             {
                 if (Directory.Exists(AccountDirectory(key))) Directory.Delete(AccountDirectory(key), true);
@@ -192,7 +210,7 @@ public sealed class ListSnapshotStore
         {
             var path = Path.Combine(root, AccountFile);
             if (!File.Exists(path)) return null;
-            var entry = JsonSerializer.Deserialize<RememberedEntry>(File.ReadAllBytes(path), Options);
+            var entry = JsonSerializer.Deserialize<RememberedEntry>(ReadShared(path), Options);
             return entry is not null && entry.Fingerprint == Fingerprint(token) && AccountKey(entry.Login) is not null ? entry.Login : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
@@ -201,13 +219,22 @@ public sealed class ListSnapshotStore
         }
     }
 
-    public void RememberAccount(string token, string login)
+    public long AccountGeneration
+    {
+        get
+        {
+            lock (gate) return accountGeneration;
+        }
+    }
+
+    public void RememberAccount(string token, string login, long? generation = null)
     {
         if (AccountKey(login) is null) return;
         try
         {
             lock (gate)
             {
+                if (generation is { } g && g != accountGeneration) return;
                 Directory.CreateDirectory(root);
                 ReplaceFile(Path.Combine(root, AccountFile), JsonSerializer.SerializeToUtf8Bytes(new RememberedEntry { Login = login, Fingerprint = Fingerprint(token) }, Options));
             }
@@ -220,7 +247,11 @@ public sealed class ListSnapshotStore
 
     public void ForgetAccount()
     {
-        lock (gate) TryDelete(Path.Combine(root, AccountFile));
+        lock (gate)
+        {
+            accountGeneration++;
+            TryDelete(Path.Combine(root, AccountFile));
+        }
     }
 
     private static void TryDelete(string path)
