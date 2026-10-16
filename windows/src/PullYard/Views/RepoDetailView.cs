@@ -265,6 +265,7 @@ public sealed class RepoCodeView : Grid, IShortcutHost
     private bool syncing;
     private bool contentQueued;
     private string? renderedCode;
+    private Border? htmlHost;
 
     public RepoCodeView(RepoCodeViewModel model)
     {
@@ -453,14 +454,12 @@ public sealed class RepoCodeView : Grid, IShortcutHost
             else bodyElement = Ui.Loading();
             SetRow(bodyElement, 1);
             grid.Children.Add(bodyElement);
-            Detach(html);
             content.Content = grid;
             return;
         }
         if (model.Readme is { } readme)
         {
-            Detach(html);
-            var wrapper = new Border { Margin = new Thickness(10), CornerRadius = new CornerRadius(10), Background = Palette.Brush("panel"), Child = html };
+            var wrapper = Host(new Border { Margin = new Thickness(10), CornerRadius = new CornerRadius(10), Background = Palette.Brush("panel") });
             html.Render(Wrap(Resolve(readme, model.Dir)), "conversation", "top", "readme");
             renderedCode = null;
             content.Content = wrapper;
@@ -472,6 +471,15 @@ public sealed class RepoCodeView : Grid, IShortcutHost
             return;
         }
         content.Content = Ui.Empty("", "teal", L.T("Code_Pick", "Pick a file on the left or press Ctrl+P"));
+    }
+
+    private Border Host(Border border)
+    {
+        if (htmlHost is not null && !ReferenceEquals(htmlHost, border) && ReferenceEquals(htmlHost.Child, html)) htmlHost.Child = null;
+        Detach(html);
+        border.Child = html;
+        htmlHost = border;
+        return border;
     }
 
     private static void Detach(FrameworkElement element)
@@ -566,7 +574,7 @@ public sealed class RepoCodeView : Grid, IShortcutHost
                 if (model.BlameOn && model.LoadingBlame) notes.Children.Add(Ui.H(6, Ui.Spinner(12), Ui.Text(L.T("Code_BlameLoading", "Loading blame…"), 12, "muted")));
                 else if (model.BlameOn && model.BlameFailed) notes.Children.Add(Ui.H(6, Ui.Glyph("\uE7BA", 12, "amber"), Ui.Text(L.T("Code_BlameUnavailable", "Blame unavailable for this file"), 12, "amber"), Ui.Link(L.T("Common_Retry", "Retry"), model.RetryBlame)));
                 if (file.Truncated) notes.Children.Add(Ui.H(6, Ui.Glyph("", 12, "amber"), Ui.Text(L.T("Code_Truncated", "File is too large — showing only part of it"), 12, "amber")));
-                var border = new Border { Margin = new Thickness(10, 0, 10, 10), CornerRadius = new CornerRadius(10), Background = Palette.Brush("sunken"), Child = html };
+                var border = Host(new Border { Margin = new Thickness(10, 0, 10, 10), CornerRadius = new CornerRadius(10), Background = Palette.Brush("sunken") });
                 SetRow(border, 1);
                 panel.Children.Add(border);
                 var blame = model.BlameOn ? model.Blame : null;
@@ -577,7 +585,7 @@ public sealed class RepoCodeView : Grid, IShortcutHost
             }
             case FileContentKind.Markdown:
             {
-                var border = new Border { Margin = new Thickness(10, 0, 10, 10), CornerRadius = new CornerRadius(10), Background = Palette.Brush(markdownSource ? "sunken" : "panel"), Child = html };
+                var border = Host(new Border { Margin = new Thickness(10, 0, 10, 10), CornerRadius = new CornerRadius(10), Background = Palette.Brush(markdownSource ? "sunken" : "panel") });
                 if (markdownSource) html.Render(CodeHtml.Render(file.Text, ext, true), "code", "top", "flush code-body");
                 else html.Render(Wrap(Resolve(file.Html, path.Contains('/') ? path[..path.LastIndexOf('/')] : "")), "conversation", "top", "readme");
                 renderedCode = null;
