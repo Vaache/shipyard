@@ -155,16 +155,24 @@ jobs:
 
       - name: Demo Claude Code workspace
         run: |
-          mkdir -p ~/.local/bin ~/code/web-app/src/search
+          mkdir -p ~/.local/bin ~/code/web-app
           printf '%s\n' '#!/bin/sh' 'case "$1" in' '  auth) echo '"'"'{"loggedIn":true,"authMethod":"claude.ai","email":"alex@example.com","subscriptionType":"max"}'"'"' ;;' '  --version|-v) echo "2.1.0 (Claude Code)" ;;' '  *) exec cat >/dev/null ;;' 'esac' > ~/.local/bin/claude
           chmod +x ~/.local/bin/claude
+          cp -R .github/tour/web-app/. ~/code/web-app/
           cd ~/code/web-app
           git init -q -b main
-          echo '{ "name": "web-app", "private": true }' > package.json
-          touch src/search/useSearch.ts
           git -c user.name=Demo -c user.email=demo@example.com add -A
           git -c user.name=Demo -c user.email=demo@example.com commit -qm init
           git checkout -qb feat/search-debounce
+          cp "$GITHUB_WORKSPACE/.github/tour/useSearch.edited.ts" src/search/useSearch.ts
+          mkdir -p ~/.claude/projects/-home-runner-code-web-app
+          hours=2
+          for f in "$GITHUB_WORKSPACE"/.github/tour/sessions/*.jsonl; do
+            out=~/.claude/projects/-home-runner-code-web-app/$(basename "$f")
+            sed "s|__DEMO__|$HOME/code/web-app|g" "$f" > "$out"
+            touch -d "-$hours hours" "$out"
+            hours=$((hours + 20))
+          done
 
       - name: Tour (dark and light)
         env:

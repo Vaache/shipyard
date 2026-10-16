@@ -98,6 +98,7 @@ pub fn run(_app: Rc<App>) {
     p.wait(9000).shot("01-review-requests");
     p.act(|| app::set_section(Section::Prs(PrFilter::Mine))).wait(4000).shot("02-created-by-me");
     let rr = r.clone();
+    p.act(|| app::set_section(Section::Prs(PrFilter::ReviewRequested))).wait(3000);
     p.act(move || app::select(Some(Route::Pr(rr)))).wait(9000).shot("03-pr-conversation");
     let model = move || app::pr_model(&r);
     let m = model.clone();

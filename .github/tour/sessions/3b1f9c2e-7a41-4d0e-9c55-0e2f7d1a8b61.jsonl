@@ -1,0 +1,4 @@
+{"type": "user", "cwd": "__DEMO__", "gitBranch": "feat/search-debounce", "message": {"role": "user", "content": "Debounce the search box so we don't fire a request on every keystroke"}}
+{"type": "assistant", "cwd": "__DEMO__", "gitBranch": "feat/search-debounce", "message": {"model": "claude-opus-5-5", "role": "assistant", "content": [{"type": "text", "text": "Done."}]}}
+{"type": "custom-title", "customTitle": "Debounce search input"}
+{"type": "pr-link", "prUrl": "https://github.com/acme/web-app/pull/482", "prNumber": 482}

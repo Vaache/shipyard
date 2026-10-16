@@ -125,13 +125,21 @@ jobs:
         run: |
           $prefix = "${{ steps.brand.outputs.envprefix }}"
           $demo = Join-Path $env:USERPROFILE "code\web-app"
-          New-Item -ItemType Directory -Force -Path (Join-Path $demo "src\search") | Out-Null
-          Set-Content -Path (Join-Path $demo "package.json") -Value '{ "name": "web-app", "private": true }'
-          Set-Content -Path (Join-Path $demo "src\search\useSearch.ts") -Value ''
+          New-Item -ItemType Directory -Force -Path $demo | Out-Null
+          Copy-Item -Path ".github/tour/web-app/*" -Destination $demo -Recurse -Force
           git -C $demo init -q -b main
           git -C $demo -c user.name=Demo -c user.email=demo@example.com add -A
           git -C $demo -c user.name=Demo -c user.email=demo@example.com commit -qm init
           git -C $demo checkout -qb feat/search-debounce
+          Copy-Item -Path ".github/tour/useSearch.edited.ts" -Destination (Join-Path $demo "src\search\useSearch.ts") -Force
+          $history = New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE ".claude\projects\C--Users-runneradmin-code-web-app")
+          $age = 2
+          foreach ($f in Get-ChildItem ".github/tour/sessions/*.jsonl") {
+            $out = Join-Path $history $f.Name
+            (Get-Content $f.FullName -Raw).Replace("__DEMO__", $demo.Replace("\", "\\")) | Set-Content -Path $out -NoNewline -Encoding utf8NoBOM
+            (Get-Item $out).LastWriteTime = (Get-Date).AddHours(-$age)
+            $age += 20
+          }
           $npm = New-Item -ItemType Directory -Force -Path (Join-Path $env:APPDATA "npm")
           Set-Content -Path (Join-Path $npm "claude.cmd") -Encoding ascii -Value @(
             '@echo off'
@@ -188,7 +196,7 @@ jobs:
             Write-Host "Exit code ($mode): $($p.ExitCode)"
             $codes[$mode] = $p.ExitCode
           }
-          if ($codes["dark"] -ne 0) { throw "UI tour exited with $($codes["dark"])" }
+          foreach ($mode in $codes.Keys) { if ($codes[$mode] -ne 0) { throw "UI tour ($mode) exited with $($codes[$mode])" } }
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: matrix.arch == 'x64' && always()

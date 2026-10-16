@@ -1,0 +1,3 @@
+{"type": "user", "cwd": "__DEMO__", "gitBranch": "fix/token-refresh", "message": {"role": "user", "content": "Retry the request once after refreshing an expired token on 401"}}
+{"type": "assistant", "cwd": "__DEMO__", "gitBranch": "fix/token-refresh", "message": {"model": "claude-opus-5-5", "role": "assistant", "content": [{"type": "text", "text": "Done."}]}}
+{"type": "custom-title", "customTitle": "Retry after token refresh"}

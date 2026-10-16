@@ -57,6 +57,7 @@ h1 .grad{color:var(--muted)}
 .shot:before{display:none}
 .shot img{display:block;width:100%;height:auto;filter:drop-shadow(0 24px 40px rgba(0,0,0,.4))}
 .tour-video{margin:56px auto 0;width:100%;max-width:1100px;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#0c1220;filter:drop-shadow(0 24px 40px rgba(0,0,0,.4))}
+.tour-video img{display:block;width:100%;height:100%;object-fit:cover}
 .tour-video video{display:block;width:100%;height:100%;object-fit:cover;cursor:pointer;background:#0c1220}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .gallery{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:48px}
@@ -175,7 +176,7 @@ footer a:hover{color:var(--text)}
   document.documentElement.setAttribute("data-platform",os==="other"?"mac":os);
 })();
 </script>
-<noscript><style>.os-only,.os-tabs{display:none!important}.os-title{display:block}.cta noscript{display:contents}img[data-shot]{display:none}</style></noscript>
+<noscript><style>.os-only,.os-tabs{display:none!important}.os-title{display:block}.cta noscript{display:contents}img[data-shot],.tour-video video{display:none}</style></noscript>
 </head>
 <body>
 
@@ -235,9 +236,10 @@ footer a:hover{color:var(--text)}
 
     <figure class="tour-video reveal">
       <video muted loop playsinline preload="none" width="1920" height="1080" aria-label="PullYard product tour" data-tour-video>
-        <source src="img/pullyard-web-1920x1080.webm" type="video/webm">
-        <source src="img/pullyard-web-1280x720.mp4" type="video/mp4">
+        <source type="video/webm">
+        <source type="video/mp4">
       </video>
+      <noscript><img src="img/pullyard-web-poster.jpg" width="1920" height="1080" alt="PullYard product tour"></noscript>
       <span class="sr-only">Click the video to play or pause it.</span>
     </figure>
     <p class="demo-hint tour-hint" data-platform-text='{"mac":"A one-minute tour: diffs, review, merge, Fix with Claude Code and accounts.","windows":"A one-minute tour on Windows: diffs, review, merge, Fix with Claude Code and repositories.","linux":"A one-minute tour on Linux: diffs, review, merge, Fix with Claude Code and repositories."}'>A one-minute tour: diffs, review, merge, Fix with Claude Code and accounts.</p>
@@ -510,7 +512,7 @@ footer a:hover{color:var(--text)}
       var src=m.dir+img.getAttribute("data-shot");
       if(img.getAttribute("src")===src)return;
       img.width=m.w;img.height=m.h;
-      img.alt=img.getAttribute("data-alt")+", PullYard on "+NAMES[key];
+      img.alt=img.getAttribute("data-alt")+" on "+NAMES[key];
       img.src=src;
     });
     var video=document.querySelector("[data-tour-video]");
