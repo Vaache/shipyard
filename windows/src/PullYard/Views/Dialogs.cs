@@ -33,6 +33,14 @@ public static class Dialogs
         if (secondary is not null) d.SecondaryButtonText = secondary;
         d.Resources["ContentDialogMaxWidth"] = maxWidth;
         d.Resources["ContentDialogMinWidth"] = Math.Min(maxWidth, 460.0);
+        void Refresh() => d.DispatcherQueue.TryEnqueue(() =>
+        {
+            var theme = (root.Content as FrameworkElement)?.ActualTheme ?? ElementTheme.Default;
+            d.RequestedTheme = theme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
+            d.RequestedTheme = theme;
+        });
+        d.Opened += (_, _) => ThemeService.Changed += Refresh;
+        d.Closed += (_, _) => ThemeService.Changed -= Refresh;
         return d;
     }
 

@@ -62,6 +62,32 @@ public static class SettingsDialog
     public static async Task Show(XamlRoot? root)
     {
         if (root is null) return;
+        var scroll = new ScrollViewer { Content = Build(), MaxHeight = 620, Padding = new Thickness(0, 0, 12, 0) };
+        openScroll = scroll;
+        var d = Dialogs.Create(root, L.T("Common_Settings", "Settings"), scroll, close: L.T("Common_Done", "Done"), maxWidth: 640);
+        openDialog = d;
+        void Rebuild() => scroll.DispatcherQueue.TryEnqueue(() =>
+        {
+            var offset = scroll.VerticalOffset;
+            scroll.Content = Build();
+            scroll.UpdateLayout();
+            scroll.ChangeView(null, offset, null, true);
+        });
+        ThemeService.Changed += Rebuild;
+        try
+        {
+            await Dialogs.ShowAsync(d);
+        }
+        finally
+        {
+            ThemeService.Changed -= Rebuild;
+            openDialog = null;
+            openScroll = null;
+        }
+    }
+
+    private static StackPanel Build()
+    {
         var app = AppViewModel.Shared;
         var panel = Ui.V(18);
 
@@ -152,13 +178,7 @@ public static class SettingsDialog
         Ui.Tip(pizza, AppInfo.DonateUrl);
         pizza.Click += (_, _) => LinkBrowser.OpenDonation();
         panel.Children.Add(Group(L.F("Support_Title", "Support {0}", AppInfo.DisplayName), "\uEB51", "coral", pizza));
-
-        var scroll = new ScrollViewer { Content = panel, MaxHeight = 620, Padding = new Thickness(0, 0, 12, 0) };
-        openScroll = scroll;
-        var d = Dialogs.Create(root, L.T("Common_Settings", "Settings"), scroll, close: L.T("Common_Done", "Done"), maxWidth: 640);
-        openDialog = d;
-        await Dialogs.ShowAsync(d);
-        openDialog = null;
+        return panel;
     }
 
     private static ContentDialog? openDialog;

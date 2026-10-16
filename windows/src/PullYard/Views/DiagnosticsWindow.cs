@@ -122,12 +122,14 @@ public sealed class DiagnosticsWindow : Window
 
     private void ApplyTheme()
     {
-        root.RequestedTheme = ThemeService.Appearance switch
+        var target = ThemeService.Appearance switch
         {
             AppearanceMode.Light => ElementTheme.Light,
             AppearanceMode.Dark => ElementTheme.Dark,
             _ => ElementTheme.Default
         };
+        root.RequestedTheme = target == ElementTheme.Light ? ElementTheme.Dark : ElementTheme.Light;
+        root.RequestedTheme = target;
         root.Background = ThemeService.IsBrand ? Palette.Brush("window") : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
     }
 

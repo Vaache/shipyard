@@ -48,6 +48,7 @@ public static class Palette
 
     public static Color Get(string key, byte alpha = 255)
     {
+        if (ThemeService.IsHighContrast) return HighContrast(key, alpha);
         if (!Brand.TryGetValue(key, out var pair)) pair = Brand["muted"];
         return Hex(IsDark ? pair.Dark : pair.Light, alpha);
     }
@@ -56,7 +57,34 @@ public static class Palette
 
     public static SolidColorBrush HexBrush(string? hex, double opacity = 1) => new(Hex(hex, (byte)Math.Round(255 * opacity)));
 
-    public static string CssHex(string key) => $"#{(IsDark ? Brand[key].Dark : Brand[key].Light):X6}";
+    public static string CssHex(string key)
+    {
+        var c = Get(key);
+        return $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+    }
+
+    private static Windows.UI.ViewManagement.UISettings? uiSettings;
+
+    private static Color HighContrast(string key, byte alpha)
+    {
+        var type = key switch
+        {
+            "window" or "sidebar" or "list" or "panel" or "raised" or "sunken" or "bar" => Windows.UI.ViewManagement.UIElementType.Window,
+            "dim" or "gutter" => Windows.UI.ViewManagement.UIElementType.GrayText,
+            "accent" or "sky" => Windows.UI.ViewManagement.UIElementType.Hotlight,
+            _ => Windows.UI.ViewManagement.UIElementType.WindowText
+        };
+        try
+        {
+            uiSettings ??= new Windows.UI.ViewManagement.UISettings();
+            var c = uiSettings.UIElementColor(type);
+            return Color.FromArgb(alpha, c.R, c.G, c.B);
+        }
+        catch
+        {
+            return Hex(type == Windows.UI.ViewManagement.UIElementType.Window ? 0x000000u : 0xFFFFFFu, alpha);
+        }
+    }
 
     public static string StateKey(VisualState s) => s.ColorKey();
 
