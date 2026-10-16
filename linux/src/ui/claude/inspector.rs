@@ -398,7 +398,7 @@ impl BranchPrs {
             if sig == 0 {
                 app::on_refresh(f);
             } else {
-                app::on_live(f);
+                app::on_live_visible(&me.widget, f);
             }
         }
         if let Some(chat) = &me.tab.chat {
@@ -681,7 +681,11 @@ impl PrDetail {
             let w = Rc::downgrade(&me);
             let f = move |_: &()| match w.upgrade() {
                 Some(me) => {
-                    me.model.load(sig == 0);
+                    if sig == 0 {
+                        me.model.load(true);
+                    } else {
+                        me.model.load_live();
+                    }
                     true
                 }
                 None => false,
@@ -689,7 +693,7 @@ impl PrDetail {
             if sig == 0 {
                 app::on_refresh(f);
             } else {
-                app::on_live(f);
+                app::on_live_visible(&widget, f);
             }
         }
         me.render();

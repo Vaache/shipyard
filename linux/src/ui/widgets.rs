@@ -443,9 +443,13 @@ impl RefreshStatus {
 
     fn render(&self) {
         let (updated, refreshing, error) = self.state.borrow().clone();
-        self.icon.set_visible_child_name(if refreshing { "spin" } else if error.is_some() { "warn" } else { "idle" });
+        let paused = crate::api::rate_limited_until().filter(|_| !refreshing);
+        self.icon.set_visible_child_name(if refreshing { "spin" } else if error.is_some() || paused.is_some() { "warn" } else { "idle" });
+        let resume = paused.map(|t| t.with_timezone(&chrono::Local).format("%H:%M").to_string());
         let text = if refreshing {
             "Updating…".to_string()
+        } else if let Some(at) = &resume {
+            if self.compact { "Paused".into() } else { format!("Paused until {at}") }
         } else if error.is_some() {
             if self.compact { "Offline".into() } else { "Couldn't refresh".into() }
         } else if let Some(u) = updated {
@@ -457,10 +461,11 @@ impl RefreshStatus {
             "Not updated yet".into()
         };
         self.text.set_text(&text);
-        self.retry.set_visible(error.is_some() && !refreshing);
-        self.widget.set_tooltip_text(Some(&match &error {
-            Some(e) => format!("Last refresh failed: {e}"),
-            None => "Refresh (Ctrl+R)".to_string(),
+        self.retry.set_visible(error.is_some() && !refreshing && resume.is_none());
+        self.widget.set_tooltip_text(Some(&match (&resume, &error) {
+            (Some(at), _) => format!("GitHub rate limit reached. Live updates resume at {at}."),
+            (None, Some(e)) => format!("Last refresh failed: {e}"),
+            (None, None) => "Refresh (Ctrl+R)".to_string(),
         }));
     }
 }

@@ -99,6 +99,7 @@ pub struct PrModel {
     outdated_by_path: RefCell<HashMap<String, Vec<ReviewThread>>>,
     active: Cell<bool>,
     queued: Cell<bool>,
+    live_pending: Cell<bool>,
     reload_files: Cell<bool>,
     files_oid: RefCell<Option<String>>,
     merge_rechecks: Cell<u32>,
@@ -136,6 +137,7 @@ impl PrModel {
             outdated_by_path: RefCell::new(HashMap::new()),
             active: Cell::new(false),
             queued: Cell::new(false),
+            live_pending: Cell::new(false),
             reload_files: Cell::new(false),
             files_oid: RefCell::new(None),
             merge_rechecks: Cell::new(0),
@@ -231,6 +233,13 @@ impl PrModel {
         self.pr.borrow().as_ref().map(|p| p.review_threads.nodes.iter().filter(|t| t.path == path).count()).unwrap_or(0)
     }
 
+    pub fn load_live(self: &Rc<Self>) {
+        if !self.active.get() {
+            self.live_pending.set(true);
+        }
+        self.load(false);
+    }
+
     pub fn load(self: &Rc<Self>, full: bool) {
         if full {
             self.reload_files.set(true);
@@ -254,6 +263,7 @@ impl PrModel {
     }
 
     async fn fetch(self: Rc<Self>) {
+        let live = self.live_pending.replace(false);
         self.loading.set(true);
         self.emit(Change::Busy);
         let api = self.api.clone();
@@ -278,6 +288,7 @@ impl PrModel {
                 *self.viewed.borrow_mut() = pr.files.as_ref().map(|f| f.nodes.iter().filter(|v| v.viewer_viewed_state == "VIEWED").map(|v| v.path.clone()).collect()).unwrap_or_default();
                 self.index_threads(&pr.review_threads.nodes);
                 let head = pr.head_ref_oid.clone();
+                let refs = (pr.head_ref_name.clone(), pr.base_ref_name.clone());
                 let recheck = pr.is_open() && (pr.merge_state_status.as_deref() == Some("UNKNOWN") || pr.mergeable == "UNKNOWN");
                 *self.repo.borrow_mut() = Some(repo);
                 *self.pr.borrow_mut() = Some(pr);
@@ -286,7 +297,7 @@ impl PrModel {
                 self.last_updated.set(Some(Utc::now()));
                 self.emit(Change::Pr);
                 let me = self.clone();
-                crate::rt::spawn_local(async move { me.load_stack().await });
+                crate::rt::spawn_local(async move { me.load_stack(refs, live).await });
                 self.schedule_merge_recheck(recheck);
                 let stale = self.reload_files.get() || self.files_oid.borrow().as_ref().map(|o| *o != head).unwrap_or(false);
                 self.reload_files.set(false);
@@ -331,15 +342,15 @@ impl PrModel {
         gtk::glib::timeout_add_local_once(Duration::from_secs(delay), move || {
             if let Some(me) = weak.upgrade() {
                 me.recheck_pending.set(false);
-                me.load(false);
+                me.load_live();
             }
         });
     }
 
-    async fn load_stack(self: Rc<Self>) {
+    async fn load_stack(self: Rc<Self>, refs: (String, String), live: bool) {
         let api = self.api.clone();
         let r = self.r.clone();
-        if let Ok(s) = crate::rt::run(async move { api.pull_request_stack(&r).await }).await {
+        if let Ok(s) = crate::rt::run(async move { api.pull_request_stack_cached(&r, &refs.0, &refs.1, live).await }).await {
             if *self.stack.borrow() != s {
                 *self.stack.borrow_mut() = s;
                 self.emit(Change::Stack);

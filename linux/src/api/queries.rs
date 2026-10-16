@@ -33,12 +33,14 @@ pub fn search() -> String {
     format!("query($q: String!, $after: String) {{ search(query: $q, type: ISSUE, first: 40, after: $after) {{ issueCount pageInfo {{ hasNextPage endCursor }} nodes {{ __typename ...PRItem ...IssueItem }} }} }}\n{PR_ITEM_FRAGMENT}\n{ISSUE_ITEM_FRAGMENT}")
 }
 
+pub const BADGE_ITEM_FRAGMENT: &str = "fragment BadgeItem on PullRequest { number title url prState: state isDraft createdAt updatedAt author { login } repository { nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }";
+
 pub fn badges() -> String {
     format!(
         "query {{
-  rr: search(query: \"is:pr is:open review-requested:@me archived:false sort:updated-desc\", type: ISSUE, first: 10) {{ issueCount nodes {{ __typename ...PRItem ...IssueItem }} }}
-  mine: search(query: \"is:pr is:open author:@me archived:false sort:updated-desc\", type: ISSUE, first: 10) {{ issueCount nodes {{ __typename ...PRItem ...IssueItem }} }}
-}}\n{PR_ITEM_FRAGMENT}\n{ISSUE_ITEM_FRAGMENT}"
+  rr: search(query: \"is:pr is:open review-requested:@me archived:false sort:updated-desc\", type: ISSUE, first: 10) {{ issueCount nodes {{ __typename ...BadgeItem }} }}
+  mine: search(query: \"is:pr is:open author:@me archived:false sort:updated-desc\", type: ISSUE, first: 10) {{ issueCount nodes {{ __typename ...BadgeItem }} }}
+}}\n{BADGE_ITEM_FRAGMENT}"
     )
 }
 

@@ -153,14 +153,14 @@ impl View {
         }
     }
 
-    fn load(self: &Rc<Self>) {
+    fn load(self: &Rc<Self>, force: bool) {
         let Some(api) = app::api() else { return };
         let me = self.clone();
         me.loading.set(true);
         me.render();
         crate::rt::spawn_local(async move {
             let all = me.show_all.get();
-            let res = crate::rt::run(async move { api.notifications(all).await }).await;
+            let res = crate::rt::run(async move { api.notifications(all, force).await }).await;
             me.loading.set(false);
             if all != me.show_all.get() {
                 return;
@@ -254,7 +254,7 @@ pub fn build() -> gtk::Widget {
     let h = holder.clone();
     let status = RefreshStatus::new(false, move || {
         if let Some(v) = h.borrow().as_ref().and_then(|w| w.upgrade()) {
-            v.load();
+            v.load(true);
         }
     });
     let view = Rc::new(View {
@@ -287,7 +287,7 @@ pub fn build() -> gtk::Widget {
         if let Some(v) = v.upgrade() {
             v.show_all.set(t.is_active());
             v.items.borrow_mut().clear();
-            v.load();
+            v.load(false);
         }
     });
     let bar = hbox(0);
@@ -333,20 +333,20 @@ pub fn build() -> gtk::Widget {
     let v = Rc::downgrade(&view);
     app::on_refresh(move |_| match v.upgrade() {
         Some(v) => {
-            v.load();
+            v.load(true);
             true
         }
         None => false,
     });
     let v = Rc::downgrade(&view);
-    app::on_live(move |_| match v.upgrade() {
+    app::on_live_visible(&tv, move |_| match v.upgrade() {
         Some(v) => {
-            v.load();
+            v.load(false);
             true
         }
         None => false,
     });
-    view.load();
+    view.load(false);
     keep_alive(&tv, view);
     tv.upcast()
 }
