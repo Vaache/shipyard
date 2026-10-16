@@ -9,7 +9,7 @@ use serde_json::json;
 use crate::api::models::*;
 use crate::api::queries as q;
 use crate::api::endpoints::StackRefs;
-use crate::api::{ApiError, GitHubApi};
+use crate::api::{ApiError, ErrorKind, GitHubApi};
 use crate::conversation_html::{self, Look};
 use crate::diff::{DiffAnchor, DiffFile};
 use crate::signal::Signal;
@@ -323,6 +323,7 @@ impl PrModel {
                 self.schedule_merge_recheck(light.merge_unknown());
             }
             Ok(_) => self.fetch("changed").await,
+            Err(e) if !e.is_transient() && e.kind != ErrorKind::RateLimited => self.fetch("pulse error").await,
             Err(e) => {
                 *self.refresh_error.borrow_mut() = Some(e.message);
                 self.emit(Change::Busy);

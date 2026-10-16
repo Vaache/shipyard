@@ -264,6 +264,23 @@ pub fn outcome_icon(o: CheckOutcome) -> gtk::Image {
     }
 }
 
+pub fn rebuild_rows(list: &gtk::ListBox, build: impl FnOnce()) {
+    let scroller = list.ancestor(gtk::ScrolledWindow::static_type()).and_downcast::<gtk::ScrolledWindow>();
+    let pos = scroller.as_ref().map(|s| s.vadjustment().value());
+    let focused = list.root().and_then(|r| r.focus()).is_some_and(|f| f.is_ancestor(list));
+    let focus = list.focus_child().and_downcast::<gtk::ListBoxRow>().map(|r| r.index()).filter(|_| focused);
+    list.remove_all();
+    build();
+    if let (Some(s), Some(v)) = (scroller, pos) {
+        let adj = s.vadjustment();
+        adj.set_value(v);
+        glib::idle_add_local_once(move || adj.set_value(v));
+    }
+    if let Some(row) = focus.and_then(|i| list.row_at_index(i)) {
+        row.grab_focus();
+    }
+}
+
 pub fn scrolled<W: IsA<gtk::Widget>>(child: &W) -> gtk::ScrolledWindow {
     let s = gtk::ScrolledWindow::new();
     s.set_hscrollbar_policy(gtk::PolicyType::Never);

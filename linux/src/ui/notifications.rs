@@ -21,6 +21,7 @@ struct View {
     mark_all: gtk::Button,
     empty_label: gtk::Label,
     empty_icon: gtk::Box,
+    rendered: RefCell<String>,
 }
 
 fn icon_for(kind: &str) -> (&'static str, &'static str) {
@@ -99,14 +100,23 @@ fn row(n: &NotificationThread) -> gtk::Box {
     b
 }
 
+fn signature(items: &[NotificationThread]) -> String {
+    items
+        .iter()
+        .map(|n| format!("{}|{}|{}|{}|{}|{}|{}|{}", n.id, n.unread, n.reason, n.updated_at, n.subject.kind, n.subject.title, n.repository.full_name, util::rel(Some(n.updated_at))))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 impl View {
     fn render(self: &Rc<Self>) {
         let _span = crate::diagnostics::ui_span("notifications.render");
         let items = self.items.borrow().clone();
         self.status.update(self.updated.get(), self.loading.get(), if items.is_empty() { None } else { self.error.borrow().clone() });
         self.mark_all.set_sensitive(items.iter().any(|n| n.unread));
-        self.list.remove_all();
         if items.is_empty() {
+            self.list.remove_all();
+            self.rendered.borrow_mut().clear();
             if self.loading.get() {
                 self.stack.set_visible_child_name("loading");
             } else if let Some(e) = self.error.borrow().clone() {
@@ -122,6 +132,15 @@ impl View {
             return;
         }
         self.stack.set_visible_child_name("list");
+        let sig = signature(&items);
+        if *self.rendered.borrow() == sig {
+            return;
+        }
+        *self.rendered.borrow_mut() = sig;
+        rebuild_rows(&self.list, || self.build_rows(items));
+    }
+
+    fn build_rows(self: &Rc<Self>, items: Vec<NotificationThread>) {
         for n in items {
             let r = gtk::ListBoxRow::new();
             r.set_child(Some(&row(&n)));
@@ -269,6 +288,7 @@ pub fn build() -> gtk::Widget {
         mark_all: mark_all.clone(),
         empty_label,
         empty_icon,
+        rendered: RefCell::new(String::new()),
     });
     *holder.borrow_mut() = Some(Rc::downgrade(&view));
 

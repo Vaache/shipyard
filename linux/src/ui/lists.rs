@@ -276,6 +276,7 @@ pub struct SearchList {
     status: Rc<RefreshStatus>,
     overlay_stack: gtk::Stack,
     debounce: RefCell<Option<glib::SourceId>>,
+    rendered: RefCell<String>,
 }
 
 impl SearchList {
@@ -312,6 +313,7 @@ impl SearchList {
             status,
             overlay_stack: overlay_stack.clone(),
             debounce: RefCell::new(None),
+            rendered: RefCell::new(String::new()),
         });
         *weak_holder.borrow_mut() = Some(Rc::downgrade(&me));
 
@@ -509,16 +511,40 @@ impl SearchList {
             }
             self.list.remove_all();
             self.keys.borrow_mut().clear();
+            self.rendered.borrow_mut().clear();
             return;
         }
         self.overlay_stack.set_visible_child_name("list");
-        let scroll_pos = self.list.parent().and_then(|p| p.parent()).and_downcast::<gtk::ScrolledWindow>().map(|s| s.vadjustment().value());
-        self.list.remove_all();
+        let sig = self.signature(&items);
+        if *self.rendered.borrow() == sig {
+            self.sync_selection();
+            return;
+        }
+        *self.rendered.borrow_mut() = sig;
+        rebuild_rows(&self.list, || self.build_rows(&items));
+        self.sync_selection();
+    }
+
+    fn signature(&self, items: &[SearchItem]) -> String {
+        let mut sig = serde_json::to_string(items).unwrap_or_default();
+        for item in items {
+            sig.push('|');
+            sig.push_str(&crate::util::rel(Some(item.updated_at)));
+        }
+        if self.grouped {
+            let mut collapsed: Vec<String> = self.collapsed.borrow().iter().cloned().collect();
+            collapsed.sort();
+            sig.push_str(&format!("|{}|{}", collapsed.join(","), self.text.borrow().is_empty()));
+        }
+        sig
+    }
+
+    fn build_rows(&self, items: &[SearchItem]) {
         let mut keys = vec![];
         if self.grouped {
             let mut order: Vec<String> = vec![];
             let mut by_repo: HashMap<String, Vec<SearchItem>> = HashMap::new();
-            for item in &items {
+            for item in items {
                 let k = item.repository.name_with_owner.clone();
                 if !by_repo.contains_key(&k) {
                     order.push(k.clone());
@@ -543,19 +569,12 @@ impl SearchList {
                 }
             }
         } else {
-            for item in &items {
+            for item in items {
                 self.append_item(item, true);
                 keys.push(Some(item.route()));
             }
         }
         *self.keys.borrow_mut() = keys;
-        self.sync_selection();
-        if let Some(v) = scroll_pos {
-            if let Some(s) = self.list.parent().and_then(|p| p.parent()).and_downcast::<gtk::ScrolledWindow>() {
-                let adj = s.vadjustment();
-                glib::idle_add_local_once(move || adj.set_value(v));
-            }
-        }
     }
 
     fn append_item(&self, item: &SearchItem, show_repo: bool) {
