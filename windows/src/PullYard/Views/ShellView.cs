@@ -177,6 +177,15 @@ public sealed class ShellView : Grid
             row.Click += (_, _) => app.Updater.Present();
             footer.Children.Add(row);
         }
+        if (app.RateLimitedUntil is { } until)
+        {
+            var text = Ui.Text(L.F("RateLimit_Paused", "Rate limited — live updates resume at {0}", until.ToLocalTime().ToString("t", Fmt.Culture)), 12, "muted", wrap: true);
+            var row = Ui.Columns((Ui.Glyph("\uE823", 13, "amber"), Ui.Auto), (text, Ui.Star));
+            row.ColumnSpacing = 8;
+            row.Margin = new Thickness(14, 0, 10, 8);
+            Ui.Tip(row, L.T("RateLimit_Hint", "GitHub rate limit reached. Live polling is paused; manual refresh still works."));
+            footer.Children.Add(row);
+        }
         if (app.User is { } user)
         {
             var settings = Ui.IconButton("", L.T("Common_Settings", "Settings"), app.RequestSettings);
@@ -259,6 +268,7 @@ public sealed class ShellView : Grid
                 UpdateBadges();
                 break;
             case nameof(AppViewModel.User):
+            case nameof(AppViewModel.RateLimitedUntil):
                 RenderFooter();
                 break;
             case nameof(AppViewModel.ClipboardRoute):

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using PullYard.Core.Util;
@@ -101,17 +102,48 @@ public sealed partial class GitHubApi
         public Repo? Repository { get; set; }
     }
 
-    public async Task<List<StackPR>> PullRequestStack(ItemRef r, CancellationToken ct = default)
+    public static readonly TimeSpan StackTtl = TimeSpan.FromMinutes(10);
+
+    private sealed record CachedStack(DateTimeOffset At, List<StackPR> Stack);
+
+    private readonly ConcurrentDictionary<string, CachedStack> stackCache = new();
+    private volatile bool stackFieldUnsupported;
+
+    private static string StackKey(ItemRef r, string? head, string? @base) => $"{r.Repo.Full}#{r.Number}|{head}|{@base}";
+
+    public List<StackPR>? CachedPullRequestStack(ItemRef r, string? head, string? @base, bool live)
     {
+        if (!stackCache.TryGetValue(StackKey(r, head, @base), out var hit)) return null;
+        return live || DateTimeOffset.Now - hit.At < StackTtl ? hit.Stack : null;
+    }
+
+    public async Task<List<StackPR>> PullRequestStack(ItemRef r, string? head = null, string? @base = null, bool live = false, bool force = false, CancellationToken ct = default)
+    {
+        if (!force && CachedPullRequestStack(r, head, @base, live) is { } cached) return cached;
+        var stack = await LookupStack(r, ct).ConfigureAwait(false);
+        stackCache[StackKey(r, head, @base)] = new CachedStack(DateTimeOffset.Now, stack);
+        return stack;
+    }
+
+    private async Task<List<StackPR>> LookupStack(ItemRef r, CancellationToken ct)
+    {
+        var plainQuery = Q.PrStack.Replace(" stack { entries(first: 30) { nodes { position pullRequest { ...StackPR } } } }", "");
         StackResponse res;
-        try
+        if (stackFieldUnsupported)
         {
-            res = await GraphQL<StackResponse>(Q.PrStack, V(("o", r.Repo.Owner), ("n", r.Repo.Name), ("num", r.Number)), ct: ct).ConfigureAwait(false);
+            res = await GraphQL<StackResponse>(plainQuery, V(("o", r.Repo.Owner), ("n", r.Repo.Name), ("num", r.Number)), ct: ct).ConfigureAwait(false);
         }
-        catch (ApiException)
+        else
         {
-            var plain = await GraphQL<StackResponse>(Q.PrStack.Replace(" stack { entries(first: 30) { nodes { position pullRequest { ...StackPR } } } }", ""), V(("o", r.Repo.Owner), ("n", r.Repo.Name), ("num", r.Number)), ct: ct).ConfigureAwait(false);
-            res = plain;
+            try
+            {
+                res = await GraphQL<StackResponse>(Q.PrStack, V(("o", r.Repo.Owner), ("n", r.Repo.Name), ("num", r.Number)), ct: ct).ConfigureAwait(false);
+            }
+            catch (ApiException e) when (e.SchemaError)
+            {
+                stackFieldUnsupported = true;
+                res = await GraphQL<StackResponse>(plainQuery, V(("o", r.Repo.Owner), ("n", r.Repo.Name), ("num", r.Number)), ct: ct).ConfigureAwait(false);
+            }
         }
         if (res.Repository?.PullRequest is not { } pr) return new();
         if (pr.Stack?.Entries.Items is { Count: > 1 } entries) return entries.OrderBy(e => e.Position).Select(e => e.PullRequest).ToList();
@@ -215,23 +247,57 @@ public sealed partial class GitHubApi
             await GraphQL<EmptyData>(Q.ClearProjectItem, V(("p", project), ("i", item), ("f", field)), strict: true, ct: ct).ConfigureAwait(false);
     }
 
+    private static string NotificationsPath(bool all) => $"/notifications?all={(all ? "true" : "false")}&per_page=50";
+
     public async Task<List<NotificationThread>> Notifications(bool all, CancellationToken ct = default)
     {
         if (Demo.IsOn) return new();
-        return await Rest<List<NotificationThread>>("GET", $"/notifications?all={(all ? "true" : "false")}&per_page=50", ct: ct).ConfigureAwait(false);
+        var (data, _) = await Conditional(NotificationsPath(all), false, ct).ConfigureAwait(false);
+        return DecodeNotifications(data);
     }
 
-    public async Task<int> UnreadNotificationCount(CancellationToken ct = default)
+    public async Task<List<NotificationThread>?> NotificationsIfChanged(bool all, bool live, CancellationToken ct = default)
     {
-        var list = await Rest<List<NotificationThread>>("GET", "/notifications?per_page=50", ct: ct).ConfigureAwait(false);
-        return list.Count;
+        if (Demo.IsOn) return new();
+        var (data, changed) = await Conditional(NotificationsPath(all), live, ct).ConfigureAwait(false);
+        return changed ? DecodeNotifications(data) : null;
     }
 
-    public Task MarkNotificationRead(string id) => Send("PATCH", $"/notifications/threads/{id}");
+    public async Task<int?> UnreadNotificationCount(bool live = false, CancellationToken ct = default)
+    {
+        var (data, changed) = await Conditional("/notifications?per_page=50", live, ct).ConfigureAwait(false);
+        return changed ? DecodeNotifications(data).Count : null;
+    }
 
-    public Task MarkNotificationDone(string id) => Send("DELETE", $"/notifications/threads/{id}");
+    private static List<NotificationThread> DecodeNotifications(byte[] data)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<NotificationThread>>(data, Json.Rest) ?? new();
+        }
+        catch (JsonException e)
+        {
+            throw new ApiException($"Failed to parse response: {e.Message}");
+        }
+    }
 
-    public Task MarkAllNotificationsRead() => Send("PUT", "/notifications", new Dictionary<string, object> { ["read"] = true });
+    public Task MarkNotificationRead(string id) => ChangeNotifications(() => Send("PATCH", $"/notifications/threads/{id}"));
+
+    public Task MarkNotificationDone(string id) => ChangeNotifications(() => Send("DELETE", $"/notifications/threads/{id}"));
+
+    public Task MarkAllNotificationsRead() => ChangeNotifications(() => Send("PUT", "/notifications", new Dictionary<string, object> { ["read"] = true }));
+
+    private async Task ChangeNotifications(Func<Task> change)
+    {
+        try
+        {
+            await change().ConfigureAwait(false);
+        }
+        finally
+        {
+            Invalidate("/notifications");
+        }
+    }
 
     public async Task Mutate(string query, IDictionary<string, object?> vars, CancellationToken ct = default)
     {

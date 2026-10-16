@@ -4,7 +4,7 @@ namespace PullYard.Core.Api;
 
 internal static class RecordedHttp
 {
-    public static async Task<(HttpResponseMessage Response, byte[] Data)> Send(HttpClient client, HttpRequestMessage req, CancellationToken ct, string? graphQLQuery = null, string caller = "", bool keepRedirectBody = true)
+    public static async Task<(HttpResponseMessage Response, byte[] Data)> Send(HttpClient client, HttpRequestMessage req, CancellationToken ct, string? graphQLQuery = null, string caller = "", bool keepRedirectBody = true, bool retry = false)
     {
         var probe = RequestProbe.Start();
         HttpResponseMessage? response = null;
@@ -19,13 +19,13 @@ internal static class RecordedHttp
             {
                 var ms = probe.ElapsedMs;
                 var (error, note) = graphQLQuery is not null && code is >= 200 and < 300 ? Diagnostics.GraphQLOutcome(data) : (null, null);
-                probe.Finish(Kind(graphQLQuery), Name(req, graphQLQuery, caller), Diagnostics.RawPath(req.RequestUri), response, data.Length, null, note, ms, error);
+                probe.Finish(Kind(graphQLQuery), Name(req, graphQLQuery, caller), Diagnostics.RawPath(req.RequestUri), response, data.Length, null, note ?? (retry ? "retry" : null), ms, error);
             }
             return (response, data);
         }
         catch (Exception e)
         {
-            if (probe.Active) probe.Finish(Kind(graphQLQuery), Name(req, graphQLQuery, caller), Diagnostics.RawPath(req.RequestUri), response, 0, e);
+            if (probe.Active) probe.Finish(Kind(graphQLQuery), Name(req, graphQLQuery, caller), Diagnostics.RawPath(req.RequestUri), response, 0, e, retry ? "retry" : null);
             response?.Dispose();
             throw;
         }

@@ -244,24 +244,30 @@ public sealed class NotificationsView : ListPane
 
     protected override void OnAttached() => Load(true).Forget();
 
-    protected override void OnLiveTick() => Load(false).Forget();
+    protected override void OnLiveTick() => Load(false, live: true).Forget();
 
     protected override Task OnPullRefresh() => Load(false);
 
-    private async Task Load(bool reset)
+    private async Task Load(bool reset, bool live = false)
     {
         if (Model.Api is not { } api) return;
         loading = true;
         Update();
+        var changed = true;
         try
         {
             var mode = showAll;
-            var fetched = await api.Notifications(mode);
+            var fetched = reset ? await api.Notifications(mode) : await api.NotificationsIfChanged(mode, live);
             if (mode != showAll) return;
-            items = fetched;
             lastUpdated = DateTimeOffset.Now;
-            if (!showAll) Model.UnreadCount = items.Count;
             error = null;
+            if (fetched is null)
+            {
+                changed = false;
+                return;
+            }
+            items = fetched;
+            if (!showAll) Model.UnreadCount = items.Count;
         }
         catch (Exception e)
         {
@@ -270,7 +276,8 @@ public sealed class NotificationsView : ListPane
         finally
         {
             loading = false;
-            Render();
+            if (changed) Render();
+            else Update();
         }
     }
 

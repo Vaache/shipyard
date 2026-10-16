@@ -288,10 +288,12 @@ public sealed class BranchPRPanel : Grid
     private readonly RefreshFooter status = new(compact: true);
     private ItemRef? selected;
     private string loadedKey = "";
+    private readonly LiveRefresh live;
 
     public BranchPRPanel(ClaudeTab tab)
     {
         this.tab = tab;
+        live = new LiveRefresh(this, OnLive);
         Children.Add(host);
         listView.ItemClick += (_, e) =>
         {
@@ -322,8 +324,8 @@ public sealed class BranchPRPanel : Grid
             tab.Git.PropertyChanged += OnGit;
             tab.PropertyChanged -= OnTab;
             tab.PropertyChanged += OnTab;
-            app.LiveTick -= OnLive;
-            app.LiveTick += OnLive;
+            app.LiveTick -= live.Tick;
+            app.LiveTick += live.Tick;
             app.RefreshRequested -= OnLive;
             app.RefreshRequested += OnLive;
             Load().Forget();
@@ -332,7 +334,7 @@ public sealed class BranchPRPanel : Grid
         {
             tab.Git.PropertyChanged -= OnGit;
             tab.PropertyChanged -= OnTab;
-            app.LiveTick -= OnLive;
+            app.LiveTick -= live.Tick;
             app.RefreshRequested -= OnLive;
         };
         Render();
@@ -532,11 +534,13 @@ public sealed class InspectorPRDetail : Grid
     private PRDetailViewModel? model;
     private readonly StackPanel body = Ui.V(12);
     private readonly RefreshFooter status = new(compact: true);
+    private readonly LiveRefresh live;
     private bool showFiles;
 
     public InspectorPRDetail(ClaudeTab tab, ItemRef r, Action onBack)
     {
         this.tab = tab;
+        live = new LiveRefresh(this, OnLive);
         Ref = r;
         this.onBack = onBack;
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -557,8 +561,8 @@ public sealed class InspectorPRDetail : Grid
             if (model is null) return;
             model.PropertyChanged -= OnModel;
             model.PropertyChanged += OnModel;
-            app.LiveTick -= OnLive;
-            app.LiveTick += OnLive;
+            app.LiveTick -= live.Tick;
+            app.LiveTick += live.Tick;
             status.Retry = () => model.Load(true).Forget();
             model.Load().Forget();
             Render();
@@ -566,11 +570,11 @@ public sealed class InspectorPRDetail : Grid
         Unloaded += (_, _) =>
         {
             if (model is not null) model.PropertyChanged -= OnModel;
-            app.LiveTick -= OnLive;
+            app.LiveTick -= live.Tick;
         };
     }
 
-    private void OnLive() => model?.Load().Forget();
+    private void OnLive() => model?.Load(live: true).Forget();
 
     private void OnModel(object? sender, PropertyChangedEventArgs e)
     {

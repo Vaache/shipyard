@@ -17,23 +17,25 @@ namespace PullYard.Views;
 public abstract class LiveDetail : Grid
 {
     protected readonly AppViewModel App = AppViewModel.Shared;
+    private readonly LiveRefresh live;
     private bool subscribed;
 
     protected LiveDetail()
     {
+        live = new LiveRefresh(this, OnLive);
         Loaded += (_, _) =>
         {
             if (subscribed) return;
             subscribed = true;
             App.RefreshRequested += OnRefresh;
-            App.LiveTick += OnLive;
+            App.LiveTick += live.Tick;
             OnAttached();
         };
         Unloaded += (_, _) =>
         {
             subscribed = false;
             App.RefreshRequested -= OnRefresh;
-            App.LiveTick -= OnLive;
+            App.LiveTick -= live.Tick;
         };
     }
 

@@ -42,6 +42,7 @@ public sealed partial class MainWindow : Window
         }
         AppWindow.Closing += OnClosing;
         Activated += OnActivated;
+        model.IsShown = () => AppWindow.IsVisible && AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized };
         ThemeService.Attach(RootGrid);
         ThemeService.Changed += ApplyBackground;
         ApplyBackground();

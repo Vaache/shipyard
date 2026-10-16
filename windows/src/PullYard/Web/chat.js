@@ -64,12 +64,44 @@
     return window.innerHeight + window.scrollY >= document.body.scrollHeight - 40;
   }
 
-  function scrollDown(force) {
-    if (force || stick) window.scrollTo(0, document.body.scrollHeight);
+  function following() {
+    if (window.innerHeight > 0) stick = atBottom();
+    return stick;
+  }
+
+  function scrollDown() {
+    window.scrollTo(0, document.body.scrollHeight);
+    stick = true;
+  }
+
+  function anchor() {
+    var kids = document.getElementById("list").children;
+    for (var i = 0; i < kids.length; i++) {
+      var r = kids[i].getBoundingClientRect();
+      if (r.bottom > 0) return { id: kids[i].getAttribute("data-id"), top: r.top };
+    }
+    return null;
+  }
+
+  function restore(a) {
+    if (!a) return;
+    var n = nodes[a.id];
+    if (!n || !n.parentNode) return;
+    var delta = n.getBoundingClientRect().top - a.top;
+    if (delta) window.scrollBy(0, delta);
+    stick = atBottom();
+  }
+
+  function preserving(change) {
+    var follow = following();
+    var a = follow ? null : anchor();
+    change();
+    if (follow) scrollDown();
+    else restore(a);
   }
 
   window.addEventListener("scroll", function () {
-    stick = atBottom();
+    if (window.innerHeight > 0) stick = atBottom();
   }, { passive: true });
 
   function relative(path) {
@@ -388,22 +420,27 @@
     return node;
   }
 
-  function update(item) {
+  function replace(item) {
     var old = nodes[item.id];
     var next = build(item);
     nodes[item.id] = next;
     if (old && old.parentNode) old.parentNode.replaceChild(next, old);
   }
 
-  function upsert(list) {
+  function update(item) {
+    var a = anchor();
+    replace(item);
+    restore(a);
+  }
+
+  function apply(list) {
     var container = document.getElementById("list");
-    var keep = atBottom();
     list.forEach(function (item) {
       if (byId[item.id]) {
         var idx = items.indexOf(byId[item.id]);
         if (idx >= 0) items[idx] = item;
         byId[item.id] = item;
-        update(item);
+        replace(item);
       } else {
         items.push(item);
         byId[item.id] = item;
@@ -413,7 +450,14 @@
       }
     });
     renderTail();
-    if (keep || stick) scrollDown(true);
+  }
+
+  function upsert(list) {
+    preserving(function () { apply(list); });
+  }
+
+  function settle() {
+    if (stick) scrollDown();
   }
 
   function reset(list) {
@@ -421,9 +465,10 @@
     byId = {};
     nodes = {};
     document.getElementById("list").innerHTML = "";
-    upsert(list);
-    setTimeout(function () { scrollDown(true); }, 30);
-    setTimeout(function () { scrollDown(true); }, 300);
+    apply(list);
+    scrollDown();
+    setTimeout(settle, 30);
+    setTimeout(settle, 300);
   }
 
   function renderTail() {
@@ -497,15 +542,12 @@
         if (msg.meta) meta = msg.meta;
         upsert(msg.items || []);
         break;
-      case "meta": {
-        var keep = atBottom();
+      case "meta":
         meta = msg.meta;
-        renderTail();
-        if (keep) scrollDown(true);
+        preserving(renderTail);
         break;
-      }
       case "bottom":
-        scrollDown(true);
+        scrollDown();
         break;
     }
   }
