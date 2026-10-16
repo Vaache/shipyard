@@ -9,6 +9,7 @@ struct NotificationsView: View {
     @State private var selection: String?
     @State private var lastUpdated: Date?
     @State private var loadedKey: String?
+    @State private var checkingCache = false
     @State private var rows = RowAppearTracker.shared("notifications")
 
     var body: some View {
@@ -43,7 +44,7 @@ struct NotificationsView: View {
                     .padding(.top, 30)
                 }
             }
-            .overlay { if loading && items.isEmpty { ProgressView().controlSize(.small) } }
+            .overlay { if loading && !checkingCache && items.isEmpty { ProgressView().controlSize(.small) } }
             .liveRefresh(updated: lastUpdated, refreshing: loading, error: items.isEmpty ? nil : error) { await load() }
         }
         .navigationTitle("Notifications")
@@ -78,8 +79,11 @@ struct NotificationsView: View {
         defer { loading = false }
         async let request = api.notifications(all: all, live: live)
         if loadedKey != viewKey {
-            if let snap = await ListCache.load([NotificationThread].self, account: account, key: key), all == showAll, app.api === api {
-                rows.ingest(snap.value.map(\.id), mode: .cascade)
+            checkingCache = true
+            let snap = await ListCache.load([NotificationThread].self, account: account, key: key)
+            checkingCache = false
+            if let snap, all == showAll, app.api === api {
+                rows.ingest(snap.value.map(\.id), mode: .silent)
                 loadedKey = viewKey
                 items = snap.value
                 lastUpdated = snap.saved

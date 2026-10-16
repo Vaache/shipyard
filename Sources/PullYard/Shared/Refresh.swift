@@ -50,7 +50,10 @@ struct RefreshStatus: View {
     }
 
     private func label(now: Date) -> String {
-        if refreshing { return "Updating…" }
+        if refreshing {
+            guard !compact, let updated, now.timeIntervalSince(updated) >= 60 else { return "Updating…" }
+            return "Updated \(RefreshText.ago(updated, now: now)) · updating…"
+        }
         if error != nil { return compact ? "Offline" : "Couldn't refresh" }
         guard let updated else { return compact ? "" : "Not updated yet" }
         let ago = RefreshText.ago(updated, now: now)

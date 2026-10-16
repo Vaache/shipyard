@@ -13,6 +13,7 @@ struct ReposView: View {
     @State private var lastUpdated: Date?
     @State private var rows = RowAppearTracker.shared("repos")
     @State private var loadedAccount: String?
+    @State private var checkingCache = false
 
     private var visible: [RepoSummary] {
         repos.filter { (!hideArchived || !$0.isArchived) && (text.isEmpty || $0.nameWithOwner.localizedCaseInsensitiveContains(text) || ($0.description ?? "").localizedCaseInsensitiveContains(text)) }
@@ -33,7 +34,7 @@ struct ReposView: View {
                     .onAppear { if r.id == repos.last?.id { Task { await loadMore() } } }
             }
         }
-        .overlay { if loading && repos.isEmpty { ProgressView().controlSize(.small) } }
+        .overlay { if loading && !checkingCache && repos.isEmpty { ProgressView().controlSize(.small) } }
         .liveRefresh(updated: lastUpdated, refreshing: refreshing, error: repos.isEmpty ? nil : error) { await load() }
         .searchable(text: $text, placement: .toolbar, prompt: "Filter repositories")
         .navigationTitle("Repositories")
@@ -69,9 +70,15 @@ struct ReposView: View {
             refreshing = false
         }
         async let request = api.repos(after: nil)
-        if first, repos.isEmpty, let snap = await ListCache.load([RepoSummary].self, account: account, key: "repos"), repos.isEmpty, app.api === api {
+        var snap: ListSnapshot<[RepoSummary]>?
+        if first, repos.isEmpty {
+            checkingCache = true
+            snap = await ListCache.load([RepoSummary].self, account: account, key: "repos")
+            checkingCache = false
+        }
+        if let snap, repos.isEmpty, app.api === api {
             cached = true
-            rows.ingest(snap.value.map(\.id), mode: .cascade)
+            rows.ingest(snap.value.map(\.id), mode: .silent)
             repos = snap.value
             loadedAccount = account
             lastUpdated = snap.saved

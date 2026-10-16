@@ -43,6 +43,7 @@ final class SearchListModel {
     var loading = false
     var refreshing = false
     var showingCached = false
+    var checkingCache = false
     var lastUpdated: Date?
     var error: String?
     private var cursor: String?
@@ -70,7 +71,7 @@ final class SearchListModel {
             error = nil
             if let snap = Self.cache[key] {
                 cached = true
-                apply(snap, mode: typing ? .silent : .cascade)
+                apply(snap, mode: .silent)
             } else {
                 items = []
                 total = 0
@@ -83,11 +84,16 @@ final class SearchListModel {
         if !silent || switched { loading = true }
         refreshing = true
         async let fetched = api.search(query)
-        if switched, !cached, persist, let snap = await ListCache.load(Snapshot.self, account: account, key: diskKey)?.value {
+        if switched, !cached, persist {
+            checkingCache = true
+            let snap = await ListCache.load(Snapshot.self, account: account, key: diskKey)?.value
+            checkingCache = false
             guard gen == generation else { return }
-            cached = true
-            showingCached = true
-            apply(snap, mode: typing ? .silent : .cascade)
+            if let snap {
+                cached = true
+                showingCached = true
+                apply(snap, mode: .silent)
+            }
         }
         do {
             let r = try await fetched
@@ -229,7 +235,7 @@ struct SearchListView: View {
             .labelsHidden()
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            LoadingBar(active: model.loading && !model.items.isEmpty)
+            LoadingBar(active: model.loading && !model.showingCached && !model.items.isEmpty)
             Divider()
             List(selection: Binding(get: { app.detailRoot }, set: { app.select($0) })) {
                 if let e = model.error, model.items.isEmpty {
@@ -258,7 +264,7 @@ struct SearchListView: View {
             .opacity(model.loading && !model.showingCached && !model.items.isEmpty ? 0.55 : 1)
             .animation(.easeOut(duration: 0.15), value: model.loading)
             .overlay {
-                if model.loading && model.items.isEmpty { ProgressView().controlSize(.small) }
+                if model.loading && !model.checkingCache && model.items.isEmpty { ProgressView().controlSize(.small) }
             }
             .liveRefresh(updated: model.lastUpdated, refreshing: model.refreshing, error: model.items.isEmpty ? nil : model.error) {
                 await reload(silent: true)
