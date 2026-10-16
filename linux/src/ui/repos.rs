@@ -340,6 +340,7 @@ pub struct CodeModel {
     pub loading_dir: Cell<bool>,
     pub dir_error: RefCell<Option<String>>,
     pub readme: RefCell<Option<String>>,
+    pub readme_state: Cell<ReadmeState>,
     pub selected_file: RefCell<Option<String>>,
     pub file: RefCell<Option<FileContent>>,
     pub file_size: Cell<Option<i64>>,
@@ -347,8 +348,21 @@ pub struct CodeModel {
     pub all_paths: RefCell<Option<Vec<String>>>,
     pub paths_truncated: Cell<bool>,
     loading_paths: Cell<bool>,
-    dir_cache: RefCell<HashMap<String, (Vec<TreeEntry>, Option<String>)>>,
+    dir_cache: RefCell<HashMap<String, Vec<TreeEntry>>>,
+    readme_cache: RefCell<HashMap<String, Option<String>>>,
     pub changed: crate::signal::Signal<()>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ReadmeState {
+    None,
+    Pending,
+    Loading,
+    Loaded,
+}
+
+fn has_readme(entries: &[TreeEntry]) -> bool {
+    entries.iter().any(|e| !e.is_dir() && e.name.to_lowercase().starts_with("readme"))
 }
 
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tiff", "svg"];
@@ -366,6 +380,7 @@ impl CodeModel {
             loading_dir: Cell::new(false),
             dir_error: RefCell::new(None),
             readme: RefCell::new(None),
+            readme_state: Cell::new(ReadmeState::None),
             selected_file: RefCell::new(None),
             file: RefCell::new(None),
             file_size: Cell::new(None),
@@ -374,6 +389,7 @@ impl CodeModel {
             paths_truncated: Cell::new(false),
             loading_paths: Cell::new(false),
             dir_cache: RefCell::new(HashMap::new()),
+            readme_cache: RefCell::new(HashMap::new()),
             changed: crate::signal::Signal::new(),
         })
     }
@@ -425,6 +441,8 @@ impl CodeModel {
         *self.all_paths.borrow_mut() = None;
         *self.selected_file.borrow_mut() = None;
         *self.file.borrow_mut() = None;
+        *self.readme.borrow_mut() = None;
+        self.readme_state.set(ReadmeState::None);
         let keep = self.dir.borrow().clone();
         self.clone().open_dir(keep.clone()).await;
         if self.dir_error.borrow().is_some() && !keep.is_empty() {
@@ -438,13 +456,20 @@ impl CodeModel {
         let switching = *self.dir.borrow() != path;
         *self.dir.borrow_mut() = path.clone();
         let cached = self.dir_cache.borrow().get(&key).cloned();
-        if let Some((entries, readme)) = cached {
+        if let Some(entries) = cached {
+            let readme = self.readme_cache.borrow().get(&key).cloned();
+            self.readme_state.set(match (&readme, has_readme(&entries)) {
+                (_, false) => ReadmeState::None,
+                (Some(_), true) => ReadmeState::Loaded,
+                (None, true) => ReadmeState::Pending,
+            });
+            *self.readme.borrow_mut() = readme.flatten();
             *self.entries.borrow_mut() = entries;
-            *self.readme.borrow_mut() = readme;
             *self.dir_error.borrow_mut() = None;
         } else if switching {
             self.entries.borrow_mut().clear();
             *self.readme.borrow_mut() = None;
+            self.readme_state.set(ReadmeState::None);
             *self.dir_error.borrow_mut() = None;
         }
         self.loading_dir.set(true);
@@ -462,6 +487,7 @@ impl CodeModel {
                 None => {
                     self.entries.borrow_mut().clear();
                     *self.readme.borrow_mut() = None;
+                    self.readme_state.set(ReadmeState::None);
                     *self.dir_error.borrow_mut() = Some("Folder not found on this branch".into());
                 }
                 Some(mut list) => {
@@ -471,25 +497,48 @@ impl CodeModel {
                         }
                         util::natural_cmp(&a.name, &b.name)
                     });
-                    *self.entries.borrow_mut() = list.clone();
                     *self.dir_error.borrow_mut() = None;
-                    let mut html = None;
-                    if list.iter().any(|e| !e.is_dir() && e.name.to_lowercase().starts_with("readme")) {
-                        let api = self.api.clone();
-                        let repo = self.repo.clone();
-                        let (r3, p3) = (git_ref.clone(), path.clone());
-                        html = crate::rt::run(async move { api.readme_html(&repo, &r3, &p3).await }).await.ok().flatten();
-                        if !still() {
-                            return;
+                    if has_readme(&list) {
+                        if self.readme_state.get() != ReadmeState::Loading {
+                            self.readme_state.set(ReadmeState::Pending);
                         }
+                    } else {
+                        *self.readme.borrow_mut() = None;
+                        self.readme_state.set(ReadmeState::None);
+                        self.readme_cache.borrow_mut().remove(&key);
                     }
-                    self.dir_cache.borrow_mut().insert(key, (list, html.clone()));
-                    *self.readme.borrow_mut() = html;
+                    *self.entries.borrow_mut() = list.clone();
+                    self.dir_cache.borrow_mut().insert(key, list);
                 }
             },
             Err(e) => *self.dir_error.borrow_mut() = Some(e.message),
         }
         self.loading_dir.set(false);
+        self.changed.emit(&());
+    }
+
+    pub fn ensure_readme(self: &Rc<Self>) {
+        if self.readme_state.get() != ReadmeState::Pending {
+            return;
+        }
+        self.readme_state.set(ReadmeState::Loading);
+        let me = self.clone();
+        crate::rt::spawn_local(async move { me.load_readme().await });
+    }
+
+    async fn load_readme(self: Rc<Self>) {
+        let git_ref = self.git_ref.borrow().clone();
+        let path = self.dir.borrow().clone();
+        let api = self.api.clone();
+        let repo = self.repo.clone();
+        let (r, p) = (git_ref.clone(), path.clone());
+        let html = crate::rt::run(async move { api.readme_html(&repo, &r, &p).await }).await.ok().flatten();
+        if *self.dir.borrow() != path || *self.git_ref.borrow() != git_ref {
+            return;
+        }
+        self.readme_cache.borrow_mut().insert(format!("{git_ref}|{path}"), html.clone());
+        *self.readme.borrow_mut() = html;
+        self.readme_state.set(ReadmeState::Loaded);
         self.changed.emit(&());
     }
 
@@ -660,7 +709,7 @@ pub struct CodeBrowser {
     content: adw::Bin,
     markdown_source: Cell<bool>,
     wrap: Cell<bool>,
-    html: Rc<HtmlView>,
+    html: RefCell<Option<Rc<HtmlView>>>,
     code: CodeView,
     rendered_key: RefCell<String>,
 }
@@ -715,14 +764,14 @@ impl CodeBrowser {
             content,
             markdown_source: Cell::new(false),
             wrap: Cell::new(false),
-            html: HtmlView::new(),
+            html: RefCell::new(None),
             code: CodeView::new(),
             rendered_key: RefCell::new(String::new()),
         });
         let w = Rc::downgrade(&me);
-        me.html.on_link(move |url| {
+        me.content.connect_map(move |_| {
             if let Some(me) = w.upgrade() {
-                me.open_link(&url);
+                me.render_content();
             }
         });
         let w = Rc::downgrade(&me);
@@ -778,6 +827,21 @@ impl CodeBrowser {
         });
         me.render();
         me
+    }
+
+    fn html(self: &Rc<Self>) -> Rc<HtmlView> {
+        if let Some(h) = self.html.borrow().as_ref() {
+            return h.clone();
+        }
+        let h = HtmlView::new();
+        let w = Rc::downgrade(self);
+        h.on_link(move |url| {
+            if let Some(me) = w.upgrade() {
+                me.open_link(&url);
+            }
+        });
+        *self.html.borrow_mut() = Some(h.clone());
+        h
     }
 
     fn open_link(&self, url: &str) {
@@ -884,10 +948,14 @@ impl CodeBrowser {
     fn render_content(self: &Rc<Self>) {
         let m = &self.model;
         let selected = m.selected_file.borrow().clone();
+        if selected.is_none() && self.content.is_mapped() {
+            m.ensure_readme();
+        }
         let file = m.file.borrow().clone();
         let error = m.file_error.borrow().clone();
+        let readme_waiting = matches!(m.readme_state.get(), ReadmeState::Pending | ReadmeState::Loading);
         let key = format!(
-            "{:?}|{}|{}|{}|{}|{}|{}",
+            "{:?}|{}|{}|{}|{}|{}|{}|{}",
             selected,
             match &file {
                 Some(FileContent::Text(t, _)) => format!("t{}", t.len()),
@@ -898,6 +966,7 @@ impl CodeBrowser {
             },
             error.clone().unwrap_or_default(),
             m.readme.borrow().as_ref().map(|r| r.len()).unwrap_or(0),
+            readme_waiting,
             m.loading_dir.get(),
             self.markdown_source.get(),
             self.wrap.get()
@@ -929,16 +998,32 @@ impl CodeBrowser {
             return;
         }
         if let Some(readme) = m.readme.borrow().clone() {
-            self.html.set_html(&markdown_page(&readme, Look::current()));
+            let html = self.html();
+            html.set_html(&markdown_page(&readme, Look::current()));
             let holder = vbox(0);
             holder.add_css_class("sy-card-flat");
             pad(&holder, 10);
-            if let Some(p) = self.html.view.parent() {
+            if let Some(p) = html.view.parent() {
                 if let Ok(b) = p.downcast::<gtk::Box>() {
-                    b.remove(&self.html.view);
+                    b.remove(&html.view);
                 }
             }
-            holder.append(&self.html.view);
+            holder.append(&html.view);
+            self.content.set_child(Some(&holder));
+            return;
+        }
+        if readme_waiting {
+            let holder = vbox(8);
+            holder.add_css_class("sy-card-flat");
+            pad(&holder, 10);
+            holder.set_vexpand(true);
+            let row = hbox(8);
+            row.set_halign(gtk::Align::Center);
+            row.set_valign(gtk::Align::Start);
+            row.set_margin_top(24);
+            row.append(&spinner(14));
+            row.append(&label_with("Loading README…", &["sy-dim", "sy-small"]));
+            holder.append(&row);
             self.content.set_child(Some(&holder));
             return;
         }
@@ -1042,9 +1127,10 @@ impl CodeBrowser {
                     detach(&self.code.widget);
                     wrapper.append(&frame(&self.code.widget, "sy-sunken"));
                 } else {
-                    self.html.set_html(&markdown_page(html, Look::current()));
-                    detach(&self.html.view);
-                    wrapper.append(&frame(&self.html.view, "sy-card-flat"));
+                    let view = self.html();
+                    view.set_html(&markdown_page(html, Look::current()));
+                    detach(&view.view);
+                    wrapper.append(&frame(&view.view, "sy-card-flat"));
                 }
             }
             FileContent::Image(tex) => {

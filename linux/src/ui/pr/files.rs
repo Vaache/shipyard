@@ -199,6 +199,7 @@ impl FilesTab {
     }
 
     fn rebuild(self: &Rc<Self>) {
+        let _span = crate::diagnostics::ui_span("pr.diff");
         let m = &self.model;
         if !m.files_loaded.get() {
             if let Some(e) = m.files_error.borrow().clone() {
