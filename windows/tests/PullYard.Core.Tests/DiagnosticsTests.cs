@@ -5,6 +5,7 @@ using Xunit;
 
 namespace PullYard.Core.Tests;
 
+[Collection("Diagnostics")]
 public class DiagnosticsTests : IDisposable
 {
     private static readonly Uri Closed = new("http://127.0.0.1:1/logs/run.txt?sig=secret");
@@ -184,7 +185,11 @@ public class DiagnosticsTests : IDisposable
         var before = DateTimeOffset.Now;
         await Assert.ThrowsAnyAsync<Exception>(() => GitHubApi.Plain(Closed));
         var after = DateTimeOffset.Now;
-        var e = Assert.Single(Diagnostics.Shared.Requests());
+        var all = Diagnostics.Shared.Requests();
+        Assert.Equal(2, all.Count);
+        Assert.Equal("retry", all[0].Note);
+        var e = all[1];
+        Assert.Null(e.Note);
         Assert.Equal(Diagnostics.KindRest, e.Kind);
         Assert.Equal("GET /logs/run.txt", e.Name);
         Assert.Equal("/logs/run.txt", e.Path);
@@ -214,13 +219,13 @@ public class DiagnosticsTests : IDisposable
         await Settled();
         await Assert.ThrowsAnyAsync<Exception>(() => GitHubApi.Plain(Closed));
         var all = Diagnostics.Shared.Requests();
-        Assert.Equal(2, all.Count);
-        Assert.Equal(Diagnostics.OriginUser, all[0].Origin);
-        Assert.Equal(Diagnostics.OriginLiveTick, all[1].Origin);
+        Assert.Equal(4, all.Count);
+        Assert.All(all.Take(2), r => Assert.Equal(Diagnostics.OriginUser, r.Origin));
+        Assert.All(all.Skip(2), r => Assert.Equal(Diagnostics.OriginLiveTick, r.Origin));
         var t = Assert.Single(Diagnostics.Shared.Ticks());
         Assert.True(t.Finished);
-        Assert.Equal(1, t.Requests);
-        Assert.True(t.DurationMs >= all[1].DurationMs - 1);
+        Assert.Equal(2, t.Requests);
+        Assert.True(t.DurationMs >= all[2].DurationMs + all[3].DurationMs + RetryPolicy.Delay.TotalMilliseconds - 5);
     }
 
     [Fact]
@@ -241,7 +246,7 @@ public class DiagnosticsTests : IDisposable
         await Settled();
         var t = Assert.Single(Diagnostics.Shared.Ticks());
         Assert.True(t.Finished);
-        Assert.Equal(3, t.Requests);
+        Assert.Equal(6, t.Requests);
         var requests = Diagnostics.Shared.Requests();
         Assert.All(requests, r => Assert.Equal(Diagnostics.OriginLiveTick, r.Origin));
         Assert.True(t.DurationMs >= requests.Sum(r => r.DurationMs) - 5);

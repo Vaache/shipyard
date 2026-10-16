@@ -19,11 +19,13 @@ public abstract class ListPane : Grid
     protected readonly ListView List;
     protected readonly ContentControl Overlay = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch, IsTabStop = false, IsHitTestVisible = true };
     protected readonly RefreshFooter Footer = new();
+    private readonly LiveRefresh live;
     private bool subscribed;
 
     protected ListPane(string title, string template)
     {
         TitleText = Ui.Text(title, 15, "text", FontWeights.SemiBold);
+        live = new LiveRefresh(this, OnLiveTick);
         List = ListSupport.Create(template);
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -70,14 +72,14 @@ public abstract class ListPane : Grid
             if (subscribed) return;
             subscribed = true;
             Model.RefreshRequested += OnManualRefresh;
-            Model.LiveTick += OnLiveTick;
+            Model.LiveTick += live.Tick;
             OnAttached();
         };
         Unloaded += (_, _) =>
         {
             subscribed = false;
             Model.RefreshRequested -= OnManualRefresh;
-            Model.LiveTick -= OnLiveTick;
+            Model.LiveTick -= live.Tick;
         };
     }
 

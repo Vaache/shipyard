@@ -76,6 +76,16 @@ public sealed class LiveTick
         }
     }
 
+    internal bool Hold()
+    {
+        lock (gate)
+        {
+            if (finished) return false;
+            pending++;
+            return true;
+        }
+    }
+
     internal void Leave()
     {
         int gen;
@@ -210,6 +220,8 @@ public sealed class Diagnostics
         Shared.Add(tick);
         return tick;
     }
+
+    internal static LiveTick? HoldTick() => enabled && currentTick.Value is { } tick && tick.Hold() ? tick : null;
 
     public static void EndLiveTick(LiveTick tick)
     {

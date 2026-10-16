@@ -1,5 +1,5 @@
 *{box-sizing:border-box}
-html,body{margin:0;background:transparent}
+html,body{margin:0;background:transparent;overflow-anchor:none}
 body{font:13.5px/1.55 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--fg);padding:16px 20px 24px}
 #list,#tail{max-width:920px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
 #tail{margin-top:14px}

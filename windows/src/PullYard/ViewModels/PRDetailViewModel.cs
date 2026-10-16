@@ -43,6 +43,8 @@ public sealed partial class PRDetailViewModel : ObservableObject
     private Task? activeLoad;
     private Task? queuedLoad;
     private bool reloadFiles;
+    private bool userLoad;
+    private bool reloadStack;
     private string? filesOid;
     private CancellationTokenSource? mergeRecheck;
     private int mergeRechecks;
@@ -99,9 +101,14 @@ public sealed partial class PRDetailViewModel : ObservableObject
 
     public List<string> ReviewersToReRequest => StaleReviews.Select(s => s.Login).ToList();
 
-    public Task Load(bool full = false)
+    public Task Load(bool full = false, bool live = false)
     {
-        if (full) reloadFiles = true;
+        if (full)
+        {
+            reloadFiles = true;
+            reloadStack = true;
+        }
+        if (!live) userLoad = true;
         if (queuedLoad is not null) return queuedLoad;
         if (activeLoad is not null)
         {
@@ -141,6 +148,8 @@ public sealed partial class PRDetailViewModel : ObservableObject
 
     private async Task Fetch()
     {
+        var live = !userLoad;
+        userLoad = false;
         Loading = true;
         try
         {
@@ -161,7 +170,9 @@ public sealed partial class PRDetailViewModel : ObservableObject
             RefreshError = null;
             LastUpdated = DateTimeOffset.Now;
             NotifyDerived();
-            LoadStack().Forget();
+            var forceStack = reloadStack;
+            reloadStack = false;
+            LoadStack(pr, live, forceStack).Forget();
             ScheduleMergeRecheck(pr);
             var filesStale = reloadFiles || (filesOid is not null && filesOid != pr.HeadRefOid);
             reloadFiles = false;
@@ -218,14 +229,14 @@ public sealed partial class PRDetailViewModel : ObservableObject
         {
             return;
         }
-        await Load();
+        await Load(live: true);
     }
 
-    public async Task LoadStack()
+    private async Task LoadStack(PullRequestDetail pr, bool live, bool force)
     {
         try
         {
-            var s = await Api.PullRequestStack(Ref);
+            var s = await Api.PullRequestStack(Ref, pr.HeadRefName, pr.BaseRefName, live, force);
             if (s.Select(x => x.Number).SequenceEqual(Stack.Select(x => x.Number)) && s.Select(x => x.State).SequenceEqual(Stack.Select(x => x.State))) return;
             Stack = s;
         }
@@ -313,7 +324,11 @@ public sealed partial class PRDetailViewModel : ObservableObject
         try
         {
             await op();
-            if (reload) await Load();
+            if (reload)
+            {
+                reloadStack = true;
+                await Load();
+            }
             return true;
         }
         catch (Exception e)

@@ -28,6 +28,7 @@ public sealed partial class AppViewModel : ObservableObject
     [ObservableProperty] private int unreadCount;
     [ObservableProperty] private DateTimeOffset? lastBadgeRefresh;
     [ObservableProperty] private Route? clipboardRoute;
+    [ObservableProperty] private DateTimeOffset? rateLimitedUntil;
 
     public ClaudeWorkspace Claude { get; private set; } = null!;
     public UpdaterViewModel Updater { get; } = new();
@@ -44,11 +45,17 @@ public sealed partial class AppViewModel : ObservableObject
     private readonly Dictionary<ItemRef, PRDetailViewModel> prModels = new();
     private readonly List<ItemRef> prOrder = new();
     private string? lastClipboard;
+    private bool viewsStale;
+    private SynchronizationContext? context;
+    private CancellationTokenSource? rateLimitCts;
+    private GitHubApi? loginAttempt;
     public bool IsActive { get; set; } = true;
+    public Func<bool> IsShown { get; set; } = () => true;
 
     public void Initialize()
     {
         Claude = new ClaudeWorkspace();
+        context = SynchronizationContext.Current;
         ClaudeAccountStore.Shared.Attach(SynchronizationContext.Current!);
         Restore().Forget();
     }
@@ -60,6 +67,55 @@ public sealed partial class AppViewModel : ObservableObject
     partial void OnUserChanged(RestUser? value) => OnPropertyChanged(nameof(UserDisplayName));
 
     partial void OnScopesChanged(List<string> value) => OnPropertyChanged(nameof(HasProjectScope));
+
+    partial void OnApiChanged(GitHubApi? oldValue, GitHubApi? newValue)
+    {
+        if (oldValue is not null) oldValue.RateLimit.Paused -= OnRateLimited;
+        if (newValue is not null) newValue.RateLimit.Paused += OnRateLimited;
+        rateLimitCts?.Cancel();
+        RateLimitedUntil = null;
+        if (newValue is null) return;
+        if (oldValue is not null && oldValue.Token == newValue.Token && oldValue.RateLimit.Until is { } carried) newValue.RateLimit.PauseUntil(carried);
+        if (newValue.RateLimit.Until is { } until && until > DateTimeOffset.Now) ApplyRateLimit(until);
+    }
+
+    private void OnRateLimited(DateTimeOffset until)
+    {
+        if (context is { } ctx) ctx.Post(_ => ApplyRateLimit(until), null);
+        else ApplyRateLimit(until);
+    }
+
+    private void ApplyRateLimit(DateTimeOffset until)
+    {
+        if (RateLimitedUntil is { } current && current >= until) return;
+        RateLimitedUntil = until;
+        rateLimitCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        rateLimitCts = cts;
+        ResumeAfterRateLimit(until, cts.Token).Forget();
+    }
+
+    private async Task ResumeAfterRateLimit(DateTimeOffset until, CancellationToken ct)
+    {
+        var wait = until - DateTimeOffset.Now + TimeSpan.FromSeconds(1);
+        try
+        {
+            await Task.Delay(wait > TimeSpan.Zero ? wait : TimeSpan.Zero, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        if (Api?.RateLimit.Until is { } next && next > until)
+        {
+            ApplyRateLimit(next);
+            return;
+        }
+        RateLimitedUntil = null;
+        if (Phase == Phase.LoggedIn) TickLive();
+    }
+
+    private bool LivePaused => Api?.RateLimit.IsPaused(DateTimeOffset.Now) ?? false;
 
     private async Task Restore()
     {
@@ -81,7 +137,7 @@ public sealed partial class AppViewModel : ObservableObject
         }
         catch
         {
-            Api = new GitHubApi(token);
+            Api = loginAttempt is { } attempt && attempt.Token == token ? attempt : new GitHubApi(token);
             Phase = Phase.LoggedIn;
             StartPolling();
         }
@@ -90,6 +146,7 @@ public sealed partial class AppViewModel : ObservableObject
     public async Task Login(string token, bool persist = true)
     {
         var api = new GitHubApi(token);
+        loginAttempt = api;
         var (user, scopes) = await api.CurrentUser();
         if (persist) CredentialStore.Save(token);
         Api = api;
@@ -263,7 +320,7 @@ public sealed partial class AppViewModel : ObservableObject
         var cts = new CancellationTokenSource();
         pollCts = cts;
         lastLiveRefresh = DateTimeOffset.Now;
-        RefreshBadges().Forget();
+        if (!LivePaused) RefreshBadges().Forget();
         Poll(cts.Token).Forget();
     }
 
@@ -288,18 +345,28 @@ public sealed partial class AppViewModel : ObservableObject
 
     public void DidBecomeActive()
     {
-        if (Phase != Phase.LoggedIn || DateTimeOffset.Now - lastLiveRefresh <= TimeSpan.FromSeconds(10)) return;
-        TickLive();
+        if (Phase != Phase.LoggedIn) return;
+        var due = DateTimeOffset.Now - lastLiveRefresh > TimeSpan.FromSeconds(10);
+        if (due || viewsStale) TickLive(badges: due);
     }
 
-    private void TickLive()
+    private void TickLive(bool badges = true)
     {
-        lastLiveRefresh = DateTimeOffset.Now;
+        if (LivePaused) return;
+        if (badges) lastLiveRefresh = DateTimeOffset.Now;
         var tick = Diagnostics.BeginLiveTick();
         try
         {
-            LiveTick?.Invoke();
-            RefreshBadges().Forget();
+            if (IsShown())
+            {
+                viewsStale = false;
+                LiveTick?.Invoke();
+            }
+            else
+            {
+                viewsStale = true;
+            }
+            if (badges) RefreshBadges(live: true).Forget();
         }
         finally
         {
@@ -307,7 +374,7 @@ public sealed partial class AppViewModel : ObservableObject
         }
     }
 
-    public async Task RefreshBadges()
+    public async Task RefreshBadges(bool live = false)
     {
         if (Api is not { } api) return;
         if (Demo.IsOn)
@@ -330,7 +397,7 @@ public sealed partial class AppViewModel : ObservableObject
         }
         try
         {
-            UnreadCount = await api.UnreadNotificationCount();
+            if (await api.UnreadNotificationCount(live) is { } unread) UnreadCount = unread;
         }
         catch
         {

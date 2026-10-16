@@ -24,11 +24,13 @@ public sealed class PRDetailView : Grid
     private PRDetailViewModel? model;
     private readonly ContentControl root = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch, IsTabStop = false };
     private PRContent? content;
+    private readonly LiveRefresh live;
     private bool subscribed;
 
     public PRDetailView(ItemRef r)
     {
         itemRef = r;
+        live = new LiveRefresh(this, OnLive);
         Children.Add(root);
         root.Content = Ui.Loading();
         Loaded += (_, _) =>
@@ -36,21 +38,21 @@ public sealed class PRDetailView : Grid
             if (subscribed) return;
             subscribed = true;
             app.RefreshRequested += OnRefresh;
-            app.LiveTick += OnLive;
+            app.LiveTick += live.Tick;
             Start();
         };
         Unloaded += (_, _) =>
         {
             subscribed = false;
             app.RefreshRequested -= OnRefresh;
-            app.LiveTick -= OnLive;
+            app.LiveTick -= live.Tick;
             if (model is not null) model.PropertyChanged -= OnModel;
         };
     }
 
     private void OnRefresh() => model?.Load(true).Forget();
 
-    private void OnLive() => model?.Load().Forget();
+    private void OnLive() => model?.Load(live: true).Forget();
 
     private void Start()
     {
