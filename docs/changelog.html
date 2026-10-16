@@ -138,11 +138,66 @@ footer a:hover{color:var(--text)}
 
 <main class="wrap">
 
+<article class="release" id="v2.8.0">
+  <div class="side">
+    <a class="ver" href="#v2.8.0">2.8.0 <span class="hash">#</span></a>
+    <time class="date" datetime="2026-10-16">October 16, 2026</time>
+    <span class="badge latest">Latest</span>
+    <div class="plats"><span class="plat">macOS</span><span class="plat">Windows</span><span class="plat">Linux</span></div>
+  </div>
+  <div class="body">
+    <h2>Lighter sync, instant lists and git blame</h2>
+    <p class="lede">PullYard now talks to GitHub far less: in a 20-minute session on macOS traffic dropped from 7.9 MB to 1.1 MB. Lists open instantly from a local cache, and you can see who wrote every line.</p>
+    <div class="group g-new">
+      <h3><i></i>New</h3>
+      <ul>
+        <li data-os="all"><b>Git blame</b> in the repository code browser: author, date and commit for every block of lines, with a heat stripe for recent changes. Click a block to open its commit. Turn it on with the <b>Blame</b> button, or <b>Blame</b> on a file in a pull request.</li>
+        <li data-os="mac"><span class="os">macOS</span>Toggle blame with <kbd>⌥⌘B</kbd>.</li>
+        <li data-os="windows linux">Toggle blame with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>B</kbd>.</li>
+        <li data-os="all"><b>Copy short link</b> copies <code>owner/repo#123</code> from the pull request or issue header and from the right-click menu on list rows and notifications.</li>
+        <li data-os="mac"><span class="os">macOS</span>Copy the short link of the open pull request or issue with <kbd>⇧⌘C</kbd>, or right-click a row in the menu bar inbox.</li>
+        <li data-os="windows linux">Copy the short link of the open pull request or issue with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>.</li>
+        <li data-os="all"><b>Diagnostics</b> in Settings: an optional panel with every request to GitHub, its time, size and rate limit, plus background refresh timings. Off by default; export to share with a bug report. Tokens and request bodies are never recorded.</li>
+        <li data-os="all">The website shows screenshots and the product tour of the platform you're on.</li>
+      </ul>
+    </div>
+    <div class="group g-improved">
+      <h3><i></i>Faster</h3>
+      <ul>
+        <li data-os="all">Background refresh updates only the screen you're looking at. Other sections catch up when you open them.</li>
+        <li data-os="all">Notifications are fetched only when they change, and the menu bar badges use a much smaller request.</li>
+        <li data-os="all">An open pull request is refreshed with a small check and fully reloaded only when something changed, or every five minutes.</li>
+        <li data-os="all">Files of a pull request load when you open the <b>Files</b> tab, not before.</li>
+        <li data-os="all">Lists open instantly from a cache on disk, kept per account and removed when you sign out, and they still show when you start offline.</li>
+        <li data-os="all">Stacked pull request lookups are cached instead of repeated on every refresh.</li>
+        <li data-os="linux"><span class="os">Linux</span>Quick open and <code>@</code> file completion search as you type without stalling, CI logs switch between all lines and errors instantly, and Claude replies stream without redrawing the whole chat.</li>
+        <li data-os="linux"><span class="os">Linux</span>Large diffs update in about 17 ms instead of up to 230 ms, the projects board no longer redraws while you drag, and label colors load in one pass.</li>
+        <li data-os="linux"><span class="os">Linux</span>The repository README loads only when you scroll to it, and the app is about 20% smaller.</li>
+      </ul>
+    </div>
+    <div class="group g-improved">
+      <h3><i></i>Reliability</h3>
+      <ul>
+        <li data-os="all">Reads that fail on a dropped connection or a 502–504 from GitHub are retried once. Changes such as merges and comments are never sent twice.</li>
+        <li data-os="all">When GitHub's rate limit is reached, background refresh pauses until it resets and tells you so.</li>
+        <li data-os="all">The Claude chat no longer jumps to the bottom while you're reading earlier messages.</li>
+      </ul>
+    </div>
+    <div class="group g-fixed">
+      <h3><i></i>Fixed</h3>
+      <ul>
+        <li data-os="windows"><span class="os">Windows</span>A crash in the code viewer.</li>
+        <li data-os="linux"><span class="os">Linux</span>The Claude workspace no longer shows "No Claude Code sessions yet" under an existing session, and the account avatar is round again.</li>
+      </ul>
+    </div>
+    <p class="empty">No changes for this platform in this release.</p>
+  </div>
+</article>
+
 <article class="release" id="v2.7.0">
   <div class="side">
     <a class="ver" href="#v2.7.0">2.7.0 <span class="hash">#</span></a>
     <time class="date" datetime="2026-10-15">October 15, 2026</time>
-    <span class="badge latest">Latest</span>
     <div class="plats"><span class="plat">macOS</span><span class="plat">Windows</span><span class="plat">Linux</span></div>
   </div>
   <div class="body">
