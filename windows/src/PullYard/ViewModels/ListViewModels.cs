@@ -66,7 +66,7 @@ public sealed partial class SearchListViewModel : ObservableObject
             var merged = r.Nodes.ToList();
             var nextCursor = r.PageInfo?.EndCursor;
             var more = r.PageInfo?.HasNextPage ?? false;
-            if (!switched && Items.Count > r.Nodes.Count)
+            if (!switched && fetched && Items.Count > r.Nodes.Count)
             {
                 var fresh = r.Nodes.Select(n => n.Id).ToHashSet();
                 merged.AddRange(Items.Skip(r.Nodes.Count).Where(i => !fresh.Contains(i.Id)));

@@ -52,6 +52,9 @@ public sealed partial class PRDetailViewModel : ObservableObject
     private bool filesOutdated;
     private string? signature;
     private bool pulseUnsupported;
+    private DateTimeOffset lastFullFetch;
+
+    public static readonly TimeSpan FullFetchInterval = TimeSpan.FromMinutes(5);
     private CancellationTokenSource? mergeRecheck;
     private int mergeRechecks;
     private Dictionary<string, List<ReviewThread>> threadIndex = new();
@@ -156,7 +159,8 @@ public sealed partial class PRDetailViewModel : ObservableObject
     {
         var live = !userLoad;
         userLoad = false;
-        if (live && !reloadFiles && !reloadStack && Pr is not null && signature is not null && !pulseUnsupported && await Unchanged())
+        var fullDue = DateTimeOffset.Now - lastFullFetch >= FullFetchInterval;
+        if (live && !fullDue && !reloadFiles && !reloadStack && Pr is not null && signature is not null && !pulseUnsupported && await Unchanged())
         {
             if (FilesVisible && (!FilesLoaded || filesOutdated || FilesError is not null)) LoadFiles().Forget();
             return;
@@ -176,6 +180,7 @@ public sealed partial class PRDetailViewModel : ObservableObject
             ViewedPaths = (pr.Files?.Items ?? new()).Where(f => f.ViewerViewedState == "VIEWED").Select(f => f.Path).ToHashSet();
             IndexThreads(pr.ReviewThreads.Items);
             signature = PullRequestSignature.Of(pr);
+            lastFullFetch = DateTimeOffset.Now;
             if (FilesLoaded) filesOid ??= pr.HeadRefOid;
             if (reloadFiles || (FilesLoaded && filesOid != pr.HeadRefOid)) filesOutdated = true;
             reloadFiles = false;
