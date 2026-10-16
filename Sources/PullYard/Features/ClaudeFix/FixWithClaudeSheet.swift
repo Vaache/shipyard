@@ -23,8 +23,13 @@ struct FixWithClaudeSheet: View {
     @State private var ciItems: [String: CIFailure] = [:]
     @State private var ciSelected: Set<String> = []
     @State private var ciLoading = false
+    @State private var ciGeneration = 0
+    @State private var ciHead: String?
+    @State private var ciNonce = CIFixPrompt.nonce()
 
-    private var failing: [CheckContext] { Array(CIFailureCollector.failing(pr.checks).prefix(CIFailureCollector.maxChecks)) }
+    private var allFailing: [CheckContext] { CIFailureCollector.failing(pr.checks) }
+    private var failing: [CheckContext] { CIFailureCollector.shown(allFailing, focus: ci?.focus) }
+    private var ciKey: String { source == .ci ? pr.headRefOid + "|" + failing.map(\.id).joined(separator: ",") : "" }
     private var threads: [ReviewThread] { pr.reviewThreads.nodes.filter { !$0.isResolved } }
     private var general: [GeneralFeedback] { FixPrompt.generalFeedback(pr) }
 
@@ -34,7 +39,7 @@ struct FixWithClaudeSheet: View {
         }
         if source == .ci {
             let chosen = failing.filter { ciSelected.contains($0.id) }
-            return CIFixPrompt.build(pr: pr, repo: model.ref.repo, failures: chosen.compactMap { ciItems[$0.id] }, pending: chosen.filter { ciItems[$0.id] == nil }.map { CIFailure(check: $0).name }, options: options)
+            return CIFixPrompt.build(pr: pr, repo: model.ref.repo, failures: chosen.compactMap { ciItems[$0.id] }, pending: chosen.filter { ciItems[$0.id] == nil }.map { CIFailure(check: $0).name }, options: options, nonce: ciNonce)
         }
         let chosen = threads.filter { selected.contains($0.id) }
         return FixPrompt.build(pr: pr, repo: model.ref.repo, threads: chosen, general: general, options: options)
@@ -83,8 +88,16 @@ struct FixWithClaudeSheet: View {
         .onChange(of: options.push) { custom = nil }
         .onChange(of: options.replyAndResolve) { custom = nil }
         .onChange(of: options.includeGeneral) { custom = nil }
-        .task(id: source == .ci) {
-            guard source == .ci, failing.contains(where: { ciItems[$0.id] == nil }) else { return }
+        .task(id: ciKey) {
+            guard source == .ci else { return }
+            if ciHead != pr.headRefOid {
+                ciHead = pr.headRefOid
+                ciItems = [:]
+            }
+            let ids = Set(failing.map(\.id))
+            ciSelected.formIntersection(ids)
+            if ciSelected.isEmpty { ciSelected = ids }
+            guard failing.contains(where: { ciItems[$0.id] == nil }) else { return }
             await gatherCI()
         }
         .task {
@@ -173,6 +186,9 @@ struct FixWithClaudeSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("Failing checks").font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
+                if allFailing.count > failing.count {
+                    Text("showing \(failing.count) of \(allFailing.count)").font(.caption).foregroundStyle(Color.syDim)
+                }
                 if ciLoading {
                     ProgressView().controlSize(.mini)
                     Text("Collecting logs…").font(.caption).foregroundStyle(Color.syDim)
@@ -230,15 +246,25 @@ struct FixWithClaudeSheet: View {
     }
 
     private func gatherCI() async {
+        ciGeneration += 1
+        let generation = ciGeneration
         ciLoading = true
-        defer { ciLoading = false }
+        defer { if ciGeneration == generation { ciLoading = false } }
         let api = model.api, repo = model.ref.repo
+        var queue = failing.filter { ciItems[$0.id] == nil }[...]
         await withTaskGroup(of: CIFailure.self) { group in
-            for c in failing where ciItems[c.id] == nil {
+            func next() {
+                guard let c = queue.popFirst() else { return }
                 group.addTask { await CIFailureCollector.collect(api: api, repo: repo, check: c) }
             }
-            for await item in group where !Task.isCancelled {
+            for _ in 0..<CIFailureCollector.concurrency { next() }
+            for await item in group {
+                guard !Task.isCancelled, ciGeneration == generation else {
+                    group.cancelAll()
+                    return
+                }
                 ciItems[item.id] = item
+                next()
             }
         }
     }
