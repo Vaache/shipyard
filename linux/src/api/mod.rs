@@ -12,6 +12,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::brand;
+use crate::diagnostics::{self, Probe};
 
 #[derive(Debug, Clone)]
 pub struct ApiError {
@@ -90,6 +91,18 @@ fn describe_graphql_error(e: &Value) -> String {
     }
 }
 
+fn net<T>(probe: &mut Probe, result: Result<T, reqwest::Error>) -> ApiResult<T> {
+    result.map_err(|mut e| {
+        if let Some(url) = e.url_mut() {
+            url.set_query(None);
+            url.set_fragment(None);
+        }
+        let err = ApiError::from(e);
+        probe.fail(&err);
+        err
+    })
+}
+
 fn strip_nulls(vars: Value) -> Value {
     match vars {
         Value::Object(map) => Value::Object(map.into_iter().filter(|(_, v)| !v.is_null()).collect()),
@@ -131,53 +144,66 @@ impl GitHubApi {
         }
     }
 
-    pub async fn graphql<T: DeserializeOwned>(&self, query: &str, variables: Value, strict: bool) -> ApiResult<T> {
+    pub async fn graphql<T: DeserializeOwned>(&self, name: &'static str, query: &str, variables: Value, strict: bool) -> ApiResult<T> {
+        self.graphql_probed(diagnostics::begin("graphql", || name.to_string()), query, variables, strict).await
+    }
+
+    async fn graphql_probed<T: DeserializeOwned>(&self, mut probe: Probe, query: &str, variables: Value, strict: bool) -> ApiResult<T> {
         let body = serde_json::json!({ "query": query, "variables": strip_nulls(variables) });
-        let resp = self
-            .inner
-            .client
-            .post("https://api.github.com/graphql")
-            .header(AUTHORIZATION, self.auth())
-            .header(ACCEPT, "application/vnd.github+json")
-            .header(CONTENT_TYPE, "application/json")
-            .json(&body)
-            .send()
-            .await?;
+        let resp = net(
+            &mut probe,
+            self.inner
+                .client
+                .post("https://api.github.com/graphql")
+                .header(AUTHORIZATION, self.auth())
+                .header(ACCEPT, "application/vnd.github+json")
+                .header(CONTENT_TYPE, "application/json")
+                .json(&body)
+                .send()
+                .await,
+        )?;
         let status = resp.status();
-        let bytes = resp.bytes().await?;
-        check_status(status, &bytes)?;
-        let value: Value = serde_json::from_slice(&bytes).map_err(|e| ApiError::new(format!("Failed to parse response: {e}")))?;
+        probe.response(status.as_u16(), resp.headers());
+        let bytes = net(&mut probe, resp.bytes().await)?;
+        probe.body(bytes.len());
+        probe.track(check_status(status, &bytes))?;
+        let value: Value = probe.track(serde_json::from_slice(&bytes).map_err(|e| ApiError::new(format!("Failed to parse response: {e}"))))?;
         let errors = value.get("errors").and_then(|e| e.as_array()).cloned().unwrap_or_default();
         let data = value.get("data").cloned().unwrap_or(Value::Null);
         if let Some(first) = errors.first() {
+            probe.fail(describe_graphql_error(first));
             if strict || data.is_null() {
                 return Err(ApiError::new(describe_graphql_error(first)));
             }
         }
         if data.is_null() {
-            return Err(ApiError::new("Empty response from GitHub"));
+            return probe.track(Err(ApiError::new("Empty response from GitHub")));
         }
-        serde_json::from_value::<T>(data).map_err(|e| match errors.first() {
+        probe.track(serde_json::from_value::<T>(data).map_err(|e| match errors.first() {
             Some(first) => ApiError::new(describe_graphql_error(first)),
             None => ApiError::new(format!("Failed to parse response: {e}")),
-        })
+        }))
     }
 
     pub async fn mutate(&self, query: &str, vars: Value) -> ApiResult<()> {
-        let _: Value = self.graphql(query, vars, true).await?;
+        let probe = diagnostics::begin("graphql", || diagnostics::graphql_name(query));
+        let _: Value = self.graphql_probed(probe, query, vars, true).await?;
         Ok(())
     }
 
     pub async fn rest_raw(&self, method: Method, path: &str, body: Option<Value>) -> ApiResult<(Vec<u8>, HeaderMap)> {
+        let mut probe = diagnostics::begin("rest", || diagnostics::rest_name(method.as_str(), path));
         let mut req = self.inner.client.request(method, Self::url(path)).header(AUTHORIZATION, self.auth()).header(ACCEPT, "application/vnd.github+json");
         if let Some(body) = body {
             req = req.json(&body);
         }
-        let resp = req.send().await?;
+        let resp = net(&mut probe, req.send().await)?;
         let status = resp.status();
         let headers = resp.headers().clone();
-        let bytes = resp.bytes().await?.to_vec();
-        check_status(status, &bytes)?;
+        probe.response(status.as_u16(), &headers);
+        let bytes = net(&mut probe, resp.bytes().await)?.to_vec();
+        probe.body(bytes.len());
+        probe.track(check_status(status, &bytes))?;
         Ok((bytes, headers))
     }
 
@@ -191,43 +217,55 @@ impl GitHubApi {
     }
 
     pub async fn redirect_target(&self, path: &str) -> ApiResult<String> {
-        let resp = self
-            .inner
-            .no_redirect
-            .get(Self::url(path))
-            .header(AUTHORIZATION, self.auth())
-            .header(ACCEPT, "application/vnd.github+json")
-            .send()
-            .await?;
+        let mut probe = diagnostics::begin("rest", || diagnostics::rest_name("GET", path));
+        let resp = net(
+            &mut probe,
+            self.inner
+                .no_redirect
+                .get(Self::url(path))
+                .header(AUTHORIZATION, self.auth())
+                .header(ACCEPT, "application/vnd.github+json")
+                .send()
+                .await,
+        )?;
         let status = resp.status();
+        probe.response(status.as_u16(), resp.headers());
         if status.is_redirection() {
             if let Some(loc) = resp.headers().get("location").and_then(|v| v.to_str().ok()) {
                 return Ok(loc.to_string());
             }
         }
-        let bytes = resp.bytes().await?;
-        check_status(status, &bytes)?;
-        Err(ApiError::new("Log unavailable"))
+        let bytes = net(&mut probe, resp.bytes().await)?;
+        probe.body(bytes.len());
+        probe.track(check_status(status, &bytes))?;
+        probe.track(Err(ApiError::new("Log unavailable")))
     }
 
     pub async fn plain(&self, url: &str) -> ApiResult<String> {
-        let resp = self.inner.plain.get(url).send().await?;
+        let mut probe = diagnostics::begin("rest", || diagnostics::rest_name("GET", url));
+        let resp = net(&mut probe, self.inner.plain.get(url).send().await)?;
         let status = resp.status();
-        let bytes = resp.bytes().await?;
-        check_status(status, &bytes)?;
+        probe.response(status.as_u16(), resp.headers());
+        let bytes = net(&mut probe, resp.bytes().await)?;
+        probe.body(bytes.len());
+        probe.track(check_status(status, &bytes))?;
         Ok(String::from_utf8_lossy(&bytes).to_string())
     }
 
     pub async fn fetch(&self, path: &str, accept: &str) -> ApiResult<Option<Vec<u8>>> {
-        let resp = self.inner.client.get(Self::url(path)).header(AUTHORIZATION, self.auth()).header(ACCEPT, accept).send().await?;
+        let mut probe = diagnostics::begin("rest", || diagnostics::rest_name("GET", path));
+        let resp = net(&mut probe, self.inner.client.get(Self::url(path)).header(AUTHORIZATION, self.auth()).header(ACCEPT, accept).send().await)?;
         let status = resp.status();
+        probe.response(status.as_u16(), resp.headers());
         if status == StatusCode::NOT_FOUND {
             return Ok(None);
         }
         if !status.is_success() {
-            return Err(ApiError::with_status(format!("GitHub {}", status.as_u16()), status.as_u16()));
+            return probe.track(Err(ApiError::with_status(format!("GitHub {}", status.as_u16()), status.as_u16())));
         }
-        Ok(Some(resp.bytes().await?.to_vec()))
+        let bytes = net(&mut probe, resp.bytes().await)?.to_vec();
+        probe.body(bytes.len());
+        Ok(Some(bytes))
     }
 }
 

@@ -438,6 +438,7 @@ impl SearchList {
     }
 
     fn render(&self) {
+        let _span = crate::diagnostics::ui_span("list.render");
         let m = &self.model;
         let total = m.total.get();
         self.title.set_subtitle(&if total > 0 { total.to_string() } else { String::new() });

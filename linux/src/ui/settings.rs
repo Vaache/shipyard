@@ -267,6 +267,29 @@ pub fn show() {
     oauth.add(&entry);
     page.add(&oauth);
 
+    let diag = group("Diagnostics", "sy-gauge-symbolic", "indigo");
+    diag.add(&switch(
+        "Diagnostics",
+        Some("Record network requests, live refresh timings and slow UI work in memory to measure performance. Nothing leaves this device unless you export it."),
+        settings::read(|s| s.diagnostics_enabled),
+        |v| {
+            settings::update(|s| s.diagnostics_enabled = v);
+            crate::diagnostics::set_enabled(v);
+        },
+    ));
+    let open_diag = adw::ActionRow::new();
+    open_diag.set_title("Open diagnostics");
+    open_diag.set_subtitle("Requests, sizes, durations, rate limits and live refresh timings");
+    open_diag.set_activatable(true);
+    open_diag.add_suffix(&icon("go-next-symbolic", 16));
+    let d = dialog.clone();
+    open_diag.connect_activated(move |_| {
+        d.close();
+        super::diagnostics::show();
+    });
+    diag.add(&open_diag);
+    page.add(&diag);
+
     let support = group(&format!("Support {}", crate::brand::APP_NAME), "sy-star-symbolic", "coral");
     let pizza = adw::ActionRow::new();
     pizza.set_title("Buy me a pizza 🍕");

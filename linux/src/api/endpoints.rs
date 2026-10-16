@@ -38,7 +38,7 @@ impl GitHubApi {
     }
 
     pub async fn search(&self, query: &str, after: Option<String>) -> ApiResult<SearchConnection> {
-        let r: SearchResponse = self.graphql(&q::search(), json!({ "q": query, "after": after }), false).await?;
+        let r: SearchResponse = self.graphql("search", &q::search(), json!({ "q": query, "after": after }), false).await?;
         Ok(r.search)
     }
 
@@ -53,7 +53,7 @@ impl GitHubApi {
             repository: Option<Repo>,
         }
         let r: R = self
-            .graphql(&q::repo_pull_requests(), json!({ "o": repo.owner, "n": repo.name, "b": head_ref_name, "states": states, "first": first }), false)
+            .graphql("repoPullRequests", &q::repo_pull_requests(), json!({ "o": repo.owner, "n": repo.name, "b": head_ref_name, "states": states, "first": first }), false)
             .await?;
         Ok(r.repository.map(|r| r.pull_requests.nodes).unwrap_or_default())
     }
@@ -68,7 +68,7 @@ impl GitHubApi {
         struct R {
             repository: Option<Repo>,
         }
-        let r: R = self.graphql(&q::pr_item(), json!({ "o": r.repo.owner, "n": r.repo.name, "num": r.number }), false).await?;
+        let r: R = self.graphql("pullRequestItem", &q::pr_item(), json!({ "o": r.repo.owner, "n": r.repo.name, "num": r.number }), false).await?;
         Ok(r.repository.and_then(|r| r.pull_request))
     }
 
@@ -108,9 +108,9 @@ impl GitHubApi {
             repository: Option<Repo>,
         }
         let vars = json!({ "o": r.repo.owner, "n": r.repo.name, "num": r.number });
-        let resp: R = match self.graphql(&q::pr_stack(), vars.clone(), false).await {
+        let resp: R = match self.graphql("pullRequestStack", &q::pr_stack(), vars.clone(), false).await {
             Ok(v) => v,
-            Err(_) => self.graphql(&q::pr_stack_fallback(), vars, false).await?,
+            Err(_) => self.graphql("pullRequestStackFallback", &q::pr_stack_fallback(), vars, false).await?,
         };
         let Some(repo) = resp.repository else { return Ok(vec![]) };
         let Some(pr) = repo.pull_request else { return Ok(vec![]) };
@@ -168,21 +168,21 @@ impl GitHubApi {
             repository: Option<Repo>,
         }
         let r: R = self
-            .graphql(&q::pr_stack_neighbors(), json!({ "o": repo.owner, "n": repo.name, "head": pr.head_ref_name, "base": pr.base_ref_name }), false)
+            .graphql("pullRequestStackNeighbors", &q::pr_stack_neighbors(), json!({ "o": repo.owner, "n": repo.name, "head": pr.head_ref_name, "base": pr.base_ref_name }), false)
             .await?;
         Ok(r.repository.map(|r| (r.parents.nodes, r.children.nodes)).unwrap_or_default())
     }
 
     pub async fn badges(&self) -> ApiResult<BadgeResponse> {
-        self.graphql(&q::badges(), json!({}), false).await
+        self.graphql("badges", &q::badges(), json!({}), false).await
     }
 
     pub async fn pull_request(&self, r: &ItemRef) -> ApiResult<PrDetailResponse> {
-        self.graphql(&q::pull_request(), json!({ "owner": r.repo.owner, "name": r.repo.name, "number": r.number }), false).await
+        self.graphql("pullRequest", &q::pull_request(), json!({ "owner": r.repo.owner, "name": r.repo.name, "number": r.number }), false).await
     }
 
     pub async fn issue(&self, r: &ItemRef) -> ApiResult<IssueDetailResponse> {
-        self.graphql(&q::issue(), json!({ "owner": r.repo.owner, "name": r.repo.name, "number": r.number }), false).await
+        self.graphql("issue", &q::issue(), json!({ "owner": r.repo.owner, "name": r.repo.name, "number": r.number }), false).await
     }
 
     pub async fn pull_request_files(&self, r: &ItemRef) -> ApiResult<Vec<PrFile>> {
@@ -203,17 +203,17 @@ impl GitHubApi {
     }
 
     pub async fn repos(&self, after: Option<String>) -> ApiResult<RepoConnection> {
-        let r: ReposResponse = self.graphql(q::REPOS, json!({ "after": after }), false).await?;
+        let r: ReposResponse = self.graphql("repos", q::REPOS, json!({ "after": after }), false).await?;
         Ok(r.viewer.repositories)
     }
 
     pub async fn repo_info(&self, repo: &RepoRef) -> ApiResult<Option<RepoInfo>> {
-        let r: RepoInfoResponse = self.graphql(q::REPO_INFO, json!({ "owner": repo.owner, "name": repo.name }), false).await?;
+        let r: RepoInfoResponse = self.graphql("repoInfo", q::REPO_INFO, json!({ "owner": repo.owner, "name": repo.name }), false).await?;
         Ok(r.repository)
     }
 
     pub async fn projects(&self) -> ApiResult<Vec<ProjectSummary>> {
-        let r: ProjectsResponse = self.graphql(&q::projects(), json!({}), false).await?;
+        let r: ProjectsResponse = self.graphql("projects", &q::projects(), json!({}), false).await?;
         let mut seen = HashSet::new();
         let mut all = r.viewer.projects_v2.nodes;
         for org in r.viewer.organizations.nodes {
@@ -227,7 +227,7 @@ impl GitHubApi {
         let mut items = vec![];
         let mut detail: Option<ProjectDetail> = None;
         for _ in 0..10 {
-            let r: ProjectDetailResponse = self.graphql(q::PROJECT, json!({ "id": id, "after": after }), false).await?;
+            let r: ProjectDetailResponse = self.graphql("project", q::PROJECT, json!({ "id": id, "after": after }), false).await?;
             let node = r.node.ok_or_else(|| ApiError::new("Project not found"))?;
             items.extend(node.items.nodes.clone());
             let more = node.items.page_info.has_next_page;
@@ -312,7 +312,7 @@ impl GitHubApi {
     }
 
     pub async fn git_object(&self, repo: &RepoRef, git_ref: &str, path: &str) -> ApiResult<Option<GitObject>> {
-        let r: GitObjectResponse = self.graphql(q::GIT_OBJECT, json!({ "owner": repo.owner, "name": repo.name, "expr": format!("{git_ref}:{path}") }), false).await?;
+        let r: GitObjectResponse = self.graphql("gitObject", q::GIT_OBJECT, json!({ "owner": repo.owner, "name": repo.name, "expr": format!("{git_ref}:{path}") }), false).await?;
         Ok(r.repository.and_then(|r| r.object))
     }
 

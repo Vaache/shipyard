@@ -5,6 +5,7 @@ mod brand;
 mod claude;
 mod conversation_html;
 mod demo;
+mod diagnostics;
 mod diff;
 mod fix_prompt;
 mod fixtures;

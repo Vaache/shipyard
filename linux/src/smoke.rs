@@ -110,6 +110,10 @@ pub fn run(_app: Rc<App>) {
     });
     step(next(300), "open link dialog", crate::ui::main_view::open_link_dialog);
     step(next(300), "preferences", crate::ui::settings::show);
+    step(next(300), "diagnostics", || {
+        crate::diagnostics::set_enabled(true);
+        crate::ui::diagnostics::show();
+    });
     step(next(300), "update dialog", || crate::ui::update::show(false));
     step(next(300), "about", crate::ui::main_view::about);
     step(next(300), "theme toggle", || {

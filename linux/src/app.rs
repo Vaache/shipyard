@@ -555,6 +555,7 @@ impl App {
     }
 
     fn tick_live(self: &Rc<Self>) {
+        crate::diagnostics::tick_begin();
         self.state.borrow_mut().last_live = Instant::now();
         self.live.emit(&());
         let me = self.clone();
@@ -867,6 +868,7 @@ pub fn run(smoke: bool) -> glib::ExitCode {
 
     let a = app.clone();
     gtk_app.connect_startup(move |_| {
+        crate::diagnostics::set_enabled(settings::read(|s| s.diagnostics_enabled));
         crate::icons::install();
         crate::theme::install();
         a.install_actions();

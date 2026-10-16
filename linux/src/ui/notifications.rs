@@ -101,6 +101,7 @@ fn row(n: &NotificationThread) -> gtk::Box {
 
 impl View {
     fn render(self: &Rc<Self>) {
+        let _span = crate::diagnostics::ui_span("notifications.render");
         let items = self.items.borrow().clone();
         self.status.update(self.updated.get(), self.loading.get(), if items.is_empty() { None } else { self.error.borrow().clone() });
         self.mark_all.set_sensitive(items.iter().any(|n| n.unread));
