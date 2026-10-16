@@ -99,7 +99,10 @@ final class AppModel {
     var myPRCount = 0
     var unreadCount = 0
     var lastBadgeRefresh: Date?
+    var rateLimitedUntil: Date?
     private var lastLiveRefresh = Date()
+    private var liveStale = false
+    private var resumeTask: Task<Void, Never>?
     let claude = ClaudeWorkspace()
 
     private var lastClipboard: String?
@@ -129,14 +132,14 @@ final class AppModel {
             Keychain.delete()
             phase = .loggedOut
         } catch {
-            api = GitHubAPI(token: token)
+            api = makeAPI(token)
             phase = .loggedIn
             startPolling()
         }
     }
 
     func login(token: String, persist: Bool = true) async throws {
-        let api = GitHubAPI(token: token)
+        let api = makeAPI(token)
         let (user, scopes) = try await api.currentUser()
         if persist { try Keychain.save(token) }
         self.api = api
@@ -148,8 +151,51 @@ final class AppModel {
         startPolling()
     }
 
+    private func makeAPI(_ token: String) -> GitHubAPI {
+        let api = GitHubAPI(token: token)
+        api.onRateLimit = { [weak self] until in
+            Task { @MainActor in self?.pauseLive(until: until) }
+        }
+        return api
+    }
+
+    var liveRefreshPaused: Bool {
+        rateLimitedUntil.map { $0 > Date() } ?? false
+    }
+
+    func pauseLive(until: Date) {
+        guard until > Date(), until > (rateLimitedUntil ?? .distantPast) else { return }
+        rateLimitedUntil = until
+        resumeTask?.cancel()
+        resumeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(until.timeIntervalSinceNow, 0) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.rateLimitedUntil = nil
+        }
+    }
+
+    var frontRoute: Route? {
+        section == .claude ? nil : (detailPath.last ?? detailRoot)
+    }
+
+    private var mainWindowVisible: Bool {
+        let windows = NSApp.windows.filter { $0.identifier?.rawValue.hasPrefix("main") == true }
+        guard !windows.isEmpty else { return true }
+        return windows.contains { $0.isVisible && $0.occlusionState.contains(.visible) }
+    }
+
+    func windowVisibilityChanged() {
+        guard phase == .loggedIn, liveStale, !liveRefreshPaused, mainWindowVisible else { return }
+        liveStale = false
+        lastLiveRefresh = Date()
+        Diagnostics.shared.beginTick()
+        liveTick += 1
+    }
+
     func logout() {
         pollTask?.cancel()
+        resumeTask?.cancel()
+        rateLimitedUntil = nil
         Keychain.delete()
         api = nil
         user = nil
@@ -292,24 +338,29 @@ final class AppModel {
                 guard !Task.isCancelled, let self else { return }
                 cycle += 1
                 let due = Date().timeIntervalSince(self.lastLiveRefresh) >= Self.refreshInterval * 0.8
-                if due, NSApp.isActive || cycle % 4 == 0 { self.tickLive() }
+                if due, !self.liveRefreshPaused, NSApp.isActive || cycle % 4 == 0 { self.tickLive() }
             }
         }
     }
 
     func didBecomeActive() {
-        guard phase == .loggedIn, Date().timeIntervalSince(lastLiveRefresh) > 10 else { return }
+        guard phase == .loggedIn, !liveRefreshPaused, Date().timeIntervalSince(lastLiveRefresh) > 10 else { return }
         tickLive()
     }
 
     private func tickLive() {
         Diagnostics.shared.beginTick()
         lastLiveRefresh = Date()
-        liveTick += 1
-        Diagnostics.liveTask { await self.refreshBadges() }
+        if mainWindowVisible {
+            liveStale = false
+            liveTick += 1
+        } else {
+            liveStale = true
+        }
+        Diagnostics.liveTask { await self.refreshBadges(live: true) }
     }
 
-    func refreshBadges() async {
+    func refreshBadges(live: Bool = false) async {
         guard let api else { return }
         if Demo.isOn {
             reviewRequestCount = 3
@@ -323,7 +374,7 @@ final class AppModel {
             myPRs = b.mine.nodes
             myPRCount = b.mine.issueCount
         }
-        if let n = try? await api.unreadNotificationCount() {
+        if let n = try? await api.unreadNotificationCount(live: live) {
             unreadCount = n
         }
         lastBadgeRefresh = Date()

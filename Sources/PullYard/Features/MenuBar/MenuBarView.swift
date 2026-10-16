@@ -36,6 +36,14 @@ struct MenuBarView: View {
             .padding(12)
             .background(Theme.isBrand ? Color.syBar : Color.clear)
             Rectangle().fill(Color.syLine).frame(height: 1)
+            if let until = app.rateLimitedUntil {
+                Label("GitHub rate limit — live updates paused until \(until.formatted(date: .omitted, time: .shortened))", systemImage: "hourglass")
+                    .font(.caption)
+                    .foregroundStyle(Color.syMuted)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                Rectangle().fill(Color.syLine).frame(height: 1)
+            }
             if let version = Updater.shared.availableVersion {
                 Button {
                     openWindow(id: "update")

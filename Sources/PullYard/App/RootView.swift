@@ -94,10 +94,18 @@ struct MainView: View {
         }
         .modifier(BrandToolbar())
         .sheet(isPresented: $app.showOpenLink) { OpenLinkSheet() }
-        .overlay(alignment: .bottom) { ClipboardBanner() }
+        .overlay(alignment: .bottom) {
+            VStack(spacing: 8) {
+                RateLimitBanner()
+                ClipboardBanner()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             app.checkClipboard()
             app.didBecomeActive()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)) { _ in
+            app.windowVisibilityChanged()
         }
         .onAppear { app.checkClipboard() }
     }
@@ -105,15 +113,19 @@ struct MainView: View {
 
 struct RouteView: View {
     let route: Route
+    @Environment(AppModel.self) private var app
 
     var body: some View {
-        switch route {
-        case .pr(let ref): PRDetailView(ref: ref)
-        case .issue(let ref): IssueDetailView(ref: ref)
-        case .repo(let repo): RepoDetailView(repo: repo)
-        case .project(let p): ProjectBoardView(project: p)
-        case .commit(let repo, let sha): CommitDetailView(repo: repo, sha: sha)
+        Group {
+            switch route {
+            case .pr(let ref): PRDetailView(ref: ref)
+            case .issue(let ref): IssueDetailView(ref: ref)
+            case .repo(let repo): RepoDetailView(repo: repo)
+            case .project(let p): ProjectBoardView(project: p)
+            case .commit(let repo, let sha): CommitDetailView(repo: repo, sha: sha)
+            }
         }
+        .environment(\.liveFront, app.frontRoute == route)
     }
 }
 
@@ -361,6 +373,29 @@ struct OpenLinkSheet: View {
         }
         app.open(r)
         dismiss()
+    }
+}
+
+struct RateLimitBanner: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        if let until = app.rateLimitedUntil {
+            HStack(spacing: 6) {
+                Image(systemName: "hourglass").foregroundStyle(Color.syAmber)
+                Text("GitHub rate limit — live updates paused until \(until.formatted(date: .omitted, time: .shortened))")
+                    .foregroundStyle(Color.syMuted)
+                    .lineLimit(1)
+            }
+            .font(.caption)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().stroke(Color(nsColor: .separatorColor)))
+            .padding(.bottom, app.clipboardRoute == nil ? 16 : 0)
+            .allowsHitTesting(false)
+            .transition(.opacity)
+        }
     }
 }
 

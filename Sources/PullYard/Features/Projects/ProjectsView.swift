@@ -55,7 +55,7 @@ struct ProjectsListView: View {
         }
         .task { await load(first: true) }
         .onChange(of: app.refreshTick) { Task { await load() } }
-        .onChange(of: app.liveTick) { Diagnostics.liveTask { await load() } }
+        .onLiveTick { await load() }
         .onChange(of: showClosed) { rows.ingest(projects.filter { showClosed || !$0.closed }.map(\.id), mode: .cascade) }
     }
 
@@ -229,7 +229,7 @@ struct ProjectBoardView: View {
             await m.load()
         }
         .onChange(of: app.refreshTick) { Task { await model?.load() } }
-        .onChange(of: app.liveTick) { Diagnostics.liveTask { await model?.load() } }
+        .onLiveTick { await model?.load() }
     }
 
     private func board(_ model: ProjectBoardModel) -> some View {

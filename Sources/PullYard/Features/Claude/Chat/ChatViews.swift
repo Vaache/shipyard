@@ -6,7 +6,7 @@ struct ChatView: View {
     @Environment(AppModel.self) private var app
     let tab: ClaudeTab
     let chat: ChatSession
-    @State private var stickToBottom = true
+    @State private var follow = ChatFollow()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -38,11 +38,28 @@ struct ChatView: View {
                     .animation(Motion.spring, value: chat.lastError)
                     .frame(maxWidth: 920)
                     .frame(maxWidth: .infinity)
+                    .background {
+                        GeometryReader { g in
+                            Color.clear.preference(key: ChatContentFrameKey.self, value: g.frame(in: .named(ChatContentFrameKey.space)))
+                        }
+                    }
                 }
-                .defaultScrollAnchor(.bottom)
-                .onChange(of: chat.items.count) { scrollDown(proxy) }
+                .coordinateSpace(name: ChatContentFrameKey.space)
+                .background {
+                    GeometryReader { g in
+                        Color.clear.preference(key: ChatViewportKey.self, value: g.size.height)
+                    }
+                }
+                .modifier(InitialBottomAnchor())
+                .onPreferenceChange(ChatViewportKey.self) { follow.viewportHeight = $0 }
+                .onPreferenceChange(ChatContentFrameKey.self) { if follow.track($0) { scrollDown(proxy) } }
+                .onChange(of: chat.items.count) {
+                    if case .user? = chat.items.last { follow.stick = true }
+                    scrollDown(proxy)
+                }
                 .onChange(of: lastTextLength) { scrollDown(proxy) }
                 .onChange(of: chat.busy) { scrollDown(proxy) }
+                .onChange(of: chat.lastError) { scrollDown(proxy) }
                 .onChange(of: chat.pendingCount) {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrollDown(proxy) }
                 }
@@ -74,6 +91,7 @@ struct ChatView: View {
     }
 
     private func jumpToBottom(_ proxy: ScrollViewProxy) {
+        follow.stick = true
         proxy.scrollTo("bottom", anchor: .bottom)
         for delay in [0.05, 0.2, 0.5, 1.0] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { proxy.scrollTo("bottom", anchor: .bottom) }
@@ -81,8 +99,50 @@ struct ChatView: View {
     }
 
     private func scrollDown(_ proxy: ScrollViewProxy) {
-        guard stickToBottom else { return }
+        guard follow.stick else { return }
         withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("bottom", anchor: .bottom) }
+    }
+}
+
+private final class ChatFollow {
+    var stick = true
+    var viewportHeight: CGFloat = 0
+    private var contentFrame: CGRect = .zero
+
+    func track(_ frame: CGRect) -> Bool {
+        let grew = frame.height > contentFrame.height + 1
+        if frame.maxY - viewportHeight <= 40 {
+            stick = true
+        } else if frame.minY > contentFrame.minY + 1 {
+            stick = false
+        }
+        contentFrame = frame
+        return grew && stick
+    }
+}
+
+private struct ChatContentFrameKey: PreferenceKey {
+    static let space = "chatScroll"
+    static let defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
+private struct ChatViewportKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct InitialBottomAnchor: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) {
+            content.defaultScrollAnchor(.bottom, for: .initialOffset)
+        } else {
+            content
+        }
     }
 }
 

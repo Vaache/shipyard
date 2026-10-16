@@ -194,8 +194,8 @@ struct RepoDetailView: View {
                 else if let code { await code.openDir(code.dir) }
             }
         }
-        .onChange(of: app.liveTick) {
-            if tab != .code { Diagnostics.liveTask { await model.load(api: app.api, query: query, silent: true) } }
+        .onLiveTick {
+            if tab != .code { await model.load(api: app.api, query: query, silent: true) }
         }
     }
 

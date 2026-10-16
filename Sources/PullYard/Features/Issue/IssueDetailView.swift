@@ -102,7 +102,7 @@ struct IssueDetailView: View {
             await m.load()
         }
         .onChange(of: app.refreshTick) { Task { await model?.load() } }
-        .onChange(of: app.liveTick) { Diagnostics.liveTask { await model?.load() } }
+        .onLiveTick { await model?.load() }
     }
 
     private func content(_ model: IssueDetailModel, _ issue: IssueDetail) -> some View {
