@@ -130,7 +130,7 @@ pub fn run() -> i32 {
         })
         .await;
         step(&mut failures, "notifications", async {
-            let n = api.notifications(false).await?;
+            let n = api.notifications(false, true).await?;
             Ok(format!("unread={}", n.len()))
         })
         .await;

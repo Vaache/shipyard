@@ -1,4 +1,7 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use reqwest::Method;
 use serde::Deserialize;
@@ -6,7 +9,28 @@ use serde_json::{json, Value};
 
 use super::models::*;
 use super::queries as q;
-use super::{ApiError, ApiResult, GitHubApi};
+use super::{ApiError, ApiResult, ErrorKind, GitHubApi};
+
+const STACK_TTL: Duration = Duration::from_secs(600);
+const STACK_CACHE_LIMIT: usize = 200;
+
+static STACK_CACHE: LazyLock<Mutex<HashMap<String, (Instant, Vec<StackPr>)>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+static STACK_FIELD_MISSING: AtomicBool = AtomicBool::new(false);
+
+pub struct StackRefs {
+    pub head_owner: String,
+    pub head: String,
+    pub base: String,
+}
+
+fn stack_key(r: &ItemRef, refs: &StackRefs) -> String {
+    format!("{}#{}|{}:{}|{}", r.repo.full(), r.number, refs.head_owner, refs.head, refs.base)
+}
+
+pub fn reset_caches() {
+    STACK_CACHE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    STACK_FIELD_MISSING.store(false, Ordering::Relaxed);
+}
 
 const PATH_SET: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC.remove(b'-').remove(b'_').remove(b'.').remove(b'~');
 
@@ -108,9 +132,17 @@ impl GitHubApi {
             repository: Option<Repo>,
         }
         let vars = json!({ "o": r.repo.owner, "n": r.repo.name, "num": r.number });
-        let resp: R = match self.graphql("pullRequestStack", &q::pr_stack(), vars.clone(), false).await {
-            Ok(v) => v,
-            Err(_) => self.graphql("pullRequestStackFallback", &q::pr_stack_fallback(), vars, false).await?,
+        let resp: R = if STACK_FIELD_MISSING.load(Ordering::Relaxed) {
+            self.graphql("pullRequestStackFallback", &q::pr_stack_fallback(), vars, false).await?
+        } else {
+            match self.graphql("pullRequestStack", &q::pr_stack(), vars.clone(), false).await {
+                Ok(v) => v,
+                Err(e) if e.kind == ErrorKind::Schema => {
+                    STACK_FIELD_MISSING.store(true, Ordering::Relaxed);
+                    self.graphql("pullRequestStackFallback", &q::pr_stack_fallback(), vars, false).await?
+                }
+                Err(e) => return Err(e),
+            }
         };
         let Some(repo) = resp.repository else { return Ok(vec![]) };
         let Some(pr) = repo.pull_request else { return Ok(vec![]) };
@@ -155,6 +187,30 @@ impl GitHubApi {
         chain.push(current);
         chain.extend(above);
         Ok(if chain.len() > 1 { chain } else { vec![] })
+    }
+
+    fn cached_stack(r: &ItemRef, refs: &StackRefs) -> Option<Vec<StackPr>> {
+        let cache = STACK_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        let (at, stack) = cache.get(&stack_key(r, refs))?;
+        if at.elapsed() >= STACK_TTL {
+            return None;
+        }
+        Some(stack.clone())
+    }
+
+    pub async fn pull_request_stack_cached(&self, r: &ItemRef, refs: &StackRefs, fresh: bool) -> ApiResult<Vec<StackPr>> {
+        if !fresh {
+            if let Some(stack) = Self::cached_stack(r, refs) {
+                return Ok(stack);
+            }
+        }
+        let stack = self.pull_request_stack(r).await?;
+        let mut cache = STACK_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if cache.len() >= STACK_CACHE_LIMIT {
+            cache.retain(|_, (at, _)| at.elapsed() < STACK_TTL);
+        }
+        cache.insert(stack_key(r, refs), (Instant::now(), stack.clone()));
+        Ok(stack)
     }
 
     async fn stack_neighbors(&self, repo: &RepoRef, pr: &StackPr) -> ApiResult<(Vec<StackPr>, Vec<StackPr>)> {
@@ -250,28 +306,36 @@ impl GitHubApi {
         }
     }
 
-    pub async fn notifications(&self, all: bool) -> ApiResult<Vec<NotificationThread>> {
+    pub async fn notifications(&self, all: bool, force: bool) -> ApiResult<Vec<NotificationThread>> {
         if crate::demo::is_on() {
             return Ok(vec![]);
         }
-        self.rest(Method::GET, &format!("/notifications?all={all}&per_page=50"), None).await
+        let bytes = self.rest_polled(&format!("/notifications?all={all}&per_page=50"), force).await?;
+        serde_json::from_slice(&bytes).map_err(|e| ApiError::new(format!("Failed to parse response: {e}")))
     }
 
-    pub async fn unread_notification_count(&self) -> ApiResult<usize> {
-        let list: Vec<Value> = self.rest(Method::GET, "/notifications?per_page=50", None).await?;
+    pub async fn unread_notification_count(&self, force: bool) -> ApiResult<usize> {
+        let bytes = self.rest_polled("/notifications?per_page=50", force).await?;
+        let list: Vec<Value> = serde_json::from_slice(&bytes).map_err(|e| ApiError::new(format!("Failed to parse response: {e}")))?;
         Ok(list.len())
     }
 
     pub async fn mark_notification_read(&self, id: &str) -> ApiResult<()> {
-        self.send(Method::PATCH, &format!("/notifications/threads/{id}"), None).await
+        let result = self.send(Method::PATCH, &format!("/notifications/threads/{id}"), None).await;
+        self.invalidate_polled();
+        result
     }
 
     pub async fn mark_notification_done(&self, id: &str) -> ApiResult<()> {
-        self.send(Method::DELETE, &format!("/notifications/threads/{id}"), None).await
+        let result = self.send(Method::DELETE, &format!("/notifications/threads/{id}"), None).await;
+        self.invalidate_polled();
+        result
     }
 
     pub async fn mark_all_notifications_read(&self) -> ApiResult<()> {
-        self.send(Method::PUT, "/notifications", Some(json!({ "read": true }))).await
+        let result = self.send(Method::PUT, "/notifications", Some(json!({ "read": true }))).await;
+        self.invalidate_polled();
+        result
     }
 
     pub async fn add_comment(&self, subject: &str, body: &str) -> ApiResult<()> {

@@ -8,6 +8,7 @@ use serde_json::json;
 
 use crate::api::models::*;
 use crate::api::queries as q;
+use crate::api::endpoints::StackRefs;
 use crate::api::{ApiError, GitHubApi};
 use crate::conversation_html::{self, Look};
 use crate::diff::{DiffAnchor, DiffFile};
@@ -99,6 +100,7 @@ pub struct PrModel {
     outdated_by_path: RefCell<HashMap<String, Vec<ReviewThread>>>,
     active: Cell<bool>,
     queued: Cell<bool>,
+    stack_fresh: Cell<bool>,
     reload_files: Cell<bool>,
     files_oid: RefCell<Option<String>>,
     merge_rechecks: Cell<u32>,
@@ -136,6 +138,7 @@ impl PrModel {
             outdated_by_path: RefCell::new(HashMap::new()),
             active: Cell::new(false),
             queued: Cell::new(false),
+            stack_fresh: Cell::new(false),
             reload_files: Cell::new(false),
             files_oid: RefCell::new(None),
             merge_rechecks: Cell::new(0),
@@ -233,6 +236,7 @@ impl PrModel {
 
     pub fn load(self: &Rc<Self>, full: bool) {
         if full {
+            self.stack_fresh.set(true);
             self.reload_files.set(true);
         }
         if self.active.get() {
@@ -278,6 +282,11 @@ impl PrModel {
                 *self.viewed.borrow_mut() = pr.files.as_ref().map(|f| f.nodes.iter().filter(|v| v.viewer_viewed_state == "VIEWED").map(|v| v.path.clone()).collect()).unwrap_or_default();
                 self.index_threads(&pr.review_threads.nodes);
                 let head = pr.head_ref_oid.clone();
+                let refs = StackRefs {
+                    head_owner: pr.head_repository.as_ref().and_then(|h| h.name_with_owner.split('/').next()).unwrap_or("").to_string(),
+                    head: pr.head_ref_name.clone(),
+                    base: pr.base_ref_name.clone(),
+                };
                 let recheck = pr.is_open() && (pr.merge_state_status.as_deref() == Some("UNKNOWN") || pr.mergeable == "UNKNOWN");
                 *self.repo.borrow_mut() = Some(repo);
                 *self.pr.borrow_mut() = Some(pr);
@@ -286,7 +295,7 @@ impl PrModel {
                 self.last_updated.set(Some(Utc::now()));
                 self.emit(Change::Pr);
                 let me = self.clone();
-                crate::rt::spawn_local(async move { me.load_stack().await });
+                crate::rt::spawn_local(async move { me.load_stack(refs).await });
                 self.schedule_merge_recheck(recheck);
                 let stale = self.reload_files.get() || self.files_oid.borrow().as_ref().map(|o| *o != head).unwrap_or(false);
                 self.reload_files.set(false);
@@ -336,10 +345,11 @@ impl PrModel {
         });
     }
 
-    async fn load_stack(self: Rc<Self>) {
+    async fn load_stack(self: Rc<Self>, refs: StackRefs) {
+        let fresh = self.stack_fresh.replace(false);
         let api = self.api.clone();
         let r = self.r.clone();
-        if let Ok(s) = crate::rt::run(async move { api.pull_request_stack(&r).await }).await {
+        if let Ok(s) = crate::rt::run(async move { api.pull_request_stack_cached(&r, &refs, fresh).await }).await {
             if *self.stack.borrow() != s {
                 *self.stack.borrow_mut() = s;
                 self.emit(Change::Stack);
@@ -474,6 +484,7 @@ impl PrModel {
         match res {
             Ok(()) => {
                 if reload {
+                    self.stack_fresh.set(true);
                     self.load(false);
                 }
                 true

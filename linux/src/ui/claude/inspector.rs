@@ -398,7 +398,7 @@ impl BranchPrs {
             if sig == 0 {
                 app::on_refresh(f);
             } else {
-                app::on_live(f);
+                app::on_live_visible(&page, f);
             }
         }
         if let Some(chat) = &me.tab.chat {
@@ -689,7 +689,7 @@ impl PrDetail {
             if sig == 0 {
                 app::on_refresh(f);
             } else {
-                app::on_live(f);
+                app::on_live_visible(&widget, f);
             }
         }
         me.render();

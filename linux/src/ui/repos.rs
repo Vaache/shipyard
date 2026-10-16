@@ -1397,7 +1397,7 @@ pub fn detail_page(repo: &RepoRef) -> adw::NavigationPage {
         None => false,
     });
     let weak = Rc::downgrade(&me);
-    app::on_live(move |_| match weak.upgrade() {
+    app::on_live_visible(&list_col, move |_| match weak.upgrade() {
         Some(me) => {
             me.reload_list(true);
             true

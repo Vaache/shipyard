@@ -349,6 +349,35 @@ pub fn on_live(f: impl Fn(&()) -> bool + 'static) {
     get().live.connect(f);
 }
 
+pub fn on_live_visible(widget: &impl IsA<gtk::Widget>, f: impl Fn(&()) -> bool + 'static) {
+    let f = Rc::new(f);
+    let stale = Rc::new(Cell::new(false));
+    let widget = widget.upcast_ref::<gtk::Widget>();
+    let weak = widget.downgrade();
+    let (live, pending) = (f.clone(), stale.clone());
+    on_live(move |_| {
+        let Some(w) = weak.upgrade() else { return false };
+        if w.is_mapped() {
+            pending.set(false);
+            live(&())
+        } else {
+            pending.set(true);
+            true
+        }
+    });
+    widget.connect_map(move |_| {
+        if stale.get() && crate::api::rate_limited_until().is_none() {
+            stale.set(false);
+            f(&());
+        }
+    });
+}
+
+fn reset_session_caches() {
+    crate::api::reset_rate_limit();
+    crate::api::endpoints::reset_caches();
+}
+
 pub fn on_badges(f: impl Fn(&()) -> bool + 'static) {
     get().badges.connect(f);
 }
@@ -460,6 +489,7 @@ impl App {
     }
 
     pub async fn login(self: Rc<Self>, token: String, persist: bool) -> Result<(), crate::api::ApiError> {
+        reset_session_caches();
         let api = GitHubApi::new(&token);
         let a2 = api.clone();
         let (user, scopes) = crate::rt::run(async move { a2.current_user().await }).await?;
@@ -496,6 +526,7 @@ impl App {
         if let Some(id) = self.poll.borrow_mut().take() {
             id.remove();
         }
+        reset_session_caches();
         {
             let mut s = self.state.borrow_mut();
             s.api = None;
@@ -519,7 +550,7 @@ impl App {
         self.state.borrow_mut().last_live = Instant::now();
         self.refresh.emit(&());
         let me = self.clone();
-        crate::rt::spawn_local(async move { me.refresh_badges().await });
+        crate::rt::spawn_local(async move { me.refresh_badges(true).await });
     }
 
     pub fn start_polling(self: &Rc<Self>) {
@@ -528,7 +559,7 @@ impl App {
         }
         self.state.borrow_mut().last_live = Instant::now();
         let me = self.clone();
-        crate::rt::spawn_local(async move { me.refresh_badges().await });
+        crate::rt::spawn_local(async move { me.refresh_badges(true).await });
         let interval = settings::refresh_interval();
         let weak = Rc::downgrade(self);
         let cycle = Cell::new(0u64);
@@ -555,15 +586,18 @@ impl App {
     }
 
     fn tick_live(self: &Rc<Self>) {
+        if crate::api::rate_limited_until().is_some() {
+            return;
+        }
         crate::diagnostics::live_tick(|| {
             self.state.borrow_mut().last_live = Instant::now();
             self.live.emit(&());
             let me = self.clone();
-            crate::rt::spawn_local(async move { me.refresh_badges().await });
+            crate::rt::spawn_local(async move { me.refresh_badges(false).await });
         });
     }
 
-    pub async fn refresh_badges(self: Rc<Self>) {
+    pub async fn refresh_badges(self: Rc<Self>, force: bool) {
         let Some(api) = self.state.borrow().api.clone() else { return };
         if demo::is_on() {
             {
@@ -601,7 +635,7 @@ impl App {
             }
         }
         let a2 = api.clone();
-        if let Ok(n) = crate::rt::run(async move { a2.unread_notification_count().await }).await {
+        if let Ok(n) = crate::rt::run(async move { a2.unread_notification_count(force).await }).await {
             self.state.borrow_mut().unread_count = n;
         }
         self.state.borrow_mut().last_badge_refresh = Some(chrono::Utc::now());

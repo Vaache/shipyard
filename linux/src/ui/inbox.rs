@@ -119,7 +119,7 @@ pub fn button() -> gtk::MenuButton {
     let refresh = icon_button("view-refresh-symbolic", "Refresh");
     refresh.connect_clicked(|_| {
         let a = app::get();
-        crate::rt::spawn_local(async move { a.refresh_badges().await });
+        crate::rt::spawn_local(async move { a.refresh_badges(true).await });
     });
     header.append(&refresh);
     col.append(&header);

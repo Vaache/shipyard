@@ -32,6 +32,8 @@ pub struct ChatView {
     permission_bar: gtk::Box,
     scroller: gtk::ScrolledWindow,
     stick: Cell<bool>,
+    scrolling: Cell<bool>,
+    last_value: Cell<f64>,
     dirty_texts: RefCell<Vec<String>>,
     flush_scheduled: Cell<bool>,
     open_tools: RefCell<std::collections::HashMap<String, bool>>,
@@ -321,6 +323,8 @@ impl ChatView {
             permission_bar,
             scroller,
             stick: Cell::new(true),
+            scrolling: Cell::new(false),
+            last_value: Cell::new(0.0),
             dirty_texts: RefCell::new(vec![]),
             flush_scheduled: Cell::new(false),
             open_tools: RefCell::new(std::collections::HashMap::new()),
@@ -329,7 +333,13 @@ impl ChatView {
         let w = Rc::downgrade(&me);
         me.scroller.vadjustment().connect_value_changed(move |adj| {
             if let Some(me) = w.upgrade() {
-                me.stick.set(adj.value() + adj.page_size() >= adj.upper() - 40.0);
+                me.on_scrolled(adj);
+            }
+        });
+        let w = Rc::downgrade(&me);
+        me.scroller.vadjustment().connect_changed(move |_| {
+            if let Some(me) = w.upgrade() {
+                me.scroll_down();
             }
         });
         let w = Rc::downgrade(&me);
@@ -396,16 +406,45 @@ impl ChatView {
         self.jump_to_bottom();
     }
 
+    fn on_scrolled(&self, adj: &gtk::Adjustment) {
+        let value = adj.value();
+        let previous = self.last_value.replace(value);
+        if self.scrolling.get() {
+            return;
+        }
+        let distance = adj.upper() - adj.page_size() - value;
+        if distance <= 1.0 {
+            self.stick.set(true);
+        } else if value < previous {
+            self.stick.set(false);
+        } else if distance <= 40.0 {
+            self.stick.set(true);
+        }
+    }
+
+    fn scroll_to_end(&self) {
+        let adj = self.scroller.vadjustment();
+        self.scrolling.set(true);
+        adj.set_value(adj.upper());
+        self.last_value.set(adj.value());
+        self.scrolling.set(false);
+    }
+
     fn append_new(self: &Rc<Self>) {
         let items: Vec<ChatItem> = self.chat.items.borrow().clone();
         let start = self.rendered.borrow().len();
+        let sent = items.iter().skip(start).any(|i| matches!(i, ChatItem::User { .. }));
         for item in items.iter().skip(start) {
             let w = self.item_widget(item);
             self.items_box.append(&w);
             self.rendered.borrow_mut().push((item.id(), w));
         }
         self.welcome.set_visible(items.is_empty());
-        self.scroll_down();
+        if sent {
+            self.jump_to_bottom();
+        } else {
+            self.scroll_down();
+        }
     }
 
     fn update_item(self: &Rc<Self>, key: &str) {
@@ -421,19 +460,27 @@ impl ChatView {
         self.rendered.borrow_mut()[pos].1 = new;
     }
 
-    fn scroll_down(&self) {
+    fn scroll_down(self: &Rc<Self>) {
         if !self.stick.get() {
             return;
         }
-        let adj = self.scroller.vadjustment();
-        glib::idle_add_local_once(move || adj.set_value(adj.upper()));
+        let w = Rc::downgrade(self);
+        glib::idle_add_local_once(move || {
+            if let Some(me) = w.upgrade().filter(|me| me.stick.get()) {
+                me.scroll_to_end();
+            }
+        });
     }
 
-    fn jump_to_bottom(&self) {
-        let adj = self.scroller.vadjustment();
+    fn jump_to_bottom(self: &Rc<Self>) {
+        self.stick.set(true);
         for delay in [50u64, 200, 500] {
-            let a = adj.clone();
-            glib::timeout_add_local_once(Duration::from_millis(delay), move || a.set_value(a.upper()));
+            let w = Rc::downgrade(self);
+            glib::timeout_add_local_once(Duration::from_millis(delay), move || {
+                if let Some(me) = w.upgrade().filter(|me| me.stick.get()) {
+                    me.scroll_to_end();
+                }
+            });
         }
     }
 

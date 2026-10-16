@@ -399,7 +399,7 @@ impl SearchList {
             None => false,
         });
         let weak = Rc::downgrade(&me);
-        app::on_live(move |_| match weak.upgrade() {
+        app::on_live_visible(&tv, move |_| match weak.upgrade() {
             Some(me) => {
                 me.reload(true);
                 true

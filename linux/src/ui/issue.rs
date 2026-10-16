@@ -297,7 +297,7 @@ pub fn page_child(r: &ItemRef) -> gtk::Widget {
         if sig == 0 {
             app::on_refresh(f);
         } else {
-            app::on_live(f);
+            app::on_live_visible(&tv, f);
         }
     }
     me.load();

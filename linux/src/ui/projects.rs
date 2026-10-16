@@ -227,7 +227,7 @@ pub fn list() -> gtk::Widget {
         if sig == 0 {
             app::on_refresh(f);
         } else {
-            app::on_live(f);
+            app::on_live_visible(&tv, f);
         }
     }
     me.load();
@@ -621,7 +621,7 @@ pub fn board_page(project: &ProjectRef) -> adw::NavigationPage {
         if sig == 0 {
             app::on_refresh(f);
         } else {
-            app::on_live(f);
+            app::on_live_visible(&tv, f);
         }
     }
     me.load();
