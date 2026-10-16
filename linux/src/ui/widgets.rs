@@ -447,7 +447,10 @@ impl RefreshStatus {
         self.icon.set_visible_child_name(if refreshing { "spin" } else if error.is_some() || paused.is_some() { "warn" } else { "idle" });
         let resume = paused.map(|t| t.with_timezone(&chrono::Local).format("%H:%M").to_string());
         let text = if refreshing {
-            "Updating…".to_string()
+            match updated.filter(|u| !self.compact && (chrono::Utc::now() - *u).num_seconds() >= 60) {
+                Some(u) => format!("Updated {} · updating…", util::refresh_ago(u)),
+                None => "Updating…".to_string(),
+            }
         } else if let Some(at) = &resume {
             if self.compact { "Paused".into() } else { format!("Paused until {at}") }
         } else if error.is_some() {

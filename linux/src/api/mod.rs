@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, ETAG, IF_MODIFIED_SINCE, IF_NONE_MATCH, LAST_MODIFIED};
 use reqwest::{Client, Method, StatusCode};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -99,8 +99,14 @@ impl From<reqwest::Error> for ApiError {
 
 pub type ApiResult<T> = Result<T, ApiError>;
 
-struct Polled {
+#[derive(Clone, Default)]
+struct Validators {
     last_modified: Option<String>,
+    etag: Option<String>,
+}
+
+struct Polled {
+    validators: Validators,
     body: Vec<u8>,
     checked: Instant,
     interval: Duration,
@@ -266,6 +272,10 @@ fn net<T>(probe: &mut Probe, result: Result<T, reqwest::Error>) -> ApiResult<T> 
     })
 }
 
+fn header_string(headers: &HeaderMap, name: HeaderName) -> Option<String> {
+    headers.get(name).and_then(|v| v.to_str().ok()).map(str::to_string)
+}
+
 fn strip_nulls(vars: Value) -> Value {
     match vars {
         Value::Object(map) => Value::Object(map.into_iter().filter(|(_, v)| !v.is_null()).collect()),
@@ -377,11 +387,14 @@ impl GitHubApi {
         Ok(())
     }
 
-    async fn attempt(&self, method: &Method, path: &str, body: Option<&Value>, since: Option<&str>, retry: bool) -> ApiResult<Exchange> {
+    async fn attempt(&self, method: &Method, path: &str, body: Option<&Value>, since: Option<&Validators>, retry: bool) -> ApiResult<Exchange> {
         let mut probe = retry_probe(diagnostics::begin_rest(method.as_str(), path), retry);
         let mut req = self.inner.client.request(method.clone(), Self::url(path)).header(AUTHORIZATION, self.auth()).header(ACCEPT, "application/vnd.github+json");
-        if let Some(since) = since {
-            req = req.header(IF_MODIFIED_SINCE, since);
+        if let Some(etag) = since.and_then(|v| v.etag.as_deref()) {
+            req = req.header(IF_NONE_MATCH, etag);
+        }
+        if let Some(modified) = since.and_then(|v| v.last_modified.as_deref()) {
+            req = req.header(IF_MODIFIED_SINCE, modified);
         }
         if let Some(body) = body {
             req = req.json(body);
@@ -398,12 +411,12 @@ impl GitHubApi {
         Ok(Exchange { status, bytes, headers, probe })
     }
 
-    async fn exchange(&self, method: Method, path: &str, body: Option<Value>, since: Option<String>) -> ApiResult<Exchange> {
+    async fn exchange(&self, method: Method, path: &str, body: Option<Value>, since: Option<Validators>) -> ApiResult<Exchange> {
         let read = method == Method::GET;
-        match self.attempt(&method, path, body.as_ref(), since.as_deref(), false).await {
+        match self.attempt(&method, path, body.as_ref(), since.as_ref(), false).await {
             Err(e) if read && e.is_transient() => {
                 tokio::time::sleep(RETRY_DELAY).await;
-                self.attempt(&method, path, body.as_ref(), since.as_deref(), true).await
+                self.attempt(&method, path, body.as_ref(), since.as_ref(), true).await
             }
             other => other,
         }
@@ -424,7 +437,7 @@ impl GitHubApi {
             let polled = self.polled();
             let entry = polled.entries.get(path).filter(|_| !force);
             let fresh = entry.filter(|p| p.checked.elapsed() < p.interval).map(|p| p.body.clone());
-            let since = entry.and_then(|p| p.last_modified.clone());
+            let since = entry.map(|p| p.validators.clone()).filter(|v| v.last_modified.is_some() || v.etag.is_some());
             (polled.generation, fresh, since)
         };
         if let Some(body) = fresh {
@@ -444,10 +457,10 @@ impl GitHubApi {
             drop(ex);
             ex = self.exchange(Method::GET, path, None, None).await?;
         }
-        let last_modified = ex.headers.get(LAST_MODIFIED).and_then(|v| v.to_str().ok()).map(str::to_string);
+        let validators = Validators { last_modified: header_string(&ex.headers, LAST_MODIFIED), etag: header_string(&ex.headers, ETAG) };
         let mut polled = self.polled();
         if polled.generation == generation {
-            polled.entries.insert(path.to_string(), Polled { last_modified, body: ex.bytes.clone(), checked: Instant::now(), interval });
+            polled.entries.insert(path.to_string(), Polled { validators, body: ex.bytes.clone(), checked: Instant::now(), interval });
         }
         drop(polled);
         Ok(ex.bytes)

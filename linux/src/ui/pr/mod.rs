@@ -162,7 +162,7 @@ impl PrPage {
         });
         me.show_tab();
         me.render();
-        model.load(false);
+        model.open();
         keep_alive(&toolbar, me);
         page
     }

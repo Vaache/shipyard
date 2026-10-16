@@ -28,6 +28,11 @@ static STORE: LazyLock<Mutex<Store>> = LazyLock::new(|| Mutex::new(Store::defaul
 
 tokio::task_local! {
     pub static TICK: u64;
+    static NOTE: String;
+}
+
+pub fn with_note<F: Future>(note: String, future: F) -> impl Future<Output = F::Output> {
+    NOTE.scope(note, future)
 }
 
 thread_local! {
@@ -342,7 +347,7 @@ fn start(kind: &'static str, name: String, path: Option<String>) -> Probe {
         status: None,
         bytes: 0,
         error: None,
-        note: None,
+        note: NOTE.try_with(String::clone).ok(),
         rate_limit_remaining: None,
         rate_limit_reset: None,
         rate_limit_resource: None,
@@ -410,7 +415,13 @@ impl Probe {
     }
 
     pub fn note_with(&mut self, note: impl FnOnce() -> String) {
-        self.with(|p| p.note = Some(note()));
+        self.with(|p| {
+            let note = note();
+            p.note = Some(match p.note.take() {
+                Some(prev) => format!("{prev}; {note}"),
+                None => note,
+            });
+        });
     }
 
     pub fn track<T, E: std::fmt::Display>(&mut self, result: Result<T, E>) -> Result<T, E> {
@@ -629,6 +640,15 @@ mod tests {
 
     fn open_tick(id: u64, started: Instant) -> OpenTick {
         OpenTick { id, ts: Utc::now(), started, in_flight: 0, tasks: 0, requests: 0, last_end: None, last_activity: started }
+    }
+
+    #[test]
+    fn notes_combine_scope_and_probe() {
+        let mut probe = crate::rt::block_on(with_note("full: first".into(), async { start("graphql", "pullRequest".into(), None) }));
+        probe.note_with(|| "retry".into());
+        assert_eq!(probe.0.take().expect("probe").note.as_deref(), Some("full: first; retry"));
+        let mut bare = start("graphql", "pullRequest".into(), None);
+        assert_eq!(bare.0.take().expect("probe").note, None);
     }
 
     #[test]
