@@ -555,6 +555,8 @@ impl CodeModel {
     pub async fn reveal(self: Rc<Self>, path: String) {
         let parent = util::parent_path(&path);
         if parent != *self.dir.borrow() {
+            *self.selected_file.borrow_mut() = Some(path.clone());
+            *self.file.borrow_mut() = None;
             self.clone().open_dir(parent).await;
         }
         self.open_file(path).await;
