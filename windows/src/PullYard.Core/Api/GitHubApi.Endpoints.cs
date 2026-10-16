@@ -185,6 +185,12 @@ public sealed partial class GitHubApi
     public Task<PRDetailResponse> PullRequest(ItemRef r, CancellationToken ct = default) =>
         GraphQL<PRDetailResponse>(Q.PullRequest, V(("owner", r.Repo.Owner), ("name", r.Repo.Name), ("number", r.Number)), ct: ct);
 
+    public async Task<PullRequestDetail?> PullRequestPulse(ItemRef r, CancellationToken ct = default)
+    {
+        var res = await GraphQL<PRDetailResponse>(Q.PullRequestPulse, V(("owner", r.Repo.Owner), ("name", r.Repo.Name), ("number", r.Number)), ct: ct).ConfigureAwait(false);
+        return res.Repository?.PullRequest;
+    }
+
     public Task<IssueDetailResponse> Issue(ItemRef r, CancellationToken ct = default) =>
         GraphQL<IssueDetailResponse>(Q.Issue, V(("owner", r.Repo.Owner), ("name", r.Repo.Name), ("number", r.Number)), ct: ct);
 

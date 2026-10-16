@@ -664,6 +664,7 @@ public sealed class InspectorPRDetail : Grid
             HorizontalContentAlignment = HorizontalAlignment.Stretch
         };
         var filesPanel = Ui.V(3);
+        if (showFiles) model.LoadFiles().Forget();
         if (model.FilesLoaded)
         {
             foreach (var f in model.Files)

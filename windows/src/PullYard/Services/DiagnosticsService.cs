@@ -12,6 +12,7 @@ public static class DiagnosticsService
     private static DispatcherQueueTimer? probe;
     private static long lastProbe;
     private static bool skipNext;
+    private static int modalDepth;
 
     public static event Action? Changed;
 
@@ -60,7 +61,7 @@ public static class DiagnosticsService
         var now = Stopwatch.GetTimestamp();
         var late = Stopwatch.GetElapsedTime(lastProbe, now).TotalMilliseconds - ProbeInterval.TotalMilliseconds;
         lastProbe = now;
-        if (!MainWindowShown())
+        if (modalDepth > 0 || !MainWindowShown())
         {
             skipNext = true;
             return;
@@ -71,6 +72,25 @@ public static class DiagnosticsService
             return;
         }
         if (late > SlowUiThresholdMs) Diagnostics.Shared.AddSlowUi(late);
+    }
+
+    public static IDisposable Modal()
+    {
+        modalDepth++;
+        return new ModalScope();
+    }
+
+    private sealed class ModalScope : IDisposable
+    {
+        private bool done;
+
+        public void Dispose()
+        {
+            if (done) return;
+            done = true;
+            modalDepth--;
+            skipNext = true;
+        }
     }
 
     private static void StopProbe()

@@ -18,6 +18,7 @@ public sealed partial class AppViewModel : ObservableObject
     [ObservableProperty] private Phase phase = Phase.Checking;
     [ObservableProperty] private GitHubApi? api;
     [ObservableProperty] private RestUser? user;
+    [ObservableProperty] private string? account;
     [ObservableProperty] private List<string> scopes = new();
     [ObservableProperty] private Section section = Section.Prs(PRFilter.ReviewRequested);
     [ObservableProperty] private Route? detailRoot;
@@ -57,6 +58,7 @@ public sealed partial class AppViewModel : ObservableObject
         Claude = new ClaudeWorkspace();
         context = SynchronizationContext.Current;
         ClaudeAccountStore.Shared.Attach(SynchronizationContext.Current!);
+        Task.Run(ListSnapshotStore.Shared.Prune).Forget();
         Restore().Forget();
     }
 
@@ -126,29 +128,59 @@ public sealed partial class AppViewModel : ObservableObject
             Phase = Phase.LoggedOut;
             return;
         }
+        GitHubApi? early = null;
+        if (!Demo.IsOn && ListSnapshotStore.Shared.RememberedAccount(token) is { } remembered)
+        {
+            early = new GitHubApi(token);
+            Account = remembered;
+            Api = early;
+            Phase = Phase.LoggedIn;
+            StartPolling();
+        }
         try
         {
-            await Login(token, persist: false);
+            await Login(token, persist: false, early);
         }
         catch (ApiException e) when (e.Status == 401)
         {
-            CredentialStore.Delete();
-            Phase = Phase.LoggedOut;
+            if (early is not null) Logout();
+            else
+            {
+                CredentialStore.Delete();
+                Phase = Phase.LoggedOut;
+            }
         }
         catch
         {
+            if (early is not null && ReferenceEquals(Api, early)) return;
             Api = loginAttempt is { } attempt && attempt.Token == token ? attempt : new GitHubApi(token);
             Phase = Phase.LoggedIn;
             StartPolling();
         }
     }
 
-    public async Task Login(string token, bool persist = true)
+    public async Task Login(string token, bool persist = true, GitHubApi? current = null)
     {
-        var api = new GitHubApi(token);
+        var api = current ?? new GitHubApi(token);
         loginAttempt = api;
         var (user, scopes) = await api.CurrentUser();
         if (persist) CredentialStore.Save(token);
+        if (current is not null && ReferenceEquals(Api, current))
+        {
+            User = Demo.IsOn ? Demo.User : user;
+            Scopes = scopes;
+            if (!string.Equals(Account, user.Login, StringComparison.OrdinalIgnoreCase))
+            {
+                var stale = Account;
+                Task.Run(() => ListSnapshotStore.Shared.Clear(stale)).Forget();
+                Account = user.Login;
+                Refresh();
+            }
+            Remember(token, user.Login);
+            return;
+        }
+        if (Account is { } previous && !string.Equals(previous, user.Login, StringComparison.OrdinalIgnoreCase)) SearchListViewModel.ClearCache();
+        Account = user.Login;
         Api = api;
         User = Demo.IsOn ? Demo.User : user;
         Scopes = scopes;
@@ -156,12 +188,26 @@ public sealed partial class AppViewModel : ObservableObject
         prOrder.Clear();
         Phase = Phase.LoggedIn;
         StartPolling();
+        Remember(token, user.Login);
+    }
+
+    private static void Remember(string token, string login)
+    {
+        if (!Demo.IsOn) Task.Run(() => ListSnapshotStore.Shared.RememberAccount(token, login)).Forget();
     }
 
     public void Logout()
     {
         pollCts?.Cancel();
         CredentialStore.Delete();
+        var account = Account;
+        Task.Run(() =>
+        {
+            ListSnapshotStore.Shared.ForgetAccount();
+            ListSnapshotStore.Shared.Clear(account);
+        }).Forget();
+        SearchListViewModel.ClearCache();
+        Account = null;
         Api = null;
         User = null;
         Scopes = new();

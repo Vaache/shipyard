@@ -394,6 +394,9 @@ public sealed class PullRequestDetail
     public string Body { get; set; } = "";
     public string BodyHTML { get; set; } = "";
     public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? UpdatedAt { get; set; }
+    public Count? Comments { get; set; }
+    public Count? Reviews { get; set; }
     public Actor? Author { get; set; }
     public string HeadRefName { get; set; } = "";
     public string BaseRefName { get; set; } = "";

@@ -47,12 +47,15 @@ fragment IssueItem on Issue { number title url issueState: state stateReason cre
 ... on ConvertToDraftEvent {{ actor {Actor} createdAt }}
 ... on ReviewRequestedEvent {{ actor {Actor} createdAt requestedReviewer {{ __typename ... on User {{ login avatarUrl }} ... on Team {{ name }} }} }}";
 
+    public const string PrTimelineTypes = "[ISSUE_COMMENT, PULL_REQUEST_REVIEW, PULL_REQUEST_COMMIT, MERGED_EVENT, CLOSED_EVENT, REOPENED_EVENT, HEAD_REF_FORCE_PUSHED_EVENT, HEAD_REF_DELETED_EVENT, READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, REVIEW_REQUESTED_EVENT, CROSS_REFERENCED_EVENT, LABELED_EVENT, RENAMED_TITLE_EVENT]";
+
     public static readonly string PullRequest = $@"query PullRequest($owner: String!, $name: String!, $number: Int!) {{
   viewer {{ login }}
   repository(owner: $owner, name: $name) {{
     viewerPermission mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed deleteBranchOnMerge autoMergeAllowed viewerDefaultMergeMethod
     pullRequest(number: $number) {{
-      id number title url state isDraft merged mergeable mergeStateStatus body bodyHTML createdAt
+      id number title url state isDraft merged mergeable mergeStateStatus body bodyHTML createdAt updatedAt
+      comments {{ totalCount }} reviews {{ totalCount }}
       author {Actor}
       headRefName baseRefName headRefOid
       headRepository {{ nameWithOwner }}
@@ -70,11 +73,27 @@ fragment IssueItem on Issue { number title url issueState: state stateReason cre
       }} }} }} }} }} }}
       allCommits: commits(first: 100) {{ totalCount nodes {{ commit {{ oid abbreviatedOid messageHeadline committedDate url author {{ name avatarUrl user {{ login }} }} statusCheckRollup {{ state }} }} }} }}
       files(first: 100) {{ nodes {{ path viewerViewedState }} }}
-      timelineItems(last: 100, itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW, PULL_REQUEST_COMMIT, MERGED_EVENT, CLOSED_EVENT, REOPENED_EVENT, HEAD_REF_FORCE_PUSHED_EVENT, HEAD_REF_DELETED_EVENT, READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, REVIEW_REQUESTED_EVENT, CROSS_REFERENCED_EVENT, LABELED_EVENT, RENAMED_TITLE_EVENT]) {{
+      timelineItems(last: 100, itemTypes: {PrTimelineTypes}) {{
         totalCount nodes {{ __typename {CommonTimeline} {PrTimeline} }}
       }}
       reviewThreads(first: 100) {{ nodes {{ id isResolved isOutdated path line originalLine diffSide viewerCanResolve viewerCanUnresolve viewerCanReply
         comments(first: 50) {{ nodes {{ id author {Actor} body bodyHTML createdAt diffHunk pullRequestReview {{ id }} }} }} }} }}
+    }}
+  }}
+}}";
+
+    public static readonly string PullRequestPulse = $@"query PullRequestPulse($owner: String!, $name: String!, $number: Int!) {{
+  repository(owner: $owner, name: $name) {{
+    pullRequest(number: $number) {{
+      updatedAt headRefOid state isDraft mergeable mergeStateStatus reviewDecision
+      comments {{ totalCount }} reviews {{ totalCount }}
+      timelineItems(itemTypes: {PrTimelineTypes}) {{ totalCount }}
+      reviewThreads(first: 100) {{ nodes {{ isResolved }} }}
+      allCommits: commits {{ totalCount }}
+      lastCommit: commits(last: 1) {{ nodes {{ commit {{ oid statusCheckRollup {{ state contexts(first: 100) {{ nodes {{ __typename
+        ... on CheckRun {{ status conclusion }}
+        ... on StatusContext {{ state }}
+      }} }} }} }} }} }}
     }}
   }}
 }}";

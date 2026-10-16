@@ -51,6 +51,7 @@ public static class WindowInterop
         var picker = new FolderPicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
         picker.FileTypeFilter.Add("*");
         WinRT.Interop.InitializeWithWindow.Initialize(picker, Handle(window));
+        using var modal = DiagnosticsService.Modal();
         var folder = await picker.PickSingleFolderAsync();
         return folder?.Path;
     }
@@ -60,6 +61,7 @@ public static class WindowInterop
         var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.PicturesLibrary };
         foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp" }) picker.FileTypeFilter.Add(ext);
         WinRT.Interop.InitializeWithWindow.Initialize(picker, Handle(window));
+        using var modal = DiagnosticsService.Modal();
         var files = await picker.PickMultipleFilesAsync();
         return files?.Select(f => f.Path).ToList() ?? new List<string>();
     }
@@ -69,6 +71,7 @@ public static class WindowInterop
         var picker = new FileSavePicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary, SuggestedFileName = suggestedName };
         picker.FileTypeChoices.Add(typeName, new List<string> { extension });
         WinRT.Interop.InitializeWithWindow.Initialize(picker, Handle(window));
+        using var modal = DiagnosticsService.Modal();
         var file = await picker.PickSaveFileAsync();
         return file?.Path;
     }
