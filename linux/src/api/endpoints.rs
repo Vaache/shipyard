@@ -392,6 +392,11 @@ impl GitHubApi {
         self.rest(Method::GET, &format!("/repos/{}/check-runs/{check_run_id}", repo.full()), None).await
     }
 
+    pub async fn job_log_tail(&self, repo: &RepoRef, job_id: i64, max_bytes: usize) -> ApiResult<(String, bool)> {
+        let target = self.redirect_target(&format!("/repos/{}/actions/jobs/{job_id}/logs", repo.full())).await?;
+        self.plain_tail(&target, max_bytes).await
+    }
+
     pub async fn job_log(&self, repo: &RepoRef, job_id: i64) -> ApiResult<String> {
         let target = self.redirect_target(&format!("/repos/{}/actions/jobs/{job_id}/logs", repo.full())).await?;
         self.plain(&target).await

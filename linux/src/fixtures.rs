@@ -131,3 +131,29 @@ pub const TOUR_FAILING_CHECKS: &str = r##"[
   { "__typename": "CheckRun", "databaseId": 51234567802, "name": "test (macos-14)", "status": "COMPLETED", "conclusion": "FAILURE", "detailsUrl": "https://github.com/migueldeicaza/SwiftTerm/actions/runs/18001/job/51234567802", "startedAt": "2026-10-16T09:58:00Z", "completedAt": "2026-10-16T10:01:12Z", "checkSuite": { "workflowRun": { "databaseId": 18001, "workflow": { "name": "CI" } } } },
   { "__typename": "CheckRun", "databaseId": 51234567803, "name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS", "detailsUrl": "https://github.com/migueldeicaza/SwiftTerm/actions/runs/18001/job/51234567803", "startedAt": "2026-10-16T09:58:00Z", "completedAt": "2026-10-16T09:58:41Z", "checkSuite": { "workflowRun": { "databaseId": 18001, "workflow": { "name": "CI" } } } }
 ]"##;
+
+pub const CI_LOG_GO: &str = "2026-10-16T08:00:01.0000000Z ##[group]Run actions/setup-go@v5
+2026-10-16T08:00:01.1000000Z with:
+2026-10-16T08:00:01.2000000Z   go-version: 1.23
+2026-10-16T08:00:03.0000000Z ##[endgroup]
+2026-10-16T08:00:04.0000000Z ##[group]Run pip install -r requirements.txt
+2026-10-16T08:00:04.1000000Z pip install -r requirements.txt
+2026-10-16T08:00:04.2000000Z ##[endgroup]
+2026-10-16T08:00:06.0000000Z Collecting requests==2.32.3
+2026-10-16T08:00:09.0000000Z ERROR: pip's dependency resolver does not currently take into account all the packages that are installed.
+2026-10-16T08:00:09.1000000Z Successfully installed requests-2.32.3
+##[group]Run go test ./...
+2026-10-16T08:00:10.1000000Z go test ./...
+2026-10-16T08:00:10.2000000Z ##[endgroup]
+2026-10-16T08:00:15.0000000Z === RUN   TestParse
+2026-10-16T08:00:15.0100000Z     parse_test.go:42: expected 2, got 1
+2026-10-16T08:00:15.0200000Z --- FAIL: TestParse (0.00s)
+2026-10-16T08:00:15.0300000Z === RUN   TestFormat
+2026-10-16T08:00:15.0400000Z --- PASS: TestFormat (0.00s)
+2026-10-16T08:00:15.0500000Z FAIL
+2026-10-16T08:00:15.0600000Z FAIL\texample.com/app/parse\t0.012s
+2026-10-16T08:00:15.0700000Z ok  \texample.com/app/util\t0.004s
+2026-10-16T08:00:15.0800000Z FAIL
+2026-10-16T08:00:15.1000000Z ##[error]Process completed with exit code 1.
+2026-10-16T08:00:16.0000000Z Post job cleanup.
+";

@@ -546,12 +546,15 @@ impl PrPage {
                 log.add_css_class("flat");
                 let m = self.model.clone();
                 let cc = c.clone();
-                let failed = c.outcome() == CheckOutcome::Failure;
+                let failed = crate::ci_fix::is_fixable(&c);
                 log.connect_clicked(move |_| {
-                    let fix: Option<Rc<dyn Fn()>> = if failed {
+                    let fix: Option<Rc<dyn Fn(Option<String>)>> = if failed {
                         let m = m.clone();
                         let id = cc.id();
-                        Some(Rc::new(move || fix_claude::show_ci(m.clone(), Some(id.clone()))))
+                        Some(Rc::new(move |text: Option<String>| match text {
+                            Some(t) => fix_claude::show_ci_with_log(m.clone(), id.clone(), t),
+                            None => fix_claude::show_ci(m.clone(), Some(id.clone())),
+                        }))
                     } else {
                         None
                     };
@@ -559,7 +562,7 @@ impl PrPage {
                 });
                 b.append(&log);
             }
-            if c.outcome() == CheckOutcome::Failure {
+            if crate::ci_fix::is_fixable(&c) {
                 let fix = icon_label_button("sy-sparkles-symbolic", "Fix with Claude Code");
                 fix.add_css_class("flat");
                 fix.set_tooltip_text(Some("Send this check's failure log to a new Claude Code session"));

@@ -154,7 +154,7 @@ pub fn run(_app: Rc<App>) {
         let m = pr();
         let c = m.pr.borrow().as_ref().map(|p| p.checks()[0].clone());
         if let Some(c) = c {
-            crate::ui::pr::sheets::job_log(m.api.clone(), m.r.repo.clone(), c, Some(std::rc::Rc::new(|| {})));
+            crate::ui::pr::sheets::job_log(m.api.clone(), m.r.repo.clone(), c, Some(std::rc::Rc::new(|_: Option<String>| {})));
         }
     });
     step(next(300), "fix ci sheet", move || crate::ui::fix_claude::show_ci(pr(), None));

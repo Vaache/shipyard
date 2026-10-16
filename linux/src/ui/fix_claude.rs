@@ -122,6 +122,11 @@ pub fn ci_banner(pr: &PullRequestDetail, r: &ItemRef, action: impl Fn() + 'stati
 struct CiFix {
     failures: RefCell<Vec<Failure>>,
     selected: RefCell<HashSet<String>>,
+    checks: HashMap<String, CheckContext>,
+    requested: RefCell<HashSet<String>>,
+    seed_log: RefCell<Option<(String, String)>>,
+    limit: Arc<tokio::sync::Semaphore>,
+    nonce: String,
     status: RefCell<HashMap<String, gtk::Box>>,
     tasks: RefCell<Vec<tokio::task::AbortHandle>>,
 }
@@ -135,6 +140,10 @@ impl CiFix {
     fn render_status(&self, f: &Failure) {
         let Some(b) = self.status.borrow().get(&f.id).cloned() else { return };
         clear(&b);
+        if f.is_pending() && !self.requested.borrow().contains(&f.id) {
+            b.append(&label_with("Select to fetch the log", &["sy-dim", "sy-small"]));
+            return;
+        }
         if f.is_pending() {
             b.append(&spinner(12));
         }
@@ -183,7 +192,7 @@ impl State {
             let failures = ci.failures.borrow();
             let selected = ci.selected.borrow();
             let chosen: Vec<&Failure> = failures.iter().filter(|f| selected.contains(&f.id)).collect();
-            return ci_fix::build(&PrInfo::new(&self.pr, &self.model.r.repo), &chosen, &options);
+            return ci_fix::build(&PrInfo::new(&self.pr, &self.model.r.repo), &chosen, &options, &ci.nonce);
         }
         if self.use_reviewer.get() {
             if let Some(f) = &self.found {
@@ -218,6 +227,35 @@ impl State {
         let empty = self.ci.as_ref().is_some_and(|c| c.selected.borrow().is_empty());
         self.launch.set_sensitive(!p.trim().is_empty() && !loading && !empty && (target == Target::Copy || self.folder.borrow().is_some()));
         self.launch.set_tooltip_text(if loading { Some("Collecting CI logs…") } else { None });
+        self.prompt_view.set_editable(!loading);
+    }
+
+    fn ci_fetch(self: &Rc<Self>, id: &str) {
+        let Some(ci) = &self.ci else { return };
+        let Some(check) = ci.checks.get(id).cloned() else { return };
+        if !ci.requested.borrow_mut().insert(id.to_string()) {
+            return;
+        }
+        let log = {
+            let mut seed = ci.seed_log.borrow_mut();
+            if seed.as_ref().is_some_and(|(s, _)| s == id) {
+                seed.take().map(|(_, l)| l)
+            } else {
+                None
+            }
+        };
+        if let Some(f) = ci.failures.borrow().iter().find(|f| f.id == id) {
+            ci.render_status(f);
+        }
+        let handle = crate::rt::spawn(ci_fix::collect(self.model.api.clone(), self.model.r.repo.clone(), check, ci.limit.clone(), log));
+        ci.tasks.borrow_mut().push(handle.abort_handle());
+        let w = Rc::downgrade(self);
+        crate::rt::spawn_local(async move {
+            let Ok(f) = handle.await else { return };
+            if let Some(st) = w.upgrade() {
+                st.ci_result(f);
+            }
+        });
     }
 
     fn ci_result(&self, f: Failure) {
@@ -281,14 +319,22 @@ pub fn show(model: Rc<PrModel>) {
 }
 
 pub fn show_ci(model: Rc<PrModel>, focus: Option<String>) {
-    show_ci_with(model, focus, None);
+    open_ci(model, focus, None, None);
 }
 
-pub fn show_ci_with(model: Rc<PrModel>, focus: Option<String>, prefetched: Option<Vec<Failure>>) {
+pub fn show_ci_with_log(model: Rc<PrModel>, id: String, log: String) {
+    open_ci(model, Some(id.clone()), Some((id, log)), None);
+}
+
+pub fn show_ci_prefetched(model: Rc<PrModel>, failures: Vec<Failure>) {
+    open_ci(model, None, None, Some(failures));
+}
+
+fn open_ci(model: Rc<PrModel>, focus: Option<String>, seed_log: Option<(String, String)>, prefetched: Option<Vec<Failure>>) {
     let Some(pr) = model.pr.borrow().clone() else { return };
-    let checks = ci_fix::failing(&pr);
     let fetch = prefetched.is_none();
-    let failures = prefetched.unwrap_or_else(|| checks.iter().map(Failure::from_check).collect());
+    let checks: HashMap<String, CheckContext> = if fetch { ci_fix::failing(&pr).into_iter().map(|c| (c.id(), c)).collect() } else { HashMap::new() };
+    let failures = prefetched.unwrap_or_else(|| ci_fix::failing(&pr).iter().map(Failure::from_check).collect());
     if failures.is_empty() {
         app::toast("No failing checks on the latest commit");
         return;
@@ -297,23 +343,23 @@ pub fn show_ci_with(model: Rc<PrModel>, focus: Option<String>, prefetched: Optio
         Some(id) => HashSet::from([id]),
         None => failures.iter().map(|f| f.id.clone()).collect(),
     };
-    let ci = Rc::new(CiFix { failures: RefCell::new(failures), selected: RefCell::new(selected), status: RefCell::new(HashMap::new()), tasks: RefCell::new(vec![]) });
-    let Some(state) = present(model, Some(ci.clone())) else { return };
-    if !fetch {
-        return;
+    let order: Vec<String> = failures.iter().map(|f| f.id.clone()).filter(|id| selected.contains(id)).collect();
+    let ci = Rc::new(CiFix {
+        failures: RefCell::new(failures),
+        selected: RefCell::new(selected),
+        checks,
+        requested: RefCell::new(HashSet::new()),
+        seed_log: RefCell::new(seed_log),
+        limit: Arc::new(tokio::sync::Semaphore::new(ci_fix::CONCURRENCY)),
+        nonce: ci_fix::nonce(),
+        status: RefCell::new(HashMap::new()),
+        tasks: RefCell::new(vec![]),
+    });
+    let Some(state) = present(model, Some(ci)) else { return };
+    for id in order {
+        state.ci_fetch(&id);
     }
-    let limit = Arc::new(tokio::sync::Semaphore::new(4));
-    for check in checks.into_iter().filter(|c| c.typename != "StatusContext") {
-        let handle = crate::rt::spawn(ci_fix::collect(state.model.api.clone(), state.model.r.repo.clone(), check, limit.clone()));
-        ci.tasks.borrow_mut().push(handle.abort_handle());
-        let w = Rc::downgrade(&state);
-        crate::rt::spawn_local(async move {
-            let Ok(f) = handle.await else { return };
-            if let Some(st) = w.upgrade() {
-                st.ci_result(f);
-            }
-        });
-    }
+    state.update();
 }
 
 fn ci_section(state: &Rc<State>, ci: &Rc<CiFix>, body: &gtk::Box) {
@@ -347,6 +393,7 @@ fn ci_section(state: &Rc<State>, ci: &Rc<CiFix>, body: &gtk::Box) {
         cbtn.connect_toggled(move |b| {
             if b.is_active() {
                 c.selected.borrow_mut().insert(id.clone());
+                st.ci_fetch(&id);
             } else {
                 c.selected.borrow_mut().remove(&id);
             }

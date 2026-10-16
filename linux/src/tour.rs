@@ -232,7 +232,7 @@ pub fn run(_app: Rc<App>) {
     p.act(move || {
         if let Some(m) = m() {
             let failures = tour_failures(&m);
-            crate::ui::fix_claude::show_ci_with(m, None, Some(failures));
+            crate::ui::fix_claude::show_ci_prefetched(m, failures);
         }
     })
     .wait(2500)
