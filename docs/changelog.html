@@ -138,11 +138,49 @@ footer a:hover{color:var(--text)}
 
 <main class="wrap">
 
+<article class="release" id="v2.9.0">
+  <div class="side">
+    <a class="ver" href="#v2.9.0">2.9.0 <span class="hash">#</span></a>
+    <time class="date" datetime="2026-10-16">October 16, 2026</time>
+    <span class="badge latest">Latest</span>
+    <div class="plats"><span class="plat">macOS</span><span class="plat">Windows</span><span class="plat">Linux</span></div>
+  </div>
+  <div class="body">
+    <h2>Fix failing CI with Claude Code</h2>
+    <p class="lede">When checks fail on a pull request, PullYard gathers the part of the log that matters and hands it to Claude Code, ready for you to review and launch. Windows also gets a brand theme that finally matches the rest of PullYard.</p>
+    <div class="group g-new">
+      <h3><i></i>New</h3>
+      <ul>
+        <li data-os="all">A <b>N checks failing · Fix with Claude Code</b> banner on pull requests with failing checks, plus <b>Fix with Claude Code</b> on every failing check and in the CI log view.</li>
+        <li data-os="all">PullYard finds the failing step in each GitHub Actions log, keeps the error and the lines leading up to it, adds the check's annotations, and opens the Fix sheet with a ready prompt. Nothing runs until you click <b>Launch</b>.</li>
+        <li data-os="all">Checks from other CI services contribute their title, summary and details link.</li>
+        <li data-os="all"><b>Re-run failed jobs</b> for GitHub Actions, after a confirmation.</li>
+        <li data-os="mac"><span class="os">macOS</span>Install with Homebrew: <code>brew install --cask pullyard/tap/pullyard</code>.</li>
+      </ul>
+    </div>
+    <div class="group g-security">
+      <h3><i></i>Safety</h3>
+      <ul>
+        <li data-os="all">Logs, check names and pull request titles go to the agent inside clearly marked blocks with a random marker, labelled as data rather than instructions, so a pull request can't smuggle commands into the prompt.</li>
+        <li data-os="all">Logs are streamed and trimmed to the failure, so a huge log doesn't fill memory, and your GitHub token is never sent to the log storage host.</li>
+      </ul>
+    </div>
+    <div class="group g-improved">
+      <h3><i></i>Improved</h3>
+      <ul>
+        <li data-os="windows"><span class="os">Windows</span>The PullYard theme no longer shows Windows' default gray: the list, filter box, comment box, buttons, menus and dialogs use PullYard's colors in dark and light.</li>
+        <li data-os="windows"><span class="os">Windows</span>Windows contrast themes keep their system colors, and badges and buttons stay readable in them.</li>
+        <li data-os="windows"><span class="os">Windows</span>The selected sidebar item is easier to tell apart from the one under the pointer, and Settings and Diagnostics update right away when you switch themes, keeping keyboard focus.</li>
+      </ul>
+    </div>
+    <p class="empty">No changes for this platform in this release.</p>
+  </div>
+</article>
+
 <article class="release" id="v2.8.0">
   <div class="side">
     <a class="ver" href="#v2.8.0">2.8.0 <span class="hash">#</span></a>
     <time class="date" datetime="2026-10-16">October 16, 2026</time>
-    <span class="badge latest">Latest</span>
     <div class="plats"><span class="plat">macOS</span><span class="plat">Windows</span><span class="plat">Linux</span></div>
   </div>
   <div class="body">
