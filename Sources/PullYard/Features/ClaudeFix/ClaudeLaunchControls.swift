@@ -2,13 +2,15 @@ import SwiftUI
 
 extension ClaudeLauncher {
     @MainActor
-    static func start(app: AppModel, prompt: String, folder: String?, target: ClaudeTarget, mode: ClaudePermissionMode, name: String) throws {
+    @discardableResult
+    static func start(app: AppModel, prompt: String, folder: String?, target: ClaudeTarget, mode: ClaudePermissionMode, name: String) throws -> ClaudeTab? {
         if target == .app, let folder {
-            app.claude.newSession(folder: folder, prompt: prompt, name: name)
+            let tab = app.claude.newSession(folder: folder, prompt: prompt, name: name)
             app.section = .claude
-            return
+            return tab
         }
         try launch(prompt: prompt, folder: folder ?? "", target: target, mode: mode, sessionName: name, configDir: ClaudeProfiles.shared.activeOverride)
+        return nil
     }
 }
 

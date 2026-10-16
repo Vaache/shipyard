@@ -278,6 +278,7 @@ struct JobLogSheet: View {
     let api: GitHubAPI
     let repo: RepoRef
     let check: CheckContext
+    var onFix: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var log: String?
     @State private var error: String?
@@ -292,6 +293,11 @@ struct JobLogSheet: View {
                 Toggle("Errors only", isOn: $errorsOnly).toggleStyle(.checkbox)
                 if let log { Button("Copy") { copyToPasteboard(log) } }
                 if let link = check.link { Button("Open in browser") { openInBrowser(link) } }
+                if let onFix {
+                    Button("Fix with Claude Code", action: onFix)
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.syCoral)
+                }
                 Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
             }
             .padding(12)
@@ -329,14 +335,7 @@ struct JobLogSheet: View {
     }
 
     nonisolated static func clean(_ raw: String) -> String {
-        raw.components(separatedBy: "\n").map { line -> String in
-            var l = Substring(line)
-            if l.first == "\u{FEFF}" { l = l.dropFirst() }
-            if l.count > 29, l.dropFirst(4).first == "-", let space = l.firstIndex(of: " "), l.distance(from: l.startIndex, to: space) >= 20, l.distance(from: l.startIndex, to: space) <= 34 {
-                l = l[l.index(after: space)...]
-            }
-            return String(l)
-        }.joined(separator: "\n")
+        CILogExcerpt.clean(raw)
     }
 }
 

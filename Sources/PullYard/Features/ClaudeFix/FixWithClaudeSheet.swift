@@ -1,12 +1,13 @@
 import SwiftUI
 
 enum FixSource: Hashable {
-    case reviewer, composed
+    case reviewer, composed, ci
 }
 
 struct FixWithClaudeSheet: View {
     let model: PRDetailModel
     let pr: PullRequestDetail
+    var ci: CIFixRequest?
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var app
     @AppStorage("claudeTarget.v2") private var target: ClaudeTarget = .app
@@ -19,13 +20,21 @@ struct FixWithClaudeSheet: View {
     @State private var folder: String?
     @State private var detecting = true
     @State private var error: String?
+    @State private var ciItems: [String: CIFailure] = [:]
+    @State private var ciSelected: Set<String> = []
+    @State private var ciLoading = false
 
+    private var failing: [CheckContext] { Array(CIFailureCollector.failing(pr.checks).prefix(CIFailureCollector.maxChecks)) }
     private var threads: [ReviewThread] { pr.reviewThreads.nodes.filter { !$0.isResolved } }
     private var general: [GeneralFeedback] { FixPrompt.generalFeedback(pr) }
 
     private var generated: String {
         if source == .reviewer, let found {
             return FixPromptExtractor.wrap(found, pr: pr, options: options)
+        }
+        if source == .ci {
+            let chosen = failing.filter { ciSelected.contains($0.id) }
+            return CIFixPrompt.build(pr: pr, repo: model.ref.repo, failures: chosen.compactMap { ciItems[$0.id] }, pending: chosen.filter { ciItems[$0.id] == nil }.map { CIFailure(check: $0).name }, options: options)
         }
         let chosen = threads.filter { selected.contains($0.id) }
         return FixPrompt.build(pr: pr, repo: model.ref.repo, threads: chosen, general: general, options: options)
@@ -48,31 +57,46 @@ struct FixWithClaudeSheet: View {
             }
             sourcePicker
             if source == .composed { composedOptions }
+            if source == .ci { ciOptions }
             HStack(spacing: 16) {
                 Toggle("Commit", isOn: $options.commit)
                 Toggle("Push", isOn: $options.push)
-                Toggle("Reply & resolve threads", isOn: $options.replyAndResolve)
-                    .disabled(!options.push)
+                if source != .ci {
+                    Toggle("Reply & resolve threads", isOn: $options.replyAndResolve)
+                        .disabled(!options.push)
+                }
             }
             .toggleStyle(.checkbox)
             .onChange(of: options.push) { _, push in if !push { options.replyAndResolve = false } }
             promptEditor
             ClaudeFolderRow(repo: model.ref.repo, folder: $folder, detecting: detecting)
             if let error { Text(error).font(.caption).foregroundStyle(Color.syRed) }
-            ClaudeLaunchRow(target: $target, mode: $mode, canLaunch: !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (target == .copy || folder != nil), onLaunch: launch)
+            ClaudeLaunchRow(target: $target, mode: $mode, canLaunch: !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (target == .copy || folder != nil) && !(source == .ci && (ciLoading || ciSelected.isEmpty)), onLaunch: launch)
         }
         .padding(20)
         .frame(width: 780, height: 680)
         .surface(.panel)
         .onChange(of: source) { custom = nil }
         .onChange(of: selected) { custom = nil }
+        .onChange(of: ciSelected) { custom = nil }
         .onChange(of: options.commit) { custom = nil }
         .onChange(of: options.push) { custom = nil }
         .onChange(of: options.replyAndResolve) { custom = nil }
         .onChange(of: options.includeGeneral) { custom = nil }
+        .task(id: source == .ci) {
+            guard source == .ci, failing.contains(where: { ciItems[$0.id] == nil }) else { return }
+            await gatherCI()
+        }
         .task {
             found = FixPromptExtractor.latest(in: pr)
-            source = found != nil ? .reviewer : .composed
+            if let ci, !failing.isEmpty {
+                source = .ci
+                let focus = failing.filter { $0.id == ci.focus }.map(\.id)
+                ciSelected = Set(focus.isEmpty ? failing.map(\.id) : focus)
+            } else {
+                source = found != nil ? .reviewer : .composed
+                ciSelected = Set(failing.map(\.id))
+            }
             selected = Set(threads.filter { !$0.isOutdated }.map(\.id))
             if selected.isEmpty { selected = Set(threads.map(\.id)) }
             folder = await LocalRepoStore.detect(model.ref.repo)
@@ -82,10 +106,15 @@ struct FixWithClaudeSheet: View {
 
     @ViewBuilder
     private var sourcePicker: some View {
-        if let found {
+        if found != nil || !failing.isEmpty {
             Picker("", selection: $source) {
-                Text("Fix prompt by @\(found.author)" + (found.date.map { " · \(Fmt.rel($0))" } ?? "")).tag(FixSource.reviewer)
+                if let found {
+                    Text("Fix prompt by @\(found.author)" + (found.date.map { " · \(Fmt.rel($0))" } ?? "")).tag(FixSource.reviewer)
+                }
                 Text("Build from comments" + " (\(threads.count))").tag(FixSource.composed)
+                if !failing.isEmpty {
+                    Text("Failing checks (\(failing.count))").tag(FixSource.ci)
+                }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -140,6 +169,80 @@ struct FixWithClaudeSheet: View {
         }
     }
 
+    private var ciOptions: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Failing checks").font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
+                if ciLoading {
+                    ProgressView().controlSize(.mini)
+                    Text("Collecting logs…").font(.caption).foregroundStyle(Color.syDim)
+                }
+                Spacer()
+                Button("All") { ciSelected = Set(failing.map(\.id)) }.buttonStyle(.link).font(.caption)
+                Button("None") { ciSelected = [] }.buttonStyle(.link).font(.caption)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(failing) { c in
+                        Toggle(isOn: Binding(get: { ciSelected.contains(c.id) }, set: { on in if on { ciSelected.insert(c.id) } else { ciSelected.remove(c.id) } })) {
+                            HStack(spacing: 6) {
+                                OutcomeIcon(outcome: c.outcome)
+                                Text(c.workflowName.map { "\($0) / \(c.title)" } ?? c.title)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.syText)
+                                    .lineLimit(1)
+                                ciStatus(c)
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+            }
+            .frame(maxHeight: 130)
+            .card(radius: 8)
+        }
+    }
+
+    @ViewBuilder
+    private func ciStatus(_ c: CheckContext) -> some View {
+        if let item = ciItems[c.id] {
+            if let note = item.note {
+                Label("partial", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.syAmber)
+                    .help(note)
+            } else {
+                Text(ciDetail(item)).font(.caption).foregroundStyle(Color.syDim).lineLimit(1)
+            }
+        } else if ciLoading {
+            ProgressView().controlSize(.mini)
+        }
+    }
+
+    private func ciDetail(_ item: CIFailure) -> String {
+        var parts: [String] = []
+        if let e = item.excerpt, !e.isEmpty { parts.append("log \(ByteCountFormatter.string(fromByteCount: Int64(e.utf8.count), countStyle: .file))") }
+        if !item.annotations.isEmpty { parts.append(plural(item.annotations.count, "annotation", "annotations")) }
+        if item.summary != nil, item.kind != .actions { parts.append("summary") }
+        return parts.isEmpty ? "no details" : parts.joined(separator: " · ")
+    }
+
+    private func gatherCI() async {
+        ciLoading = true
+        defer { ciLoading = false }
+        let api = model.api, repo = model.ref.repo
+        await withTaskGroup(of: CIFailure.self) { group in
+            for c in failing where ciItems[c.id] == nil {
+                group.addTask { await CIFailureCollector.collect(api: api, repo: repo, check: c) }
+            }
+            for await item in group where !Task.isCancelled {
+                ciItems[item.id] = item
+            }
+        }
+    }
+
     private var promptEditor: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -162,7 +265,11 @@ struct FixWithClaudeSheet: View {
 
     private func launch() {
         do {
-            try ClaudeLauncher.start(app: app, prompt: prompt, folder: folder, target: target, mode: mode, name: "Fix PR #\(pr.number): \(pr.title)")
+            let name = source == .ci ? "Fix CI PR #\(pr.number): \(pr.title)" : "Fix PR #\(pr.number): \(pr.title)"
+            let tab = try ClaudeLauncher.start(app: app, prompt: prompt, folder: folder, target: target, mode: mode, name: name)
+            if source == .ci, target != .copy {
+                app.claude.ciFixes[model.ref] = CIFixLaunch(tabID: tab?.id, target: target, headOid: pr.headRefOid, at: Date())
+            }
             dismiss()
         } catch {
             self.error = error.localizedDescription
