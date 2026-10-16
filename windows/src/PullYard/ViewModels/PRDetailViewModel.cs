@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using PullYard.Core.Api;
 using PullYard.Core.Html;
 using PullYard.Core.Util;
+using PullYard.Services;
 
 namespace PullYard.ViewModels;
 
@@ -356,6 +357,9 @@ public sealed partial class PRDetailViewModel : ObservableObject
     {
         Commentable = Pr?.IsOpen ?? false,
         ShowViewed = true,
+        ShowBlame = Pr is not null,
+        BlameLabel = L.T("Code_Blame", "Blame"),
+        BlameTitle = L.T("PR_BlameAtHead", "Blame this file at the pull request head"),
         Viewed = ViewedPaths,
         Collapsed = Collapsed,
         Threads = threadIndex,

@@ -54,7 +54,7 @@ public abstract class LiveDetail : Grid
     protected static StackPanel Toolbar(params UIElement?[] items) => Ui.H(2, items);
 }
 
-public sealed class IssueDetailView : LiveDetail
+public sealed class IssueDetailView : LiveDetail, IShortcutHost
 {
     private readonly ItemRef itemRef;
     private IssueDetailViewModel? model;
@@ -71,6 +71,14 @@ public sealed class IssueDetailView : LiveDetail
         itemRef = r;
         Children.Add(host);
         host.Content = Ui.Loading();
+        Shortcuts.ShortLinkKey(this);
+    }
+
+    public bool HandleShortcut(string id)
+    {
+        if (id != Shortcuts.ShortLink) return false;
+        ShellView.CopyShortLink(ShortLink.Of(itemRef));
+        return true;
     }
 
     protected override void OnAttached()
@@ -184,6 +192,7 @@ public sealed class IssueDetailView : LiveDetail
                 : Ui.IconButton("", L.T("Issue_Reopen", "Reopen issue"), () => model.SetOpen(true).Forget(), "text"));
         }
         tools.Children.Add(Ui.IconButton("", L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(issue.Url), "text"));
+        tools.Children.Add(Ui.IconButton("\uE8C8", L.T("Menu_CopyShortLinkHint", "Copy short link (Ctrl+Shift+C)"), () => ShellView.CopyShortLink(ShortLink.Of(itemRef)), "text"));
         tools.Children.Add(Ui.IconButton("", L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(issue.Url), "text"));
         RenderHtml();
         status.Update(model.LastUpdated, model.Loading, model.RefreshError);
@@ -495,6 +504,7 @@ public sealed class ProjectBoardView : LiveDetail
         {
             menu.Items.Add(Ui.MenuItem(L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(url)));
             menu.Items.Add(Ui.MenuItem(L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(url)));
+            if (ShortLink.Of(c?.Route) is { } shortLink) menu.Items.Add(Ui.MenuItem(L.T("Menu_CopyShortLink", "Copy Short Link"), () => ShellView.CopyShortLink(shortLink)));
         }
         card.ContextFlyout = menu;
         return card;

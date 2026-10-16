@@ -97,6 +97,9 @@ public sealed class HtmlView : Grid
             case "refresh":
                 AppViewModel.Shared.Refresh();
                 break;
+            case "key":
+                Shortcuts.Dispatch(this, id);
+                break;
             default:
                 ActionInvoked?.Invoke(type, id);
                 break;

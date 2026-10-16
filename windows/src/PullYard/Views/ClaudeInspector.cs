@@ -315,7 +315,8 @@ public sealed class BranchPRPanel : Grid
             Ui.Menu(
                 Ui.MenuItem(L.T("Inspector_OpenInPRs", "Open in PR section"), () => { app.Section = Section.Prs(PRFilter.Mine); app.Open(p.Item.Route); }),
                 Ui.MenuItem(L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(p.Item.Url)),
-                Ui.MenuItem(L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(p.Item.Url))).ShowAt((FrameworkElement)args.OriginalSource);
+                Ui.MenuItem(L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(p.Item.Url)),
+                Ui.MenuItem(L.T("Menu_CopyShortLink", "Copy Short Link"), () => ShellView.CopyShortLink(ShortLink.Of(p.Item.Repository.NameWithOwner, p.Item.Number)))).ShowAt((FrameworkElement)args.OriginalSource);
         };
         status.Retry = () => Load().Forget();
         Loaded += (_, _) =>

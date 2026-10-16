@@ -801,6 +801,57 @@ public sealed class GitObjectResponse
     public R? Repository { get; set; }
 }
 
+public sealed class BlameAuthor
+{
+    public string? Name { get; set; }
+    public Actor? User { get; set; }
+}
+
+public sealed class BlameCommit
+{
+    public string Oid { get; set; } = "";
+    public string AbbreviatedOid { get; set; } = "";
+    public string MessageHeadline { get; set; } = "";
+    public DateTimeOffset? CommittedDate { get; set; }
+    public string Url { get; set; } = "";
+    public BlameAuthor? Author { get; set; }
+}
+
+public sealed class BlameRangeNode
+{
+    public int StartingLine { get; set; }
+    public int EndingLine { get; set; }
+    public int Age { get; set; }
+    public BlameCommit? Commit { get; set; }
+}
+
+public sealed class BlameResponse
+{
+    public sealed class B
+    {
+        public List<BlameRangeNode> Ranges { get; set; } = new();
+    }
+
+    public sealed class O
+    {
+        [JsonPropertyName("__typename")]
+        public string Typename { get; set; } = "";
+        public string? Oid { get; set; }
+        public B? Blame { get; set; }
+        public O? Target { get; set; }
+
+        [JsonIgnore]
+        public List<BlameRangeNode>? Ranges => Blame?.Ranges ?? Target?.Blame?.Ranges;
+    }
+
+    public sealed class R
+    {
+        public O? Object { get; set; }
+    }
+
+    public R? Repository { get; set; }
+}
+
 public sealed class BranchInfo
 {
     public sealed class C

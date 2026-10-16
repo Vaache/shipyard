@@ -33,7 +33,7 @@ Everything from the macOS app, adapted to Windows:
 | User notifications | `AppNotificationManager` |
 | Pull to refresh | `RefreshContainer` + Ctrl+R / F5 |
 
-Keyboard: Ctrl+R refresh, Ctrl+L open by link, Ctrl+1…6 sections, Ctrl+Shift+1…4 PR tabs, Ctrl+P go to file in a repository, Ctrl+, settings, Alt+Left back, Ctrl+Enter send a comment, Enter send in Claude chat (Shift+Enter for a new line), Shift+Tab cycle the Claude permission mode.
+Keyboard: Ctrl+R refresh, Ctrl+L open by link, Ctrl+1…6 sections, Ctrl+Shift+1…4 PR tabs, Ctrl+P go to file in a repository, Ctrl+Alt+B toggle blame in the file viewer, Ctrl+Shift+C copy the open pull request or issue as `owner/repo#123`, Ctrl+, settings, Alt+Left back, Ctrl+Enter send a comment, Enter send in Claude chat (Shift+Enter for a new line), Shift+Tab cycle the Claude permission mode.
 
 ## Build
 

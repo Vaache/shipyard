@@ -31,10 +31,25 @@ public sealed class RepoDetailView : LiveDetail
     private ListView? itemsList;
     private RowAppear? itemsAppear;
     private readonly RefreshFooter footer = new();
+    private static readonly Dictionary<string, (string Ref, string Path, bool Blame)> pendingFiles = new(StringComparer.OrdinalIgnoreCase);
+    private static event Action<string>? FileRequested;
+
+    public static void OpenFile(RepoRef repo, string @ref, string path, bool blame)
+    {
+        pendingFiles[repo.Full] = (@ref, path, blame);
+        FileRequested?.Invoke(repo.Full);
+        if (pendingFiles.ContainsKey(repo.Full)) AppViewModel.Shared.Open(Route.ForRepo(repo), true);
+    }
 
     public RepoDetailView(RepoRef repo)
     {
         this.repo = repo;
+        Loaded += (_, _) =>
+        {
+            FileRequested -= OnFileRequested;
+            FileRequested += OnFileRequested;
+        };
+        Unloaded += (_, _) => FileRequested -= OnFileRequested;
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -94,12 +109,34 @@ public sealed class RepoDetailView : LiveDetail
             code = new RepoCodeViewModel(repo, api);
             ShowTab();
         }
+        TakePendingFile();
         LoadInfo().Forget();
+    }
+
+    private void OnFileRequested(string full)
+    {
+        if (full.Equals(repo.Full, StringComparison.OrdinalIgnoreCase)) TakePendingFile();
+    }
+
+    private void TakePendingFile()
+    {
+        if (code is null || !pendingFiles.Remove(repo.Full, out var pending)) return;
+        if (tab != "code")
+        {
+            tab = "code";
+            tabs.Selected = tab;
+            ShowTab();
+        }
+        code.OpenAt(pending.Ref, pending.Path, pending.Blame).Forget();
     }
 
     protected override void OnRefresh()
     {
-        if (tab == "code") code?.OpenDir(code.Dir).Forget();
+        if (tab == "code" && code is not null)
+        {
+            code.OpenDir(code.Dir).Forget();
+            if (code.SelectedFile is not null) code.ReloadFile().Forget();
+        }
         else LoadItems().Forget();
     }
 
@@ -215,7 +252,7 @@ public sealed class RepoDetailView : LiveDetail
     }
 }
 
-public sealed class RepoCodeView : Grid
+public sealed class RepoCodeView : Grid, IShortcutHost
 {
     private readonly RepoCodeViewModel model;
     private readonly DropDownButton branchButton = new();
@@ -226,6 +263,9 @@ public sealed class RepoCodeView : Grid
     private bool markdownSource;
     private bool wrap;
     private bool syncing;
+    private bool contentQueued;
+    private string? renderedCode;
+    private Border? htmlHost;
 
     public RepoCodeView(RepoCodeViewModel model)
     {
@@ -285,6 +325,7 @@ public sealed class RepoCodeView : Grid
             QuickOpen().Forget();
         };
         KeyboardAccelerators.Add(acc);
+        Shortcuts.BlameKey(this);
 
         model.PropertyChanged += OnModel;
         Unloaded += (_, _) => model.PropertyChanged -= OnModel;
@@ -328,12 +369,36 @@ public sealed class RepoCodeView : Grid
             case nameof(RepoCodeViewModel.LoadingDir):
                 RenderContent();
                 break;
+            case nameof(RepoCodeViewModel.BlameOn):
+            case nameof(RepoCodeViewModel.Blame):
+            case nameof(RepoCodeViewModel.LoadingBlame):
+            case nameof(RepoCodeViewModel.BlameFailed):
+                QueueContent();
+                break;
         }
+    }
+
+    private void QueueContent()
+    {
+        if (contentQueued) return;
+        contentQueued = true;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            contentQueued = false;
+            RenderContent();
+        });
+    }
+
+    public bool HandleShortcut(string id)
+    {
+        if (id != Shortcuts.Blame || model.SelectedFile is null || !model.CanBlame) return false;
+        model.ToggleBlame();
+        return true;
     }
 
     private void RenderBranches()
     {
-        branchButton.Content = Ui.H(6, Ui.Glyph("", 12), Ui.Text(model.CurrentRef.Length == 0 ? "…" : model.CurrentRef, 13, "text", FontWeights.Medium, mono: true));
+        branchButton.Content = Ui.H(6, Ui.Glyph("", 12), Ui.Text(model.CurrentRef.Length == 0 ? "…" : model.RefLabel, 13, "text", FontWeights.Medium, mono: true));
         var menu = new MenuFlyout();
         foreach (var b in model.Branches.Take(300))
         {
@@ -389,15 +454,14 @@ public sealed class RepoCodeView : Grid
             else bodyElement = Ui.Loading();
             SetRow(bodyElement, 1);
             grid.Children.Add(bodyElement);
-            Detach(html);
             content.Content = grid;
             return;
         }
         if (model.Readme is { } readme)
         {
-            Detach(html);
-            var wrapper = new Border { Margin = new Thickness(10), CornerRadius = new CornerRadius(10), Background = Palette.Brush("panel"), Child = html };
+            var wrapper = Host(new Border { Margin = new Thickness(10), CornerRadius = new CornerRadius(10), Background = Palette.Brush("panel") });
             html.Render(Wrap(Resolve(readme, model.Dir)), "conversation", "top", "readme");
+            renderedCode = null;
             content.Content = wrapper;
             return;
         }
@@ -407,6 +471,15 @@ public sealed class RepoCodeView : Grid
             return;
         }
         content.Content = Ui.Empty("", "teal", L.T("Code_Pick", "Pick a file on the left or press Ctrl+P"));
+    }
+
+    private Border Host(Border border)
+    {
+        if (htmlHost is not null && !ReferenceEquals(htmlHost, border) && ReferenceEquals(htmlHost.Child, html)) htmlHost.Child = null;
+        Detach(html);
+        border.Child = html;
+        htmlHost = border;
+        return border;
     }
 
     private static void Detach(FrameworkElement element)
@@ -448,7 +521,7 @@ public sealed class RepoCodeView : Grid
         if (model.FileSize is { } size) left.Children.Add(Ui.Chip(Fmt.Bytes(size)));
         if (model.File is { Kind: FileContentKind.Text } t) left.Children.Add(Ui.Chip(Fmt.Plural(t.Text.Count(c => c == '\n') + 1, "line", "lines")));
         var right = Ui.H(6);
-        if (model.File is { Kind: FileContentKind.Markdown })
+        if (model.File is { Kind: FileContentKind.Markdown } && !model.BlameOn)
         {
             var toggle = new ToggleSwitch { OnContent = L.T("Code_Source", "Source"), OffContent = L.T("Code_Preview", "Preview"), IsOn = markdownSource, MinWidth = 0 };
             toggle.Toggled += (_, _) =>
@@ -458,7 +531,14 @@ public sealed class RepoCodeView : Grid
             };
             right.Children.Add(toggle);
         }
-        if (model.File is { Kind: FileContentKind.Text })
+        if (model.CanBlame)
+        {
+            var blame = new Microsoft.UI.Xaml.Controls.Primitives.ToggleButton { IsChecked = model.BlameOn, Padding = new Thickness(8, 3, 10, 3), Content = Ui.H(6, Ui.Glyph("\uE81C", 12, "text"), new TextBlock { Text = L.T("Code_Blame", "Blame") }) };
+            Ui.Tip(blame, L.T("Code_BlameHint", "Show who last changed each line (Ctrl+Alt+B)"));
+            blame.Click += (_, _) => model.SetBlame(blame.IsChecked == true);
+            right.Children.Add(blame);
+        }
+        if (model.File is { Kind: FileContentKind.Text } || (model.File is { Kind: FileContentKind.Markdown } && model.BlameOn))
         {
             var w = new CheckBox { Content = L.T("Code_Wrap", "Wrap"), IsChecked = wrap, MinWidth = 0 };
             w.Checked += (_, _) => { wrap = true; RenderContent(); };
@@ -483,22 +563,32 @@ public sealed class RepoCodeView : Grid
         switch (file.Kind)
         {
             case FileContentKind.Text:
+            case FileContentKind.Markdown when model.BlameOn:
             {
                 var panel = new Grid();
                 panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-                if (file.Truncated) panel.Children.Add(Ui.H(6, Ui.Glyph("", 12, "amber"), Ui.Text(L.T("Code_Truncated", "File is too large — showing only part of it"), 12, "amber")));
-                var border = new Border { Margin = new Thickness(10, 0, 10, 10), CornerRadius = new CornerRadius(10), Background = Palette.Brush("sunken"), Child = html };
+                var notes = Ui.V(4);
+                notes.Margin = new Thickness(14, 0, 14, 6);
+                panel.Children.Add(notes);
+                if (model.BlameOn && model.LoadingBlame) notes.Children.Add(Ui.H(6, Ui.Spinner(12), Ui.Text(L.T("Code_BlameLoading", "Loading blame…"), 12, "muted")));
+                else if (model.BlameOn && model.BlameFailed) notes.Children.Add(Ui.H(6, Ui.Glyph("\uE7BA", 12, "amber"), Ui.Text(L.T("Code_BlameUnavailable", "Blame unavailable for this file"), 12, "amber"), Ui.Link(L.T("Common_Retry", "Retry"), model.RetryBlame)));
+                if (file.Truncated) notes.Children.Add(Ui.H(6, Ui.Glyph("", 12, "amber"), Ui.Text(L.T("Code_Truncated", "File is too large — showing only part of it"), 12, "amber")));
+                var border = Host(new Border { Margin = new Thickness(10, 0, 10, 10), CornerRadius = new CornerRadius(10), Background = Palette.Brush("sunken") });
                 SetRow(border, 1);
                 panel.Children.Add(border);
-                html.Render(CodeHtml.Render(file.Text, ext, wrap), "code", "top", "flush code-body");
+                var blame = model.BlameOn ? model.Blame : null;
+                var key = $"{model.CurrentRef}|{path}";
+                html.Render(CodeHtml.Render(file.Text, ext, wrap, blame), "code", renderedCode == key ? null : "top", "flush code-body");
+                renderedCode = key;
                 return panel;
             }
             case FileContentKind.Markdown:
             {
-                var border = new Border { Margin = new Thickness(10, 0, 10, 10), CornerRadius = new CornerRadius(10), Background = Palette.Brush(markdownSource ? "sunken" : "panel"), Child = html };
+                var border = Host(new Border { Margin = new Thickness(10, 0, 10, 10), CornerRadius = new CornerRadius(10), Background = Palette.Brush(markdownSource ? "sunken" : "panel") });
                 if (markdownSource) html.Render(CodeHtml.Render(file.Text, ext, true), "code", "top", "flush code-body");
                 else html.Render(Wrap(Resolve(file.Html, path.Contains('/') ? path[..path.LastIndexOf('/')] : "")), "conversation", "top", "readme");
+                renderedCode = null;
                 return border;
             }
             case FileContentKind.Image:

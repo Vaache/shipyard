@@ -148,6 +148,11 @@ public partial class App : Application
                     var route = item.Route;
                     items.Add(new() { Text = $"    {title2}   {item.Repository.NameWithOwner}#{item.Number}{ci}", Action = () => { ShowMainWindow(); m.Select(route); } });
                 }
+                if (list.Count > 0)
+                {
+                    var links = list.Take(10).Select(i => ShortLink.Of(i.Repository.NameWithOwner, i.Number)).Select(link => new TrayMenuItem { Text = link, Action = () => Views.ShellView.CopyShortLink(link) }).ToList();
+                    items.Add(new() { Text = "    " + L.T("Menu_CopyShortLink", "Copy Short Link"), Children = links });
+                }
                 items.Add(new() { Separator = true });
             }
             AddSection(L.T("Tray_ReviewRequests", "Review requests"), m.ReviewRequestCount, m.ReviewRequests, PRFilter.ReviewRequested);

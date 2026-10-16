@@ -196,7 +196,8 @@ public sealed class SearchListView : ListPane
     {
         var menu = Ui.Menu(
             Ui.MenuItem(L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(item.Url), ""),
-            Ui.MenuItem(L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(item.Url), ""));
+            Ui.MenuItem(L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(item.Url), ""),
+            Ui.MenuItem(L.T("Menu_CopyShortLink", "Copy Short Link"), () => ShellView.CopyShortLink(ShortLink.Of(item.Repository.NameWithOwner, item.Number)), "\uE8C8"));
         if (item.IsPR) menu.Items.Add(Ui.MenuItem(L.T("Menu_CopyCheckout", "Copy “gh pr checkout”"), () => WindowInterop.Copy($"gh pr checkout {item.Number} -R {item.Repository.NameWithOwner}"), ""));
         return menu;
     }
@@ -242,7 +243,8 @@ public sealed class NotificationsView : ListPane
             var menu = Ui.Menu(
                 n.Unread ? Ui.MenuItem(L.T("Notifications_MarkRead", "Mark as read"), () => MarkRead(n).Forget()) : null,
                 Ui.MenuItem(L.T("Notifications_Done", "Done (remove from inbox)"), () => MarkDone(n).Forget()),
-                Ui.MenuItem(L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(n.WebUrl)));
+                Ui.MenuItem(L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(n.WebUrl)),
+                ShortLink.Of(n.Route) is { } shortLink ? Ui.MenuItem(L.T("Menu_CopyShortLink", "Copy Short Link"), () => ShellView.CopyShortLink(shortLink)) : null);
             menu.ShowAt((FrameworkElement)args.OriginalSource);
         };
     }

@@ -9,6 +9,9 @@ public sealed class DiffRenderOptions
     public bool Commentable { get; init; }
     public bool ShowViewed { get; init; }
     public bool ShowOpen { get; init; }
+    public bool ShowBlame { get; init; }
+    public string BlameLabel { get; init; } = "Blame";
+    public string BlameTitle { get; init; } = "Blame this file at the pull request head";
     public IReadOnlySet<string> Viewed { get; init; } = new HashSet<string>();
     public IReadOnlySet<string> Collapsed { get; init; } = new HashSet<string>();
     public IReadOnlyDictionary<string, List<ReviewThread>> Threads { get; init; } = new Dictionary<string, List<ReviewThread>>();
@@ -65,6 +68,7 @@ public static class DiffHtml
             sb.Append($"<label class=\"viewed\"><input type=\"checkbox\"{on} onchange=\"postFile(this,'viewed')\">Viewed</label>");
         }
         if (o.ShowOpen) sb.Append($"<button class=\"ghost\" onclick=\"postFile(this,'open')\">Open</button>");
+        if (o.ShowBlame && f.Status != "removed") sb.Append($"<button class=\"ghost\" onclick=\"postFile(this,'blame')\" title=\"{Esc(o.BlameTitle)}\">{Esc(o.BlameLabel)}</button>");
         sb.Append($"<button class=\"ghost\" onclick=\"postFile(this,'copy')\" title=\"Copy path\">⧉</button>");
         sb.Append("</div>");
         return sb.ToString();
