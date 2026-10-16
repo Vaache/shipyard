@@ -7,6 +7,16 @@
 .demo .g{color:#5dbe8a;font-style:normal}.demo .r{color:#e8746a;font-style:normal}.demo .a{color:#e8b44c;font-style:normal}.demo .s{color:#5bb8ec}.demo .dim{color:var(--t3)}
 .d-side{background:var(--sb);border:1px solid rgba(255,255,255,.07);border-radius:11px;margin-bottom:7px;padding:10px 8px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
 .d-tl{display:flex;gap:8px;padding:2px 4px 12px}.d-tl i{width:12px;height:12px;border-radius:50%}
+.demo.os-windows,.demo.os-linux{position:relative;padding-top:34px}
+.d-wc{position:absolute;top:0;left:0;right:0;height:34px;display:flex;align-items:center;padding-left:16px;font-size:12px;color:var(--t2)}
+.d-wc b{font-weight:500}
+.d-wc span{margin-left:auto;display:flex;align-items:center;height:100%}
+.d-wc svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:1.1}
+.os-windows .d-wc i{width:46px;height:100%;display:grid;place-items:center}
+.os-linux .d-wc b{position:absolute;left:0;right:0;text-align:center;font-weight:600;color:var(--t1)}
+.os-linux .d-wc span{gap:10px;padding-right:10px;position:relative}
+.os-linux .d-wc i{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.08);display:grid;place-items:center}
+.os-linux .d-wc svg{width:8px;height:8px;stroke-width:1.6}
 .d-h{font-size:11px;font-weight:600;color:var(--t3);padding:9px 8px 4px}
 .d-it{display:flex!important;align-items:center;gap:9px;width:100%;padding:5px 8px!important;border-radius:7px;white-space:nowrap;transition:background .15s}
 .d-it:hover{background:rgba(255,255,255,.05)}
