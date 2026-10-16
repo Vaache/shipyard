@@ -1,0 +1,90 @@
+name: winget manifests
+
+on:
+  pull_request:
+    paths:
+      - 'packaging/winget/**'
+      - '.github/workflows/winget-validate.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Manifest version folder to test (defaults to the newest)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate and install
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Ensure winget
+        shell: pwsh
+        run: |
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
+            Install-Module -Name Microsoft.WinGet.Client -Force -Scope CurrentUser -Repository PSGallery
+            Repair-WinGetPackageManager -AllUsers -Latest
+          }
+          winget --info
+
+      - name: Pick manifest
+        id: pick
+        shell: pwsh
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          $root = "packaging/winget/manifests/p/PullYard/PullYard"
+          $version = $env:REQUESTED
+          if (-not $version) {
+            $version = Get-ChildItem $root -Directory | Sort-Object { [version]$_.Name } | Select-Object -Last 1 -ExpandProperty Name
+          }
+          $dir = Join-Path $root $version
+          if (-not (Test-Path $dir)) { throw "No manifest folder $dir" }
+          "dir=$dir" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: winget validate
+        shell: pwsh
+        run: |
+          foreach ($dir in Get-ChildItem packaging/winget/manifests/p/PullYard/PullYard -Directory) {
+            Write-Host "Validating $($dir.FullName)"
+            winget validate --manifest $dir.FullName --disable-interactivity
+            if ($LASTEXITCODE -ne 0) { throw "winget validate failed for $($dir.Name) ($LASTEXITCODE)" }
+          }
+
+      - name: winget install from manifest
+        shell: pwsh
+        run: |
+          winget settings --enable LocalManifestFiles
+          winget install --manifest "${{ steps.pick.outputs.dir }}" --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "winget install failed ($LASTEXITCODE)" }
+
+      - name: Check installed app
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.pick.outputs.version }}
+        run: |
+          $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PullYard.PullYard_is1"
+          if (-not (Test-Path $key)) { throw "Apps and Features entry $key not found" }
+          $entry = Get-ItemProperty $key
+          Write-Host "DisplayName=$($entry.DisplayName) DisplayVersion=$($entry.DisplayVersion) Publisher=$($entry.Publisher)"
+          if ($entry.DisplayName -ne "PullYard") { throw "Unexpected DisplayName $($entry.DisplayName)" }
+          if ($entry.Publisher -ne "PullYard") { throw "Unexpected Publisher $($entry.Publisher)" }
+          if ($entry.DisplayVersion -ne $env:VERSION) { throw "Unexpected DisplayVersion $($entry.DisplayVersion)" }
+          $exe = Join-Path $env:LOCALAPPDATA "Programs\PullYard\PullYard.exe"
+          if (-not (Test-Path $exe)) { throw "Installed exe not found at $exe" }
+          $p = Start-Process -FilePath $exe -ArgumentList '--version' -Wait -PassThru -NoNewWindow -RedirectStandardOutput version.txt
+          Get-Content version.txt | Write-Host
+          if ($p.ExitCode -ne 0) { throw "PullYard --version exited with $($p.ExitCode)" }
+          if ((Get-Content version.txt -Raw) -notmatch [regex]::Escape($env:VERSION)) { throw "Installed app reports an unexpected version" }
+
+      - name: winget uninstall
+        shell: pwsh
+        run: |
+          winget uninstall --product-code PullYard.PullYard_is1 --silent --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "winget uninstall failed ($LASTEXITCODE)" }
+          if (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PullYard.PullYard_is1") { throw "Apps and Features entry still present" }

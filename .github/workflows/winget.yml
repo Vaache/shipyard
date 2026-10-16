@@ -1,0 +1,107 @@
+name: winget
+
+on:
+  workflow_run:
+    workflows: [Windows]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to submit, for example v2.9.0
+        required: true
+
+concurrency:
+  group: winget
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PACKAGE_ID: PullYard.PullYard
+  PACKAGE_PATH: manifests/p/PullYard/PullYard
+  WINGETCREATE_VERSION: v1.12.13.0
+  WINGETCREATE_SHA256: 24042bd37915805615e6cf969ac57c6439124c3fe85823327f5f3fb24bd9ffea
+
+jobs:
+  update:
+    name: Submit new version
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: windows-latest
+    steps:
+      - name: Check prerequisites
+        id: gate
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HAS_TOKEN: ${{ secrets.WINGET_TOKEN != '' }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}
+        run: |
+          function Skip($reason) {
+            Write-Host "::notice::Skipping winget submission: $reason"
+            "run=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          if ($env:TAG -notmatch '^v(\d+\.\d+\.\d+)$') { Skip "$env:TAG is not a release tag" }
+          $version = $Matches[1]
+          if ($env:HAS_TOKEN -ne 'true') { Skip "the WINGET_TOKEN secret is not set" }
+
+          $release = gh release view $env:TAG --repo $env:GITHUB_REPOSITORY --json isDraft,isPrerelease,publishedAt | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { Skip "no GitHub release for $env:TAG" }
+          if ($release.isDraft -or $release.isPrerelease) { Skip "$env:TAG is a draft or prerelease" }
+
+          gh api "repos/microsoft/winget-pkgs/contents/$env:PACKAGE_PATH" --silent 2>$null
+          if ($LASTEXITCODE -ne 0) { Skip "$env:PACKAGE_ID is not in microsoft/winget-pkgs yet; the first submission is manual" }
+          gh api "repos/microsoft/winget-pkgs/contents/$env:PACKAGE_PATH/$version" --silent 2>$null
+          if ($LASTEXITCODE -eq 0) { Skip "$env:PACKAGE_ID $version is already in microsoft/winget-pkgs" }
+          $open = gh pr list --repo microsoft/winget-pkgs --state open --search "$env:PACKAGE_ID $version in:title" --json number,title | ConvertFrom-Json
+          if ($open | Where-Object { $_.title -match [regex]::Escape("$env:PACKAGE_ID version $version") }) { Skip "a pull request for $env:PACKAGE_ID $version is already open" }
+
+          $names = @("PullYard-windows-x64-setup.exe", "PullYard-windows-arm64-setup.exe")
+          $deadline = (Get-Date).AddMinutes(30)
+          while ($true) {
+            $assets = (gh release view $env:TAG --repo $env:GITHUB_REPOSITORY --json assets | ConvertFrom-Json).assets.name
+            $missing = @($names | Where-Object { $assets -notcontains $_ })
+            if ($missing.Count -eq 0) { break }
+            if ((Get-Date) -gt $deadline) { throw "Release $env:TAG is still missing: $($missing -join ', ')" }
+            Write-Host "Waiting for $($missing -join ', ')"
+            Start-Sleep -Seconds 30
+          }
+
+          $base = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TAG"
+          "run=true" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "date=$(([datetime]$release.publishedAt).ToUniversalTime().ToString('yyyy-MM-dd'))" >> $env:GITHUB_OUTPUT
+          "x64=$base/$($names[0])" >> $env:GITHUB_OUTPUT
+          "arm64=$base/$($names[1])" >> $env:GITHUB_OUTPUT
+
+      - name: Download wingetcreate
+        if: steps.gate.outputs.run == 'true'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/microsoft/winget-create/releases/download/$env:WINGETCREATE_VERSION/wingetcreate.exe" -OutFile wingetcreate.exe
+          $hash = (Get-FileHash wingetcreate.exe -Algorithm SHA256).Hash
+          if ($hash -ne $env:WINGETCREATE_SHA256) { throw "wingetcreate.exe hash mismatch: $hash" }
+          .\wingetcreate.exe info
+
+      - name: Submit to winget-pkgs
+        if: steps.gate.outputs.run == 'true'
+        shell: pwsh
+        env:
+          WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          VERSION: ${{ steps.gate.outputs.version }}
+          RELEASE_DATE: ${{ steps.gate.outputs.date }}
+          X64_URL: ${{ steps.gate.outputs.x64 }}
+          ARM64_URL: ${{ steps.gate.outputs.arm64 }}
+        run: |
+          .\wingetcreate.exe update $env:PACKAGE_ID `
+            --version $env:VERSION `
+            --urls "$env:X64_URL|x64" "$env:ARM64_URL|arm64" `
+            --release-date $env:RELEASE_DATE `
+            --release-notes-url "https://pullyard.github.io/pullyard/changelog.html#v$env:VERSION" `
+            --submit --no-open
+          if ($LASTEXITCODE -ne 0) { throw "wingetcreate update failed ($LASTEXITCODE)" }
