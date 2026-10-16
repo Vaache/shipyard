@@ -171,6 +171,7 @@ final class ClaudeWorkspace {
     var projectsUpdated: Date?
     let sessionRows = RowAppearTracker()
     var showInspector = true
+    var ciFixes: [ItemRef: CIFixLaunch] = [:]
 
     var model: ClaudeModelOption {
         get { _ = modelTick; return ClaudeModelOption(rawValue: UserDefaults.standard.string(forKey: "claude.model") ?? "") ?? .standard }

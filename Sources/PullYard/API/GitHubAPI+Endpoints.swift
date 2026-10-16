@@ -245,4 +245,9 @@ extension GitHubAPI {
         let target = try await redirectTarget("/repos/\(repo.full)/actions/jobs/\(jobId)/logs")
         return try await plain(target)
     }
+
+    func jobLogTail(repo: RepoRef, jobId: Int, maxBytes: Int) async throws -> String {
+        let target = try await redirectTarget("/repos/\(repo.full)/actions/jobs/\(jobId)/logs")
+        return try await plainTail(target, maxBytes: maxBytes)
+    }
 }

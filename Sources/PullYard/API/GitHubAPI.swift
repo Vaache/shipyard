@@ -292,6 +292,47 @@ final class GitHubAPI {
         throw APIError(message: "Log unavailable")
     }
 
+    func plainTail(_ url: URL, maxBytes: Int) async throws -> String {
+        var req = URLRequest(url: url)
+        req.setValue("bytes=-\(maxBytes)", forHTTPHeaderField: "Range")
+        var dropped = false
+        let (data, response) = try await Diagnostics.track(.rest, "GET {job-log}", url: url, authenticated: false) {
+            let (bytes, response) = try await URLSession.shared.bytes(for: req)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                var body = Data()
+                for try await b in bytes where body.count < 16_384 { body.append(b) }
+                return (body, response)
+            }
+            var buffer = Data()
+            var chunk: [UInt8] = []
+            chunk.reserveCapacity(65_536)
+            for try await b in bytes {
+                chunk.append(b)
+                guard chunk.count == 65_536 else { continue }
+                try Task.checkCancellation()
+                buffer.append(contentsOf: chunk)
+                chunk.removeAll(keepingCapacity: true)
+                if buffer.count > maxBytes * 2 {
+                    buffer = Data(buffer.suffix(maxBytes))
+                    dropped = true
+                }
+            }
+            buffer.append(contentsOf: chunk)
+            if buffer.count > maxBytes {
+                buffer = Data(buffer.suffix(maxBytes))
+                dropped = true
+            }
+            return (buffer, response)
+        }
+        if (response as? HTTPURLResponse)?.statusCode == 416 { return "" }
+        try check(response, data)
+        var text = String(decoding: data, as: UTF8.self)
+        if dropped || (response as? HTTPURLResponse)?.statusCode == 206, data.count >= maxBytes, let nl = text.firstIndex(of: "\n") {
+            text = String(text[text.index(after: nl)...])
+        }
+        return text
+    }
+
     func plain(_ url: URL) async throws -> String {
         let (data, response) = try await Diagnostics.track(.rest, "GET {job-log}", url: url, authenticated: false) { try await URLSession.shared.data(from: url) }
         try check(response, data)

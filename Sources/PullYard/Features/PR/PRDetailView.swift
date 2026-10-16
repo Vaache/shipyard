@@ -34,7 +34,7 @@ struct PRDetailView: View {
 }
 
 enum PRConfirm: Identifiable {
-    case approve, close, deleteBranch, disableAutoMerge
+    case approve, close, deleteBranch, disableAutoMerge, rerunFailed
     var id: Int { hashValue }
 }
 
@@ -48,12 +48,14 @@ struct PRDetailContent: View {
     @State private var showReviewers = false
     @State private var confirm: PRConfirm?
     @State private var showFix = false
+    @State private var ciFix: CIFixRequest?
 
     var body: some View {
         VStack(spacing: 0) {
             PRHeaderView(model: model, pr: pr, onMerge: { showMerge = true })
             ReReviewBanner(model: model, pr: pr) { showReviewers = true }
             ClaudeFixBanner(pr: pr) { showFix = true }
+            CIFailureBanner(model: model, pr: pr, onFix: { ciFix = CIFixRequest() }, onRerun: { confirm = .rerunFailed })
             TabStrip(items: [
                 TabItem(id: PRTab.conversation, title: "Conversation", icon: "bubble.left.and.bubble.right", badge: commentsBadge),
                 TabItem(id: PRTab.commits, title: "Commits", icon: "point.3.connected.trianglepath.dotted", badge: "\(pr.allCommits.totalCount ?? pr.allCommits.nodes.count)"),
@@ -86,6 +88,7 @@ struct PRDetailContent: View {
         .sheet(isPresented: $showEdit) { EditPRSheet(model: model, pr: pr) }
         .sheet(isPresented: $showReviewers) { ReviewersSheet(model: model) }
         .sheet(isPresented: $showFix) { FixWithClaudeSheet(model: model, pr: pr) }
+        .sheet(item: $ciFix) { FixWithClaudeSheet(model: model, pr: pr, ci: $0) }
         .sheet(isPresented: $model.showResolveConflicts) { ResolveConflictsSheet(model: model, pr: pr) }
         .sheet(item: $model.replyThread) { ReplySheet(model: model, thread: $0) }
         .alert("Error", isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })) {
@@ -94,7 +97,7 @@ struct PRDetailContent: View {
             Text(model.actionError ?? "")
         }
         .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), presenting: confirm) { c in
-            Button(confirmButton(c), role: c == .approve ? nil : .destructive) { perform(c) }
+            Button(confirmButton(c), role: c == .approve || c == .rerunFailed ? nil : .destructive) { perform(c) }
             Button("Cancel", role: .cancel) {}
         }
     }
@@ -104,7 +107,7 @@ struct PRDetailContent: View {
         switch tab {
         case .conversation: ConversationTab(model: model, pr: pr)
         case .commits: CommitsTab(model: model, pr: pr)
-        case .checks: ChecksTab(model: model, pr: pr)
+        case .checks: ChecksTab(model: model, pr: pr, onFix: { ciFix = $0 }, onRerun: { confirm = .rerunFailed })
         case .files: FilesTab(model: model)
         }
     }
@@ -137,6 +140,9 @@ struct PRDetailContent: View {
         case .close: return "Close pull request without merging?"
         case .deleteBranch: return "Delete branch \(pr.headRefName)?"
         case .disableAutoMerge: return "Disable auto-merge?"
+        case .rerunFailed:
+            let runs = Set(pr.checks.filter { $0.outcome == .failure }.compactMap(\.runId)).count
+            return "Re-run failed jobs in \(plural(runs, "workflow run", "workflow runs"))?"
         case nil: return ""
         }
     }
@@ -147,6 +153,7 @@ struct PRDetailContent: View {
         case .close: return "Close pull request"
         case .deleteBranch: return "Delete branch"
         case .disableAutoMerge: return "Disable"
+        case .rerunFailed: return "Re-run failed jobs"
         }
     }
 
@@ -157,6 +164,7 @@ struct PRDetailContent: View {
             case .close: await model.simple(Q.closePR)
             case .deleteBranch: await model.deleteBranch()
             case .disableAutoMerge: await model.simple(Q.disableAutoMerge)
+            case .rerunFailed: await model.rerunFailed()
             }
         }
     }
@@ -633,7 +641,10 @@ struct CommitsTab: View {
 struct ChecksTab: View {
     let model: PRDetailModel
     let pr: PullRequestDetail
+    let onFix: (CIFixRequest) -> Void
+    let onRerun: () -> Void
     @State private var logTarget: CheckContext?
+    @State private var fixAfterLog: CIFixRequest?
 
     var body: some View {
         let checks = pr.checks.sorted { ($0.outcome.rawValue, $0.title) < ($1.outcome.rawValue, $1.title) }
@@ -643,11 +654,10 @@ struct ChecksTab: View {
                 Text("No checks for the latest commit").foregroundStyle(Color.syMuted)
             }
             if !failedRuns.isEmpty, model.canWrite {
-                Button {
-                    Task { await model.rerunFailed() }
-                } label: {
-                    Label("Re-run failed jobs (\(failedRuns.count) workflow)", systemImage: "arrow.clockwise")
+                Button(action: onRerun) {
+                    Label("Re-run failed jobs (\(plural(failedRuns.count, "workflow", "workflows")))", systemImage: "arrow.clockwise")
                 }
+                .disabled(model.busy)
             }
             ForEach(checks) { c in
                 HStack(spacing: 10) {
@@ -657,6 +667,11 @@ struct ChecksTab: View {
                         Text(subtitle(c)).font(.caption).foregroundStyle(Color.syMuted).lineLimit(1)
                     }
                     Spacer()
+                    if CIFailureCollector.isFixable(c), pr.isOpen {
+                        Button("Fix with Claude Code") { onFix(CIFixRequest(focus: c.id)) }
+                            .controlSize(.small)
+                            .tint(Color.syCoral)
+                    }
                     if c.isActionsJob, c.outcome != .pending, c.outcome != .skipped {
                         Button("Log") { logTarget = c }.controlSize(.small)
                     }
@@ -671,8 +686,12 @@ struct ChecksTab: View {
             }
         }
         .liveRefresh(updated: model.lastUpdated, refreshing: model.loading, footer: false) { await model.load(full: true) }
-        .sheet(item: $logTarget) { c in
-            JobLogSheet(api: model.api, repo: model.ref.repo, check: c)
+        .sheet(item: $logTarget, onDismiss: {
+            guard let request = fixAfterLog else { return }
+            fixAfterLog = nil
+            onFix(request)
+        }) { c in
+            JobLogSheet(api: model.api, repo: model.ref.repo, check: c, onFix: CIFailureCollector.isFixable(c) && pr.isOpen ? { log in fixAfterLog = CIFixRequest(focus: c.id, log: log); logTarget = nil } : nil)
         }
     }
 
