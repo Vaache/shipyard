@@ -1,0 +1,92 @@
+id: io.github.pullyard.PullYard
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: pullyard
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --filesystem=home
+  - --talk-name=org.freedesktop.Flatpak
+  - --talk-name=org.freedesktop.secrets
+cleanup:
+  - /bin/vte-2.91-gtk4
+  - /etc
+  - /include
+  - /lib/cmake
+  - /lib/pkgconfig
+  - /libexec/vte-urlencode-cwd
+  - /share/doc
+  - /share/gir-1.0
+  - /share/man
+  - /share/pkgconfig
+  - /share/vala
+  - '*.a'
+  - '*.la'
+modules:
+  - name: fast_float
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DFASTFLOAT_TEST=OFF
+    sources:
+      - type: git
+        url: https://github.com/fastfloat/fast_float.git
+        tag: v8.2.5
+        commit: 05087a303dad9c98768b33c829d398223a649bc6
+
+  - name: simdutf
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DSIMDUTF_TESTS=OFF
+      - -DSIMDUTF_TOOLS=OFF
+      - -DSIMDUTF_BENCHMARKS=OFF
+    sources:
+      - type: git
+        url: https://github.com/simdutf/simdutf.git
+        tag: v9.0.0
+        commit: ca7acbcea967b5dcbab490066e99e3a6e6925539
+
+  - name: vte
+    buildsystem: meson
+    config-opts:
+      - --buildtype=release
+      - -Dgtk3=false
+      - -Dgtk4=true
+      - -Dglade=false
+      - -Dgir=false
+      - -Dvapi=false
+      - -Ddocs=false
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/vte/0.84/vte-0.84.1.tar.xz
+        sha256: aca1caa8478aebcdbb1d67897fb3511eb7601debae6810e16a15b6fa25f31ac8
+        x-checker-data:
+          type: gnome
+          name: vte
+
+  - name: pullyard
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_HOME: /run/build/pullyard/cargo
+        CARGO_NET_OFFLINE: 'true'
+        PULLYARD_UPDATES: external
+        PULLYARD_VERSION: 2.8.0
+    build-commands:
+      - cargo --offline fetch --manifest-path linux/Cargo.toml --locked --verbose
+      - cargo --offline build --release --locked --manifest-path linux/Cargo.toml
+      - install -Dm755 linux/target/release/pullyard ${FLATPAK_DEST}/bin/pullyard
+      - linux/packaging/render.sh "${PWD}/linux/dist"
+      - cp -r linux/dist/share/. ${FLATPAK_DEST}/share/
+    sources:
+      - type: git
+        url: https://github.com/pullyard/pullyard.git
+        tag: v2.8.0
+        commit: df548000cf719dcf0d332103ad6c027d1be8c97c
+      - cargo-sources.json

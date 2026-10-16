@@ -102,7 +102,9 @@ impl Sidebar {
         let mut menu = menu;
         menu.section(None);
         menu.item("Preferences", || ui_activate("preferences"));
-        menu.item("Check for Updates…", || ui_activate("check-updates"));
+        if brand::updates_in_app() {
+            menu.item("Check for Updates…", || ui_activate("check-updates"));
+        }
         menu.item("Buy Me a Pizza…", || ui_activate("donate"));
         menu.item(&format!("About {}", brand::APP_NAME), || ui_activate("about"));
         menu.section(None);

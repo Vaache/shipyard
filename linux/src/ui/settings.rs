@@ -4,7 +4,7 @@ use super::claude::auth_view;
 use super::dialogs;
 use super::widgets::*;
 use crate::claude::accounts::{self, Status};
-use crate::{app, auth, settings, theme, updater, util};
+use crate::{app, auth, brand, settings, theme, updater, util};
 
 fn combo(title: &str, options: &[&str], selected: usize, on_change: impl Fn(usize) + 'static) -> adw::ComboRow {
     let row = adw::ComboRow::new();
@@ -236,23 +236,27 @@ pub fn show() {
     page.add(&claude_group(&dialog));
 
     let updates = group("Updates", "sy-download-symbolic", "green");
-    updates.add(&switch("Check for updates automatically", None, settings::read(|s| s.update_auto_check), |v| settings::update(|s| s.update_auto_check = v)));
     let ver = adw::ActionRow::new();
     ver.set_title(&format!("Current version {}", updater::current_version()));
-    ver.set_subtitle(match updater::install_kind() {
-        updater::InstallKind::Flatpak => "Installed as a Flatpak",
-        updater::InstallKind::Package => "Installed from a package",
-        updater::InstallKind::Portable => "Portable install",
-    });
-    let check = button("Check Now");
-    check.set_valign(gtk::Align::Center);
-    check.set_sensitive(!updater::is_busy());
-    let d = dialog.clone();
-    check.connect_clicked(move |_| {
-        d.close();
-        super::update::show(true);
-    });
-    ver.add_suffix(&check);
+    if brand::updates_in_app() {
+        updates.add(&switch("Check for updates automatically", None, settings::read(|s| s.update_auto_check), |v| settings::update(|s| s.update_auto_check = v)));
+        ver.set_subtitle(match updater::install_kind() {
+            updater::InstallKind::Flatpak => "Installed as a Flatpak",
+            updater::InstallKind::Package => "Installed from a package",
+            updater::InstallKind::Portable => "Portable install",
+        });
+        let check = button("Check Now");
+        check.set_valign(gtk::Align::Center);
+        check.set_sensitive(!updater::is_busy());
+        let d = dialog.clone();
+        check.connect_clicked(move |_| {
+            d.close();
+            super::update::show(true);
+        });
+        ver.add_suffix(&check);
+    } else {
+        ver.set_subtitle("Updates are installed by your software center");
+    }
     updates.add(&ver);
     page.add(&updates);
 

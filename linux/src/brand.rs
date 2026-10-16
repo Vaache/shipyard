@@ -8,6 +8,11 @@ pub const URL_SCHEME: &str = env!("BRAND_URL_SCHEME");
 pub const ENV_PREFIX: &str = env!("BRAND_ENV_PREFIX");
 pub const TAGLINE: &str = env!("BRAND_APP_SUMMARY");
 pub const VERSION: &str = env!("BRAND_VERSION");
+pub const UPDATES: &str = env!("BRAND_UPDATES");
+
+pub fn updates_in_app() -> bool {
+    UPDATES != "external"
+}
 
 pub fn user_agent() -> String {
     format!("{APP_NAME}-Linux/{VERSION}")
