@@ -295,8 +295,16 @@ public sealed partial class AppViewModel : ObservableObject
     private void TickLive()
     {
         lastLiveRefresh = DateTimeOffset.Now;
-        LiveTick?.Invoke();
-        RefreshBadges().Forget();
+        var tick = Diagnostics.BeginLiveTick();
+        try
+        {
+            LiveTick?.Invoke();
+            RefreshBadges().Forget();
+        }
+        finally
+        {
+            if (tick is not null) Diagnostics.EndLiveTick(tick);
+        }
     }
 
     public async Task RefreshBadges()

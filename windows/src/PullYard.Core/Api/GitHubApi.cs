@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -54,6 +55,29 @@ public sealed partial class GitHubApi
 
     private static string Url(string path) => path.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? path : "https://api.github.com" + path;
 
+    private static async Task<(HttpResponseMessage Response, byte[] Data)> Exchange(HttpClient client, HttpRequestMessage req, string? query, string caller, CancellationToken ct)
+    {
+        var probe = RequestProbe.Start();
+        HttpResponseMessage? response = null;
+        try
+        {
+            response = await client.SendAsync(req, ct).ConfigureAwait(false);
+            var data = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            if (probe.Active) probe.Finish(ProbeKind(query), ProbeName(req, query, caller), response, data.Length, null);
+            return (response, data);
+        }
+        catch (Exception e)
+        {
+            if (probe.Active) probe.Finish(ProbeKind(query), ProbeName(req, query, caller), response, 0, e);
+            response?.Dispose();
+            throw;
+        }
+    }
+
+    private static string ProbeKind(string? query) => query is null ? Diagnostics.KindRest : Diagnostics.KindGraphQL;
+
+    private static string ProbeName(HttpRequestMessage req, string? query, string caller) => query is null ? Diagnostics.RestName(req.Method, req.RequestUri) : Diagnostics.GraphQLName(query, caller);
+
     private static async Task Check(HttpResponseMessage response, byte[] data)
     {
         await Task.CompletedTask;
@@ -88,7 +112,7 @@ public sealed partial class GitHubApi
     {
     }
 
-    public async Task<T> GraphQL<T>(string query, IDictionary<string, object?>? variables = null, bool strict = false, CancellationToken ct = default)
+    public async Task<T> GraphQL<T>(string query, IDictionary<string, object?>? variables = null, bool strict = false, CancellationToken ct = default, [CallerMemberName] string caller = "")
     {
         using var req = Request(HttpMethod.Post, "https://api.github.com/graphql");
         var vars = new JsonObject();
@@ -97,9 +121,8 @@ public sealed partial class GitHubApi
                 if (v is not null) vars[k] = JsonSerializer.SerializeToNode(v, v.GetType(), Json.Plain);
         var payload = new JsonObject { ["query"] = query, ["variables"] = vars };
         req.Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
-        using var response = await Http.SendAsync(req, ct).ConfigureAwait(false);
-        var data = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-        await Check(response, data);
+        var (response, data) = await Exchange(Http, req, query, caller, ct).ConfigureAwait(false);
+        using (response) await Check(response, data);
         GraphQLResponse<T>? decoded;
         try
         {
@@ -135,8 +158,7 @@ public sealed partial class GitHubApi
         using var req = Request(new HttpMethod(method), Url(path));
         if (body is not null)
             req.Content = new StringContent(JsonSerializer.Serialize(body, body.GetType(), Json.Plain), Encoding.UTF8, "application/json");
-        var response = await Http.SendAsync(req, ct).ConfigureAwait(false);
-        var data = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+        var (response, data) = await Exchange(Http, req, null, "", ct).ConfigureAwait(false);
         await Check(response, data);
         return (data, response);
     }
@@ -164,10 +186,10 @@ public sealed partial class GitHubApi
     public async Task<Uri> RedirectTarget(string path, CancellationToken ct = default)
     {
         using var req = Request(HttpMethod.Get, Url(path));
-        using var response = await NoRedirectHttp.SendAsync(req, ct).ConfigureAwait(false);
+        var (response, data) = await Exchange(NoRedirectHttp, req, null, "", ct).ConfigureAwait(false);
+        using var _ = response;
         var code = (int)response.StatusCode;
         if (code is >= 300 and < 400 && response.Headers.Location is { } loc) return loc;
-        var data = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
         await Check(response, data);
         throw new ApiException("Log unavailable");
     }
@@ -176,8 +198,8 @@ public sealed partial class GitHubApi
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.UserAgent.ParseAdd(AppInfo.UserAgent);
-        using var response = await Http.SendAsync(req, ct).ConfigureAwait(false);
-        var data = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+        var (response, data) = await Exchange(Http, req, null, "", ct).ConfigureAwait(false);
+        using var _ = response;
         await Check(response, data);
         return Encoding.UTF8.GetString(data);
     }
@@ -185,11 +207,12 @@ public sealed partial class GitHubApi
     public async Task<byte[]?> Fetch(string path, string accept, CancellationToken ct = default)
     {
         using var req = Request(HttpMethod.Get, Url(path), accept);
-        using var response = await Http.SendAsync(req, ct).ConfigureAwait(false);
+        var (response, data) = await Exchange(Http, req, null, "", ct).ConfigureAwait(false);
+        using var _ = response;
         var code = (int)response.StatusCode;
         if (code == 404) return null;
         if (code is < 200 or >= 300) throw new ApiException($"GitHub {code}", code);
-        return await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+        return data;
     }
 
     internal static Dictionary<string, object?> V(params (string, object?)[] pairs) => pairs.ToDictionary(p => p.Item1, p => p.Item2);

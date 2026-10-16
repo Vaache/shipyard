@@ -143,6 +143,34 @@
   <data name="Common_Settings" xml:space="preserve"><value>Settings</value></data>
   <data name="Detail_Empty" xml:space="preserve"><value>Select a pull request, issue or project</value></data>
   <data name="Detail_EmptyHint" xml:space="preserve"><value>Ctrl+L — open by link</value></data>
+  <data name="Diagnostics_ByName" xml:space="preserve"><value>By name</value></data>
+  <data name="Diagnostics_Clear" xml:space="preserve"><value>Clear</value></data>
+  <data name="Diagnostics_ColAvg" xml:space="preserve"><value>Avg ms</value></data>
+  <data name="Diagnostics_ColBytes" xml:space="preserve"><value>Bytes</value></data>
+  <data name="Diagnostics_ColCount" xml:space="preserve"><value>Count</value></data>
+  <data name="Diagnostics_ColDuration" xml:space="preserve"><value>ms</value></data>
+  <data name="Diagnostics_ColKind" xml:space="preserve"><value>Kind</value></data>
+  <data name="Diagnostics_ColName" xml:space="preserve"><value>Name</value></data>
+  <data name="Diagnostics_ColOrigin" xml:space="preserve"><value>Origin</value></data>
+  <data name="Diagnostics_ColP95" xml:space="preserve"><value>p95 ms</value></data>
+  <data name="Diagnostics_ColRemaining" xml:space="preserve"><value>Left</value></data>
+  <data name="Diagnostics_ColStatus" xml:space="preserve"><value>Status</value></data>
+  <data name="Diagnostics_ColTime" xml:space="preserve"><value>Time</value></data>
+  <data name="Diagnostics_ColTotalBytes" xml:space="preserve"><value>Total bytes</value></data>
+  <data name="Diagnostics_CopySummary" xml:space="preserve"><value>Copy summary</value></data>
+  <data name="Diagnostics_Error" xml:space="preserve"><value>error</value></data>
+  <data name="Diagnostics_Export" xml:space="preserve"><value>Export</value></data>
+  <data name="Diagnostics_Filter" xml:space="preserve"><value>Filter by name</value></data>
+  <data name="Diagnostics_JsonLines" xml:space="preserve"><value>JSON lines</value></data>
+  <data name="Diagnostics_Off" xml:space="preserve"><value>Recording is off. Turn on Diagnostics in Settings to record requests.</value></data>
+  <data name="Diagnostics_RateLimit" xml:space="preserve"><value>Rate limit: {0}</value></data>
+  <data name="Diagnostics_RateLimitEntry" xml:space="preserve"><value>{0}: {1} left, resets {2}</value></data>
+  <data name="Diagnostics_Requests" xml:space="preserve"><value>Requests</value></data>
+  <data name="Diagnostics_SlowUi" xml:space="preserve"><value>Slow UI (over {0} ms): {1}, max {2} ms</value></data>
+  <data name="Diagnostics_SlowUiNone" xml:space="preserve"><value>Slow UI (over {0} ms): none</value></data>
+  <data name="Diagnostics_Ticks" xml:space="preserve"><value>Live ticks (duration/requests, newest first): {0}</value></data>
+  <data name="Diagnostics_Totals" xml:space="preserve"><value>{0} requests · {1} · avg {2} ms · p95 {3} ms</value></data>
+  <data name="Diagnostics_WindowTitle" xml:space="preserve"><value>{0} Diagnostics</value></data>
   <data name="Edit_Body" xml:space="preserve"><value>Description (Markdown)</value></data>
   <data name="Edit_Header" xml:space="preserve"><value>Edit #{0}</value></data>
   <data name="Edit_Title" xml:space="preserve"><value>Title</value></data>
@@ -365,6 +393,9 @@
   <data name="Settings_CurrentVersion" xml:space="preserve"><value>Current version {0}</value></data>
   <data name="Settings_Dark" xml:space="preserve"><value>Dark</value></data>
   <data name="Settings_DeviceFlow" xml:space="preserve"><value>OAuth Device Flow</value></data>
+  <data name="Settings_Diagnostics" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="Settings_DiagnosticsHint" xml:space="preserve"><value>Kept in memory only, without tokens or request bodies.</value></data>
+  <data name="Settings_DiagnosticsRecord" xml:space="preserve"><value>Record network requests and timings</value></data>
   <data name="Settings_Every15m" xml:space="preserve"><value>Every 15 minutes</value></data>
   <data name="Settings_Every15s" xml:space="preserve"><value>Every 15 seconds</value></data>
   <data name="Settings_Every2m" xml:space="preserve"><value>Every 2 minutes</value></data>
@@ -376,6 +407,7 @@
   <data name="Settings_MatchSystem" xml:space="preserve"><value>Match system</value></data>
   <data name="Settings_Mode" xml:space="preserve"><value>Mode</value></data>
   <data name="Settings_NotSignedIn" xml:space="preserve"><value>Not signed in</value></data>
+  <data name="Settings_OpenDiagnostics" xml:space="preserve"><value>Open diagnostics</value></data>
   <data name="Settings_OpenLinksIn" xml:space="preserve"><value>Open links in</value></data>
   <data name="Settings_Refresh" xml:space="preserve"><value>Refresh</value></data>
   <data name="Settings_RefreshFromGh" xml:space="preserve"><value>Refresh token from gh</value></data>

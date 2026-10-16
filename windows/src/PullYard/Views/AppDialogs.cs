@@ -129,6 +129,12 @@ public static class SettingsDialog
             Row(L.T("Settings_AutoUpdates", "Check for updates automatically"), auto),
             Ui.Columns((Ui.Text(L.F("Settings_CurrentVersion", "Current version {0}", AppInfo.Version), 13, "muted"), Ui.Star), (check, Ui.Auto))));
 
+        var diagnostics = new ToggleSwitch { IsOn = DiagnosticsService.Enabled, OnContent = "", OffContent = "" };
+        diagnostics.Toggled += (_, _) => DiagnosticsService.Enabled = diagnostics.IsOn;
+        panel.Children.Add(Group(L.T("Settings_Diagnostics", "Diagnostics"), "\uE9D9", "slate",
+            Row(L.T("Settings_DiagnosticsRecord", "Record network requests and timings"), diagnostics),
+            Ui.Columns((Ui.Text(L.T("Settings_DiagnosticsHint", "Kept in memory only, without tokens or request bodies."), 12.5, "muted", wrap: true), Ui.Star), (Ui.Button(L.T("Settings_OpenDiagnostics", "Open diagnostics"), DiagnosticsWindow.Show), Ui.Auto))));
+
         var clientId = new TextBox { PlaceholderText = L.T("Login_ClientId", "Client ID"), Text = Settings.Shared.GetString(Keys.OAuthClientId) ?? "", MinWidth = 240 };
         clientId.TextChanged += (_, _) => Settings.Shared.Set(Keys.OAuthClientId, clientId.Text);
         panel.Children.Add(Group(L.T("Settings_DeviceFlow", "OAuth Device Flow"), "", "amber", Row(L.T("Login_ClientId", "Client ID"), clientId)));
