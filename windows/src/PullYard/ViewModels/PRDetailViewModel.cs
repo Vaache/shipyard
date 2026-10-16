@@ -39,6 +39,9 @@ public sealed partial class PRDetailViewModel : ObservableObject
     public HashSet<string> ViewedPaths { get; private set; } = new();
     public HashSet<string> Collapsed { get; private set; } = new();
     public List<PendingComment> Pending { get; } = new();
+    public bool FilesInInspector { get; set; }
+
+    private bool FilesVisible => Tab == PRTab.Files || FilesInInspector;
 
     private Task? activeLoad;
     private Task? queuedLoad;
@@ -46,6 +49,12 @@ public sealed partial class PRDetailViewModel : ObservableObject
     private bool userLoad;
     private bool reloadStack;
     private string? filesOid;
+    private bool filesOutdated;
+    private string? signature;
+    private bool pulseUnsupported;
+    private DateTimeOffset lastFullFetch;
+
+    public static readonly TimeSpan FullFetchInterval = TimeSpan.FromMinutes(5);
     private CancellationTokenSource? mergeRecheck;
     private int mergeRechecks;
     private Dictionary<string, List<ReviewThread>> threadIndex = new();
@@ -150,6 +159,12 @@ public sealed partial class PRDetailViewModel : ObservableObject
     {
         var live = !userLoad;
         userLoad = false;
+        var fullDue = DateTimeOffset.Now - lastFullFetch >= FullFetchInterval;
+        if (live && !fullDue && !reloadFiles && !reloadStack && Pr is not null && signature is not null && !pulseUnsupported && await Unchanged())
+        {
+            if (FilesVisible && (!FilesLoaded || filesOutdated || FilesError is not null)) LoadFiles().Forget();
+            return;
+        }
         Loading = true;
         try
         {
@@ -164,6 +179,11 @@ public sealed partial class PRDetailViewModel : ObservableObject
             var newHtml = ConversationHtml.Render(pr);
             ViewedPaths = (pr.Files?.Items ?? new()).Where(f => f.ViewerViewedState == "VIEWED").Select(f => f.Path).ToHashSet();
             IndexThreads(pr.ReviewThreads.Items);
+            signature = PullRequestSignature.Of(pr);
+            lastFullFetch = DateTimeOffset.Now;
+            if (FilesLoaded) filesOid ??= pr.HeadRefOid;
+            if (reloadFiles || (FilesLoaded && filesOid != pr.HeadRefOid)) filesOutdated = true;
+            reloadFiles = false;
             Pr = pr;
             if (newHtml != Html) Html = newHtml;
             Error = null;
@@ -174,11 +194,8 @@ public sealed partial class PRDetailViewModel : ObservableObject
             reloadStack = false;
             LoadStack(pr, live, forceStack).Forget();
             ScheduleMergeRecheck(pr);
-            var filesStale = reloadFiles || (filesOid is not null && filesOid != pr.HeadRefOid);
-            reloadFiles = false;
-            if (FilesLoaded && filesStale) LoadFiles(true).Forget();
-            else if (!FilesLoaded && !FilesLoading) LoadFiles().Forget();
-            else DiffVersion++;
+            if (FilesVisible && (filesOutdated || !FilesLoaded)) LoadFiles(filesOutdated).Forget();
+            else if (FilesLoaded) DiffVersion++;
         }
         catch (OperationCanceledException)
         {
@@ -191,6 +208,32 @@ public sealed partial class PRDetailViewModel : ObservableObject
         finally
         {
             Loading = false;
+        }
+    }
+
+    private async Task<bool> Unchanged()
+    {
+        try
+        {
+            if (await Api.PullRequestPulse(Ref) is not { } pulse || PullRequestSignature.Of(pulse) != signature) return false;
+            LastUpdated = DateTimeOffset.Now;
+            RefreshError = null;
+            if (Pr is { } pr) ScheduleMergeRecheck(pr);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            return true;
+        }
+        catch (ApiException e) when (e.SchemaError)
+        {
+            pulseUnsupported = true;
+            return false;
+        }
+        catch (Exception e)
+        {
+            RefreshError = e.Message;
+            return true;
         }
     }
 
@@ -247,16 +290,17 @@ public sealed partial class PRDetailViewModel : ObservableObject
 
     public async Task LoadFiles(bool force = false)
     {
-        if (!force && (FilesLoaded || FilesLoading)) return;
+        if (!force && (FilesLoading || FilesLoaded && !filesOutdated)) return;
         FilesLoading = true;
+        filesOutdated = false;
         var oid = Pr?.HeadRefOid;
         try
         {
             var raw = await Api.PullRequestFiles(Ref);
             var parsed = await Task.Run(() => raw.Select(f => new DiffFile(f)).ToList());
             if (!FilesLoaded) Collapsed = parsed.Where(f => ViewedPaths.Contains(f.Id) || f.Lines.Count > 1500).Select(f => f.Id).ToHashSet();
+            filesOid = oid ?? Pr?.HeadRefOid;
             Files = parsed;
-            filesOid = oid;
             FilesLoaded = true;
             FilesError = null;
             DiffVersion++;
@@ -266,6 +310,7 @@ public sealed partial class PRDetailViewModel : ObservableObject
         }
         catch (Exception e)
         {
+            filesOutdated = FilesLoaded;
             FilesError = e.Message;
         }
         finally

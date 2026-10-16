@@ -254,7 +254,8 @@ public sealed class TrayIcon : IDisposable
         }
         GetCursorPos(out var pt);
         SetForegroundWindow(hwnd);
-        var chosen = TrackPopupMenuEx(menu, 0x0100 | 0x0080 | 0x0008, pt.X, pt.Y, hwnd, IntPtr.Zero);
+        uint chosen;
+        using (DiagnosticsService.Modal()) chosen = TrackPopupMenuEx(menu, 0x0100 | 0x0080 | 0x0008, pt.X, pt.Y, hwnd, IntPtr.Zero);
         PostMessageW(hwnd, 0, IntPtr.Zero, IntPtr.Zero);
         DestroyMenu(menu);
         if (chosen != 0 && actions.TryGetValue(chosen, out var action)) action();

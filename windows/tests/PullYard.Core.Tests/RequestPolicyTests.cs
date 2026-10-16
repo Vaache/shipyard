@@ -202,6 +202,21 @@ public class RequestPolicyTests : IDisposable
         Assert.Null(all[1].Note);
     }
 
+    [Fact]
+    public async Task PartialGraphQLIsRecordedOkWithNote()
+    {
+        Diagnostics.Enabled = true;
+        var (api, h) = Make();
+        h.Then(HttpStatusCode.OK, "{\"data\":{\"repository\":{\"pullRequest\":{\"headRefOid\":\"abc\"}}},\"errors\":[{\"type\":\"FORBIDDEN\",\"message\":\"Resource not accessible\"}]}");
+        var pr = await api.PullRequestPulse(Pr);
+        Assert.Equal("abc", pr!.HeadRefOid);
+        var entry = Assert.Single(Diagnostics.Shared.Requests());
+        Assert.Equal(200, entry.Status);
+        Assert.Null(entry.Error);
+        Assert.Equal("partial", entry.Note);
+        Assert.Equal("PullRequestPulse", entry.Name);
+    }
+
     private static Action<HttpResponseMessage> LastModified(string value, int? poll = null) => r =>
     {
         r.Content.Headers.TryAddWithoutValidation("Last-Modified", value);

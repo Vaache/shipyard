@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using PullYard.Core.Api;
+using PullYard.Core.Util;
 
 namespace PullYard.ViewModels;
 
@@ -21,29 +22,42 @@ public sealed partial class SearchListViewModel : ObservableObject
     private bool hasMore;
     private bool loadingMore;
     private string currentQuery = "";
+    private string? currentKey;
     private int generation;
+    private bool fetched;
 
     public HashSet<string> Fresh { get; } = new();
 
-    public async Task Load(GitHubApi? api, string query, bool silent = false)
+    private static string? Account => Demo.IsOn ? null : AppViewModel.Shared.Account;
+
+    private static string CacheKey(string? account, string query) => $"{account}\n{query}";
+
+    public static void ClearCache() => Cache.Clear();
+
+    public async Task Load(GitHubApi? api, string query, bool silent = false, bool persist = true)
     {
         if (api is null) return;
+        var account = persist ? Account : null;
+        var key = CacheKey(Account, query);
         var switched = false;
-        if (query != currentQuery)
+        if (key != currentKey)
         {
             switched = true;
+            currentKey = key;
             currentQuery = query;
+            fetched = false;
             Error = null;
-            if (Cache.TryGetValue(query, out var snap)) Apply(snap, false);
+            if (Cache.TryGetValue(key, out var snap)) Apply(snap, false);
             else
             {
                 Items = new();
                 Total = 0;
                 LastUpdated = null;
+                if (account is not null) ShowStored(account, query, key).Forget();
             }
         }
         var gen = ++generation;
-        if (!silent || switched) Loading = true;
+        if (switched ? Items.Count == 0 : !silent) Loading = true;
         Refreshing = true;
         try
         {
@@ -52,7 +66,7 @@ public sealed partial class SearchListViewModel : ObservableObject
             var merged = r.Nodes.ToList();
             var nextCursor = r.PageInfo?.EndCursor;
             var more = r.PageInfo?.HasNextPage ?? false;
-            if (!switched && Items.Count > r.Nodes.Count)
+            if (!switched && fetched && Items.Count > r.Nodes.Count)
             {
                 var fresh = r.Nodes.Select(n => n.Id).ToHashSet();
                 merged.AddRange(Items.Skip(r.Nodes.Count).Where(i => !fresh.Contains(i.Id)));
@@ -60,9 +74,11 @@ public sealed partial class SearchListViewModel : ObservableObject
                 more = hasMore;
             }
             var snapshot = new Snapshot(merged, r.IssueCount, nextCursor, more, DateTimeOffset.Now);
-            Cache[query] = snapshot;
+            Cache[key] = snapshot;
+            fetched = true;
             Apply(snapshot, !switched);
             Error = null;
+            if (account is not null && account == Account) ListSnapshotStore.Shared.Save(account, query, new ListSnapshot(r.Nodes, r.IssueCount, snapshot.Updated)).Forget();
         }
         catch (Exception e)
         {
@@ -77,6 +93,14 @@ public sealed partial class SearchListViewModel : ObservableObject
                 Refreshing = false;
             }
         }
+    }
+
+    private async Task ShowStored(string? account, string query, string key)
+    {
+        var stored = await ListSnapshotStore.Shared.LoadAsync(account, query);
+        if (stored is null || fetched || key != currentKey || Items.Count > 0) return;
+        Apply(new Snapshot(stored.Items, stored.Total, null, false, stored.Updated), false);
+        Loading = false;
     }
 
     private void Apply(Snapshot snap, bool markFresh)
@@ -110,7 +134,7 @@ public sealed partial class SearchListViewModel : ObservableObject
             Items = Items.Concat(added).ToList();
             cursor = r.PageInfo?.EndCursor;
             hasMore = r.PageInfo?.HasNextPage ?? false;
-            Cache[query] = new Snapshot(Items, Total, cursor, hasMore, LastUpdated ?? DateTimeOffset.Now);
+            if (currentKey is { } key) Cache[key] = new Snapshot(Items, Total, cursor, hasMore, LastUpdated ?? DateTimeOffset.Now);
         }
         catch
         {

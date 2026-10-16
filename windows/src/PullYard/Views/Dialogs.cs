@@ -40,6 +40,7 @@ public static class Dialogs
     {
         if (open) return ContentDialogResult.None;
         open = true;
+        using var modal = DiagnosticsService.Modal();
         try
         {
             return await d.ShowAsync();

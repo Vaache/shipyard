@@ -61,7 +61,7 @@ public sealed class SearchListView : ListPane
 
     private async Task Reload(bool silent = false, bool typing = false)
     {
-        await vm.Load(Model.Api, Query, silent || typing);
+        await vm.Load(Model.Api, Query, silent || typing, text.Length == 0);
         if (grouped) await vm.LoadAll(Model.Api);
     }
 

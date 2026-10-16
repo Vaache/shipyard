@@ -563,13 +563,18 @@ public sealed class InspectorPRDetail : Grid
             model.PropertyChanged += OnModel;
             app.LiveTick -= live.Tick;
             app.LiveTick += live.Tick;
+            model.FilesInInspector = showFiles;
             status.Retry = () => model.Load(true).Forget();
             model.Load().Forget();
             Render();
         };
         Unloaded += (_, _) =>
         {
-            if (model is not null) model.PropertyChanged -= OnModel;
+            if (model is not null)
+            {
+                model.PropertyChanged -= OnModel;
+                model.FilesInInspector = false;
+            }
             app.LiveTick -= live.Tick;
         };
     }
@@ -584,6 +589,7 @@ public sealed class InspectorPRDetail : Grid
             case nameof(PRDetailViewModel.Pr):
             case nameof(PRDetailViewModel.Files):
             case nameof(PRDetailViewModel.FilesLoaded):
+            case nameof(PRDetailViewModel.FilesError):
             case nameof(PRDetailViewModel.Error):
                 Render();
                 break;
@@ -664,10 +670,15 @@ public sealed class InspectorPRDetail : Grid
             HorizontalContentAlignment = HorizontalAlignment.Stretch
         };
         var filesPanel = Ui.V(3);
+        if (showFiles && model.FilesError is null) model.LoadFiles().Forget();
         if (model.FilesLoaded)
         {
             foreach (var f in model.Files)
                 filesPanel.Children.Add(Ui.Columns((Ui.Text(f.StatusLetter, 11, "muted", FontWeights.Bold, mono: true), Ui.Auto), (Ui.Text(f.Id, 12, "text", mono: true), Ui.Star), (Ui.DiffStat(f.Additions, f.Deletions, 11), Ui.Auto)));
+        }
+        else if (model.FilesError is { } filesError && !model.FilesLoading)
+        {
+            filesPanel.Children.Add(Ui.Error(filesError, () => model.LoadFiles().Forget()));
         }
         else
         {
@@ -677,9 +688,14 @@ public sealed class InspectorPRDetail : Grid
         filesHeader.Expanding += (_, _) =>
         {
             showFiles = true;
+            model.FilesInInspector = true;
             model.LoadFiles().Forget();
         };
-        filesHeader.Collapsed += (_, _) => showFiles = false;
+        filesHeader.Collapsed += (_, _) =>
+        {
+            showFiles = false;
+            model.FilesInInspector = false;
+        };
         body.Children.Add(filesHeader);
         status.Update(model.LastUpdated, model.Loading, model.RefreshError);
     }
