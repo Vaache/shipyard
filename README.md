@@ -77,6 +77,14 @@ Optional on every platform: [GitHub CLI](https://cli.github.com) for one-click s
 
 ### macOS
 
+With [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask pullyard/tap/pullyard
+```
+
+Or by hand:
+
 1. Download [`PullYard.dmg`](https://github.com/pullyard/pullyard/releases/latest/download/PullYard.dmg).
 2. Open it and drag **PullYard** to Applications.
 3. The app is not notarized yet, so macOS blocks the first launch. Open **System Settings → Privacy & Security → Open Anyway** (the DMG includes a *How to Install* guide), or run:
