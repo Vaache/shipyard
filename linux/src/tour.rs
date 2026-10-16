@@ -98,6 +98,7 @@ pub fn run(_app: Rc<App>) {
     p.wait(9000).shot("01-review-requests");
     p.act(|| app::set_section(Section::Prs(PrFilter::Mine))).wait(4000).shot("02-created-by-me");
     let rr = r.clone();
+    p.act(|| app::set_section(Section::Prs(PrFilter::ReviewRequested))).wait(3000);
     p.act(move || app::select(Some(Route::Pr(rr)))).wait(9000).shot("03-pr-conversation");
     let model = move || app::pr_model(&r);
     let m = model.clone();
@@ -164,14 +165,20 @@ pub fn run(_app: Rc<App>) {
     p.act(|| app::set_section(Section::Claude)).wait(4000).shot("16-claude");
     p.act(|| {
         let ws = app::get().claude.clone();
-        let tab = ws.new_session("/tmp", None, Some("Cancel stale searches".into()), None, Some(crate::claude::TabKind::Chat));
-        if let Some(chat) = &tab.chat {
-            for line in crate::fixtures::CHAT_STREAM {
-                chat.feed(line);
+        let folder = crate::demo::folder().unwrap_or_else(|| "/tmp".into());
+        let prompt = crate::brand::env_var("TOUR_PROMPT");
+        let tab = ws.new_session(&folder, prompt, Some("Cancel stale searches".into()), None, Some(crate::claude::TabKind::Chat));
+        let script = crate::brand::env_var("TOUR_CHAT").and_then(|p| std::fs::read_to_string(p).ok());
+        let chat = tab.chat.clone();
+        glib::timeout_add_local_once(Duration::from_millis(1500), move || {
+            let Some(chat) = chat else { return };
+            match &script {
+                Some(text) => text.lines().for_each(|line| chat.feed(line)),
+                None => crate::fixtures::CHAT_STREAM.iter().for_each(|line| chat.feed(line)),
             }
-        }
+        });
     })
-    .wait(3000)
+    .wait(5000)
     .shot("16-claude-chat");
     p.act(crate::ui::settings::show).wait(2500).shot("17-preferences").act(close_dialog);
     p.wait(1000).act(|| {

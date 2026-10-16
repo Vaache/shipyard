@@ -123,30 +123,80 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          Set-Item "env:${{ steps.brand.outputs.envprefix }}_TOKEN" $env:GH_TOKEN
-          Set-Item "env:${{ steps.brand.outputs.envprefix }}_DEMO_REPO" $env:GITHUB_REPOSITORY
-          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $exe = "windows/dist/x64/app/${{ steps.brand.outputs.exe }}.exe"
-          $shots = New-Item -ItemType Directory -Force -Path "windows/dist/shots"
-          $pr = gh pr list --repo $env:GITHUB_REPOSITORY --state all --limit 1 --json number -q '.[0].number'
-          $link = if ($pr) { "${{ steps.brand.outputs.scheme }}://github.com/$env:GITHUB_REPOSITORY/pull/$pr" } else { "" }
-          $p = Start-Process -FilePath $exe -ArgumentList @('--smoke-tour', $link) -PassThru
-          $i = 0
-          while (-not $p.HasExited -and $i -lt 40) {
-            Start-Sleep -Seconds 3
-            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-            $g = [System.Drawing.Graphics]::FromImage($bmp)
-            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-            $bmp.Save((Join-Path $shots ("shot-{0:D2}.png" -f $i)), [System.Drawing.Imaging.ImageFormat]::Png)
-            $g.Dispose(); $bmp.Dispose()
-            $i++
+          $prefix = "${{ steps.brand.outputs.envprefix }}"
+          $demo = Join-Path $env:USERPROFILE "code\web-app"
+          New-Item -ItemType Directory -Force -Path $demo | Out-Null
+          Copy-Item -Path ".github/tour/web-app/*" -Destination $demo -Recurse -Force
+          git -C $demo init -q -b main
+          git -C $demo -c user.name=Demo -c user.email=demo@example.com add -A
+          git -C $demo -c user.name=Demo -c user.email=demo@example.com commit -qm init
+          git -C $demo checkout -qb feat/search-debounce
+          Copy-Item -Path ".github/tour/useSearch.edited.ts" -Destination (Join-Path $demo "src\search\useSearch.ts") -Force
+          $history = New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE ".claude\projects\C--Users-runneradmin-code-web-app")
+          $age = 2
+          foreach ($f in Get-ChildItem ".github/tour/sessions/*.jsonl") {
+            $out = Join-Path $history $f.Name
+            (Get-Content $f.FullName -Raw).Replace("__DEMO__", $demo.Replace("\", "\\")) | Set-Content -Path $out -NoNewline -Encoding utf8NoBOM
+            (Get-Item $out).LastWriteTime = (Get-Date).AddHours(-$age)
+            $age += 20
           }
-          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          $npm = New-Item -ItemType Directory -Force -Path (Join-Path $env:APPDATA "npm")
+          Set-Content -Path (Join-Path $npm "claude.cmd") -Encoding ascii -Value @(
+            '@echo off'
+            'if /i "%~1"=="auth" (echo {"loggedIn":true,"authMethod":"claude.ai","email":"alex@example.com","subscriptionType":"max"}& exit /b 0)'
+            'if /i "%~1"=="--version" (echo 2.1.0 ^(Claude Code^)& exit /b 0)'
+            'more > nul'
+          )
+          Set-Item "env:${prefix}_TOKEN" $env:GH_TOKEN
+          Set-Item "env:${prefix}_DEMO_REPO" "migueldeicaza/SwiftTerm"
+          Set-Item "env:${prefix}_DEMO_FOLDER" $demo
+          Set-Item "env:${prefix}_TOUR_CHAT" (Resolve-Path ".github/tour/claude-chat.jsonl").Path
+          Set-Item "env:${prefix}_TOUR_PROMPT" "Searching quickly shows results for an older query. Cancel stale requests."
+          try { Set-DisplayResolution -Width 1920 -Height 1080 -Force } catch { Write-Host "Display resolution unchanged: $_" }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          Add-Type -Namespace Tour -Name Dwm -MemberDefinition '[System.Runtime.InteropServices.DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(System.IntPtr hwnd, int attr, int[] rect, int size);'
+          function Save-Window($proc, $path) {
+            $proc.Refresh()
+            $r = New-Object int[] 4
+            $h = $proc.MainWindowHandle
+            if ($h -eq [IntPtr]::Zero -or [Tour.Dwm]::DwmGetWindowAttribute($h, 9, $r, 16) -ne 0) {
+              $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+              $r = @($b.Left, $b.Top, $b.Right, $b.Bottom)
+            }
+            $bmp = New-Object System.Drawing.Bitmap ($r[2] - $r[0]), ($r[3] - $r[1])
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($r[0], $r[1], 0, 0, $bmp.Size)
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose(); $bmp.Dispose()
+          }
+          $exe = "windows/dist/x64/app/${{ steps.brand.outputs.exe }}.exe"
           $data = Join-Path $env:LOCALAPPDATA "${{ steps.brand.outputs.name }}"
-          foreach ($f in @('tour.log', 'errors.log')) { $path = Join-Path $data $f; if (Test-Path $path) { Write-Host "--- $f"; Get-Content $path | Write-Host } }
-          Write-Host "Exit code: $($p.ExitCode)"
-          if ($p.ExitCode -ne 0) { throw "UI tour exited with $($p.ExitCode)" }
+          $log = Join-Path $data "tour.log"
+          $link = "${{ steps.brand.outputs.scheme }}://github.com/migueldeicaza/SwiftTerm/pull/753"
+          $personalize = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+          if (-not (Test-Path $personalize)) { New-Item -Path $personalize -Force | Out-Null }
+          $codes = @{}
+          foreach ($mode in @("dark", "light")) {
+            Set-ItemProperty -Path $personalize -Name AppsUseLightTheme -Value ([int]($mode -eq "light")) -Type DWord
+            Remove-Item $log -ErrorAction SilentlyContinue
+            $shots = New-Item -ItemType Directory -Force -Path "windows/dist/shots/$mode"
+            $p = Start-Process -FilePath $exe -ArgumentList @('--smoke-tour', $link) -PassThru
+            $seen = 0
+            $deadline = (Get-Date).AddMinutes(4)
+            while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
+              Start-Sleep -Milliseconds 250
+              $lines = @(Get-Content $log -ErrorAction SilentlyContinue)
+              for (; $seen -lt $lines.Count; $seen++) {
+                if ($lines[$seen] -match ' shot (\S+)$') { Save-Window $p (Join-Path $shots "$($Matches[1]).png") }
+              }
+            }
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+            $p.WaitForExit()
+            foreach ($f in @('tour.log', 'errors.log')) { $path = Join-Path $data $f; if (Test-Path $path) { Write-Host "--- $mode $f"; Get-Content $path | Write-Host } }
+            Write-Host "Exit code ($mode): $($p.ExitCode)"
+            $codes[$mode] = $p.ExitCode
+          }
+          foreach ($mode in $codes.Keys) { if ($codes[$mode] -ne 0) { throw "UI tour ($mode) exited with $($codes[$mode])" } }
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: matrix.arch == 'x64' && always()

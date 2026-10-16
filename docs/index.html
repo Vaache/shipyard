@@ -57,6 +57,7 @@ h1 .grad{color:var(--muted)}
 .shot:before{display:none}
 .shot img{display:block;width:100%;height:auto;filter:drop-shadow(0 24px 40px rgba(0,0,0,.4))}
 .tour-video{margin:56px auto 0;width:100%;max-width:1100px;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#0c1220;filter:drop-shadow(0 24px 40px rgba(0,0,0,.4))}
+.tour-video img{display:block;width:100%;height:100%;object-fit:cover}
 .tour-video video{display:block;width:100%;height:100%;object-fit:cover;cursor:pointer;background:#0c1220}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .gallery{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:48px}
@@ -65,6 +66,9 @@ h1 .grad{color:var(--muted)}
 .gallery figcaption{margin-top:14px;color:var(--muted);font-size:15px}
 .gallery figcaption b{color:var(--text);font-weight:600}
 .gallery .wide{grid-column:1/-1}
+img[data-shot]:not([src]){visibility:hidden}
+.os-tabs.platform-switch{margin-top:14px}
+#tour .os-tabs.platform-switch{margin-top:26px}
 
 section{padding:110px 0;position:relative}
 .eyebrow{color:var(--coral);font-weight:600;font-size:15px;margin-bottom:10px}
@@ -113,7 +117,7 @@ details.platforms.is-open{background:none}
 .os-tabs{display:inline-flex;gap:4px;padding:4px;margin-top:34px;border-radius:11px;background:var(--bg2)}
 .os-tabs button{border:0;background:none;color:var(--muted);font:600 14px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:10px 16px;border-radius:8px;cursor:pointer;transition:background .15s ease,color .15s ease}
 .os-tabs button:hover{color:var(--text)}
-.os-tabs button[aria-selected="true"]{background:var(--panel2);color:var(--text)}
+.os-tabs button[aria-selected="true"],.os-tabs button[aria-pressed="true"]{background:var(--panel2);color:var(--text)}
 .os-tabs button:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
 .os-title{display:none;margin:56px 0 0;font-size:22px;letter-spacing:-.01em}
 .os-intro{color:var(--muted);font-size:16px;max-width:680px;margin:22px 0 0}
@@ -163,7 +167,16 @@ footer a:hover{color:var(--text)}
   .code .label{min-width:0;flex-basis:100%}
 }
 </style>
-<noscript><style>.os-only,.os-tabs{display:none!important}.os-title{display:block}.cta noscript{display:contents}</style></noscript>
+<script>
+(function(){
+  var uad=navigator.userAgentData, ua=navigator.userAgent||"";
+  var hint=((uad&&uad.platform)||"")+" "+(navigator.platform||"")+" "+ua;
+  var os=/android|cros|chrome ?os/i.test(hint)?"other":/mac|iphone|ipad|ipod/i.test(hint)?"mac":/windows|win32|win64/i.test(hint)?"windows":/linux|x11|bsd/i.test(hint)?"linux":"other";
+  document.documentElement.setAttribute("data-os",os);
+  document.documentElement.setAttribute("data-platform",os==="other"?"mac":os);
+})();
+</script>
+<noscript><style>.os-only,.os-tabs{display:none!important}.os-title{display:block}.cta noscript{display:contents}img[data-shot],.tour-video video{display:none}.reveal{opacity:1;transform:none}.demo{display:block;height:auto;padding:0}.demo img{display:block;width:100%;height:auto}</style></noscript>
 </head>
 <body>
 
@@ -222,13 +235,19 @@ footer a:hover{color:var(--text)}
     </details>
 
     <figure class="tour-video reveal">
-      <video muted loop playsinline preload="none" poster="img/pullyard-web-poster.jpg" width="1920" height="1080" aria-label="PullYard product tour">
-        <source src="img/pullyard-web-1920x1080.webm" type="video/webm">
-        <source src="img/pullyard-web-1280x720.mp4" type="video/mp4">
+      <video muted loop playsinline preload="none" width="1920" height="1080" aria-label="PullYard product tour" data-tour-video>
+        <source type="video/webm">
+        <source type="video/mp4">
       </video>
+      <noscript><img src="img/pullyard-web-poster.jpg" width="1920" height="1080" alt="PullYard product tour"></noscript>
       <span class="sr-only">Click the video to play or pause it.</span>
     </figure>
-    <p class="demo-hint tour-hint">A one-minute tour: diffs, review, merge, Fix with Claude Code and accounts.</p>
+    <p class="demo-hint tour-hint" data-platform-text='{"mac":"A one-minute tour: diffs, review, merge, Fix with Claude Code and accounts.","windows":"A one-minute tour on Windows: diffs, review, merge, Fix with Claude Code and repositories.","linux":"A one-minute tour on Linux: diffs, review, merge, Fix with Claude Code and repositories."}'>A one-minute tour: diffs, review, merge, Fix with Claude Code and accounts.</p>
+    <div class="os-tabs platform-switch" role="group" aria-label="Show the app on">
+      <button type="button" data-platform="mac" aria-pressed="true">macOS</button>
+      <button type="button" data-platform="windows" aria-pressed="false">Windows</button>
+      <button type="button" data-platform="linux" aria-pressed="false">Linux</button>
+    </div>
 
     <div class="shot reveal">
       <div id="demo" class="demo" role="application" aria-label="Interactive PullYard demo">
@@ -296,7 +315,8 @@ footer a:hover{color:var(--text)}
       </ul>
     </div>
     <div class="claude-shot reveal">
-      <img src="img/claude.webp" width="1600" height="958" loading="lazy" alt="Claude Code chat in PullYard editing a file and asking permission to run tests, with the changed files on the right">
+      <img data-shot="claude.webp" width="1600" height="958" loading="lazy" alt="Claude Code chat in PullYard editing a file and asking permission to run tests" data-alt="Claude Code chat in PullYard editing a file and asking permission to run tests">
+      <noscript><img src="img/claude.webp" width="1600" height="958" alt="Claude Code chat in PullYard editing a file and asking permission to run tests, with the changed files on the right"></noscript>
     </div>
   </div>
 </section>
@@ -306,13 +326,18 @@ footer a:hover{color:var(--text)}
     <div class="reveal">
       <div class="eyebrow" style="color:var(--violet)">A closer look</div>
       <h2>What it looks like.</h2>
-      <p class="sub">These are real screenshots of PullYard on macOS, open on a public repository.</p>
+      <p class="sub">These are real screenshots of PullYard on <span data-platform-name>macOS</span>, open on a public repository.</p>
+      <div class="os-tabs platform-switch" role="group" aria-label="Show screenshots for">
+        <button type="button" data-platform="mac" aria-pressed="true">macOS</button>
+        <button type="button" data-platform="windows" aria-pressed="false">Windows</button>
+        <button type="button" data-platform="linux" aria-pressed="false">Linux</button>
+      </div>
     </div>
     <div class="gallery">
-      <figure class="reveal wide"><img src="img/pr-files.webp" width="1600" height="958" loading="lazy" alt="Changed files of a pull request with a fast diff viewer"><figcaption><b>Changed files.</b> A native diff viewer that handles thousands of lines, with a file list and checkmarks for files you've viewed.</figcaption></figure>
-      <figure class="reveal"><img src="img/pr-conversation.webp" width="1600" height="958" loading="lazy" alt="Pull request conversation with merge status and unresolved comments"><figcaption><b>Conversation.</b> Reviews, threads and checks, and a button that sends unresolved comments to Claude Code.</figcaption></figure>
-      <figure class="reveal"><img src="img/repo.webp" width="1600" height="958" loading="lazy" alt="Repository browser with file tree and rendered README"><figcaption><b>Repository browser.</b> File tree, README and code with syntax highlighting.</figcaption></figure>
-      <figure class="reveal wide"><img src="img/light.webp" width="1600" height="958" loading="lazy" alt="PullYard in light mode"><figcaption><b>Light or dark.</b> The PullYard theme comes in both, or you can switch to the standard macOS look in Settings.</figcaption></figure>
+      <figure class="reveal wide"><img data-shot="pr-files.webp" width="1600" height="958" loading="lazy" alt="Changed files of a pull request with a fast diff viewer" data-alt="Changed files of a pull request with a fast diff viewer"><noscript><img src="img/pr-files.webp" width="1600" height="958" alt="Changed files of a pull request with a fast diff viewer"></noscript><figcaption><b>Changed files.</b> A native diff viewer that handles thousands of lines, with a file list and checkmarks for files you've viewed.</figcaption></figure>
+      <figure class="reveal"><img data-shot="pr-conversation.webp" width="1600" height="958" loading="lazy" alt="Pull request conversation with merge status and unresolved comments" data-alt="Pull request conversation with merge status and unresolved comments"><noscript><img src="img/pr-conversation.webp" width="1600" height="958" alt="Pull request conversation with merge status and unresolved comments"></noscript><figcaption><b>Conversation.</b> Reviews, threads and checks, and a button that sends unresolved comments to Claude Code.</figcaption></figure>
+      <figure class="reveal"><img data-shot="repo.webp" width="1600" height="958" loading="lazy" alt="Repository browser with file tree and rendered README" data-alt="Repository browser with file tree and rendered README"><noscript><img src="img/repo.webp" width="1600" height="958" alt="Repository browser with file tree and rendered README"></noscript><figcaption><b>Repository browser.</b> File tree, README and code with syntax highlighting.</figcaption></figure>
+      <figure class="reveal wide"><img data-shot="light.webp" width="1600" height="958" loading="lazy" alt="PullYard in light mode" data-alt="PullYard in light mode"><noscript><img src="img/light.webp" width="1600" height="958" alt="PullYard in light mode"></noscript><figcaption><b>Light or dark.</b> The PullYard theme comes in both, or you can switch to the standard <span data-platform-text='{"mac":"macOS","windows":"Windows","linux":"GNOME"}'>macOS</span> look in Settings.</figcaption></figure>
     </div>
   </div>
 </section>
@@ -432,8 +457,12 @@ footer a:hover{color:var(--text)}
     other:"macOS, Windows and Linux"
   };
   var uad=navigator.userAgentData, ua=navigator.userAgent||"";
-  var hint=((uad&&uad.platform)||"")+" "+(navigator.platform||"")+" "+ua;
-  var os=/android|cros|chrome ?os/i.test(hint)?"other":/mac|iphone|ipad|ipod/i.test(hint)?"mac":/windows|win32|win64/i.test(hint)?"windows":/linux|x11|bsd/i.test(hint)?"linux":"other";
+  var os=document.documentElement.getAttribute("data-os")||"other";
+  var MEDIA={
+    mac:{dir:"img/",w:1600,h:958},
+    windows:{dir:"img/windows/",w:1586,h:993},
+    linux:{dir:"img/linux/",w:1590,h:990}
+  };
   var arch=/arm64|aarch64/i.test(ua)?"arm64":"x64";
   var release=null, deb=null;
   function asset(name){
@@ -471,7 +500,39 @@ footer a:hover{color:var(--text)}
       if(on&&focus)t.focus();
     });
     document.querySelectorAll("[data-os-panel]").forEach(function(p){p.hidden=p.getAttribute("data-os-panel")!==key});
+    showPlatform(key);
   }
+  function showPlatform(key){
+    var m=MEDIA[key]||MEDIA.mac, root=document.documentElement, changed=root.getAttribute("data-platform")!==key;
+    root.setAttribute("data-platform",key);
+    document.querySelectorAll("button[data-platform]").forEach(function(b){b.setAttribute("aria-pressed",b.getAttribute("data-platform")===key?"true":"false")});
+    document.querySelectorAll("[data-platform-name]").forEach(function(el){el.textContent=NAMES[key]});
+    document.querySelectorAll("[data-platform-text]").forEach(function(el){try{el.textContent=JSON.parse(el.getAttribute("data-platform-text"))[key]}catch(e){}});
+    document.querySelectorAll("img[data-shot]").forEach(function(img){
+      var src=m.dir+img.getAttribute("data-shot");
+      if(img.getAttribute("src")===src)return;
+      img.width=m.w;img.height=m.h;
+      img.alt=img.getAttribute("data-alt")+" on "+NAMES[key];
+      img.src=src;
+    });
+    var video=document.querySelector("[data-tour-video]");
+    if(video){
+      var poster=m.dir+"pullyard-web-poster.jpg";
+      if(video.getAttribute("poster")!==poster){
+        var playing=!video.paused;
+        video.poster=poster;
+        video.querySelector('source[type="video/webm"]').src=m.dir+"pullyard-web-1920x1080.webm";
+        video.querySelector('source[type="video/mp4"]').src=m.dir+"pullyard-web-1280x720.mp4";
+        video.removeAttribute("src");
+        video.load();
+        if(playing)video.play().catch(function(){});
+      }
+    }
+    if(changed)document.dispatchEvent(new CustomEvent("platformchange",{detail:key}));
+  }
+  document.querySelectorAll("button[data-platform]").forEach(function(b){
+    b.addEventListener("click",function(){selectOS(b.getAttribute("data-platform"))});
+  });
   var tabs=[].slice.call(document.querySelectorAll("[data-os-tab]"));
   tabs.forEach(function(t,i){
     t.addEventListener("click",function(){selectOS(t.getAttribute("data-os-tab"))});
@@ -541,6 +602,7 @@ footer a:hover{color:var(--text)}
   var video = document.querySelector(".tour-video video");
   if (!video) return;
   var fellBack = false, visible = false;
+  document.addEventListener("platformchange", function () { fellBack = false; });
   video.addEventListener("error", function () {
     if (fellBack || !/\.webm$/.test(video.currentSrc)) return;
     fellBack = true;

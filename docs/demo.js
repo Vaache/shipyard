@@ -194,8 +194,20 @@
     return s === "merged" ? "merge" : "pr";
   }
 
+  function platform() {
+    return document.documentElement.getAttribute("data-platform") || "mac";
+  }
+  function sendKey() {
+    return platform() === "mac" ? "⌘↩" : "Ctrl+Enter";
+  }
+  function windowBar() {
+    if (platform() === "mac") return "";
+    var glyphs = ['<path d="M1 5h8"/>', '<rect x="1" y="1" width="8" height="8"/>', '<path d="m1 1 8 8M9 1 1 9"/>'];
+    return '<div class="d-wc" aria-hidden="true"><b>PullYard</b><span>' + glyphs.map(function (g) { return '<i><svg viewBox="0 0 10 10">' + g + "</svg></i>"; }).join("") + "</span></div>";
+  }
+
   function sidebar() {
-    var h = '<div class="d-side"><div class="d-tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>';
+    var h = '<div class="d-side">' + (platform() === "mac" ? '<div class="d-tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>' : "");
     SECTIONS.forEach(function (s) {
       if (s.h) { h += '<div class="d-h">' + s.h + "</div>"; return; }
       var on = state.section === s.id ? " on" : "";
@@ -291,7 +303,7 @@
       if (p.review) {
         h += '<div class="d-card"><div class="d-ch">' + avatar(p.review.who) + "<b>" + p.review.who + '</b> · <span class="r">requested changes</span></div><div class="d-cb"><div class="d-tpath">' + p.review.file + ":" + p.review.line + "</div>" + esc(p.review.text) + '<div class="d-acts"><button>Reply</button><button>Resolve</button><button class="d-hot" data-fix>' + icon("spark", "ti") + "Fix with Claude Code</button></div></div></div>";
       }
-      return h + '<div class="d-composer">Comment (Markdown) — ⌘↩ to send<span>Comment</span></div></div>';
+      return h + '<div class="d-composer">Comment (Markdown) — ' + sendKey() + ' to send<span>Comment</span></div></div>';
     }
     if (state.tab === "commits") {
       return '<div class="d-plain">' + p.commits.map(function (c, i) {
@@ -361,7 +373,7 @@
       '<div class="d-ln d"><span>25</span><span></span><span>−</span><span>    fetchResults(debounced)</span></div>' +
       '<div class="d-ln a"><span></span><span>25</span><span>+</span><span>    fetchResults(debounced, ctrl.signal)</span></div>' +
       '<div class="d-ln a"><span></span><span>29</span><span>+</span><span>    return () =&gt; ctrl.abort()</span></div></div>';
-    if (step.k === "perm") return '<div class="d-perm" id="d-perm"><small>Claude wants to run a command</small><code>npm test -- search</code><div class="d-pacts"><button data-allow>Allow</button><button data-deny>Deny</button><kbd>⌘↩</kbd></div></div>';
+    if (step.k === "perm") return '<div class="d-perm" id="d-perm"><small>Claude wants to run a command</small><code>npm test -- search</code><div class="d-pacts"><button data-allow>Allow</button><button data-deny>Deny</button><kbd>' + sendKey() + '</kbd></div></div>';
     if (step.k === "bash") return '<div class="d-toolx"><div class="d-tool"><span class="d-ok">' + icon("check", "ti") + '</span><b>Bash</b><small>npm test -- search</small></div><pre> ✓ src/search/SearchBar.test.tsx (8)\n ✓ src/hooks/useDebounce.test.ts (4)\n\n Tests  12 passed</pre></div>';
     if (step.k === "denied") return '<div class="d-ans dim">Skipped the tests. Tell me what to do instead.</div>';
     return "";
@@ -403,8 +415,8 @@
   }
 
   function render() {
-    root.className = "demo" + (state.detailOpen ? " show-detail" : "");
-    root.innerHTML = sidebar() + listColumn() + detail();
+    root.className = "demo os-" + platform() + (state.detailOpen ? " show-detail" : "");
+    root.innerHTML = windowBar() + sidebar() + listColumn() + detail();
     var listKey = state.section + "|" + state.filter;
     if (listKey !== lastListKey) {
       Array.prototype.slice.call(root.querySelectorAll(".d-list .d-row"), 0, 12).forEach(function (r, i) {
@@ -493,6 +505,8 @@
     state.updated = Date.now();
     if (state.section === "review") render();
   }, 6000);
+
+  document.addEventListener("platformchange", render);
 
   state.detail = "pr";
   render();

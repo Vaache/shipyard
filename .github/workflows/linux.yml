@@ -135,6 +135,10 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          sparse-checkout: .github/tour
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: tarball-x86_64
@@ -149,17 +153,41 @@ jobs:
           mkdir -p ~/.config/gtk-4.0
           printf '[Settings]\ngtk-font-name=Cantarell 11\n' > ~/.config/gtk-4.0/settings.ini
 
+      - name: Demo Claude Code workspace
+        run: |
+          mkdir -p ~/.local/bin ~/code/web-app
+          printf '%s\n' '#!/bin/sh' 'case "$1" in' '  auth) echo '"'"'{"loggedIn":true,"authMethod":"claude.ai","email":"alex@example.com","subscriptionType":"max"}'"'"' ;;' '  --version|-v) echo "2.1.0 (Claude Code)" ;;' '  *) exec cat >/dev/null ;;' 'esac' > ~/.local/bin/claude
+          chmod +x ~/.local/bin/claude
+          cp -R .github/tour/web-app/. ~/code/web-app/
+          cd ~/code/web-app
+          git init -q -b main
+          git -c user.name=Demo -c user.email=demo@example.com add -A
+          git -c user.name=Demo -c user.email=demo@example.com commit -qm init
+          git checkout -qb feat/search-debounce
+          cp "$GITHUB_WORKSPACE/.github/tour/useSearch.edited.ts" src/search/useSearch.ts
+          mkdir -p ~/.claude/projects/-home-runner-code-web-app
+          hours=2
+          for f in "$GITHUB_WORKSPACE"/.github/tour/sessions/*.jsonl; do
+            out=~/.claude/projects/-home-runner-code-web-app/$(basename "$f")
+            sed "s|__DEMO__|$HOME/code/web-app|g" "$f" > "$out"
+            touch -d "-$hours hours" "$out"
+            hours=$((hours + 20))
+          done
+
       - name: Tour (dark and light)
         env:
           PULLYARD_TOKEN: ${{ github.token }}
           PULLYARD_DEMO_REPO: migueldeicaza/SwiftTerm
           PULLYARD_TOUR_PR: migueldeicaza/SwiftTerm#753
+          PULLYARD_TOUR_CHAT: ${{ github.workspace }}/.github/tour/claude-chat.jsonl
+          PULLYARD_TOUR_PROMPT: Searching quickly shows results for an older query. Cancel stale requests.
           WEBKIT_DISABLE_COMPOSITING_MODE: '1'
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
           GTK_A11Y: none
           GSK_RENDERER: cairo
           NO_AT_BRIDGE: '1'
         run: |
+          export PULLYARD_DEMO_FOLDER="$HOME/code/web-app"
           tar -C dist -xzf dist/*.tar.gz
           bin=$(find dist -path '*/bin/*' -type f | head -1)
           for scheme in dark light; do
