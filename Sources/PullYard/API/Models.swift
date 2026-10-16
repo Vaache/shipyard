@@ -55,12 +55,20 @@ struct Nodes<T: Decodable>: Decodable {
     }
 }
 
+extension Nodes: Encodable where T: Encodable {
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(nodes, forKey: .nodes)
+        try c.encodeIfPresent(totalCount, forKey: .totalCount)
+    }
+}
+
 struct PageInfo: Decodable {
     let hasNextPage: Bool
     let endCursor: String?
 }
 
-struct Count: Decodable {
+struct Count: Codable, Equatable {
     let totalCount: Int
 }
 
@@ -72,18 +80,18 @@ struct Login: Decodable {
     let login: String
 }
 
-struct Actor: Decodable, Hashable {
+struct Actor: Codable, Hashable {
     let login: String
     let avatarUrl: String?
 }
 
-struct LabelInfo: Decodable, Hashable {
+struct LabelInfo: Codable, Hashable {
     let name: String
     let color: String
 }
 
-struct RepoName: Decodable {
-    struct Branch: Decodable { let name: String }
+struct RepoName: Codable {
+    struct Branch: Codable { let name: String }
     let nameWithOwner: String
     var defaultBranchRef: Branch?
 }
@@ -103,25 +111,25 @@ struct Viewer: Decodable {
     let login: String
 }
 
-struct RESTUser: Decodable {
+struct RESTUser: Codable {
     let login: String
     let name: String?
     let avatarUrl: String?
 }
 
-struct RollupState: Decodable {
+struct RollupState: Codable {
     let state: String
 }
 
-struct RollupCommit: Decodable {
+struct RollupCommit: Codable {
     let statusCheckRollup: RollupState?
 }
 
-struct RollupCommitNode: Decodable {
+struct RollupCommitNode: Codable {
     let commit: RollupCommit
 }
 
-struct SearchItem: Decodable, Identifiable {
+struct SearchItem: Codable, Identifiable {
     let typename: String
     let number: Int
     let title: String
@@ -456,9 +464,84 @@ struct PRRepository: Decodable {
     var canWrite: Bool { ["ADMIN", "MAINTAIN", "WRITE"].contains(viewerPermission ?? "") }
 }
 
+struct PRPulse: Decodable, Equatable {
+    struct Target: Decodable, Equatable { let oid: String? }
+    struct BaseRef: Decodable, Equatable { let target: Target? }
+    struct AutoMerge: Decodable, Equatable { let enabledAt: Date? }
+    struct Context: Decodable, Equatable {
+        let typename: String
+        let databaseId: Int?
+        let name: String?
+        let status: String?
+        let conclusion: String?
+        let completedAt: Date?
+        let context: String?
+        let state: String?
+
+        enum CodingKeys: String, CodingKey { case typename = "__typename", databaseId, name, status, conclusion, completedAt, context, state }
+    }
+    struct Contexts: Decodable, Equatable {
+        let totalCount: Int
+        let nodes: [Context?]
+    }
+    struct Requested: Decodable, Equatable { let requestedReviewer: Reviewer? }
+    struct Requests: Decodable, Equatable {
+        let totalCount: Int
+        let nodes: [Requested?]
+    }
+    struct Rollup: Decodable, Equatable {
+        let state: String
+        let contexts: Contexts?
+    }
+    struct Commit: Decodable, Equatable {
+        let oid: String
+        let statusCheckRollup: Rollup?
+    }
+    struct CommitNode: Decodable, Equatable { let commit: Commit }
+    struct Commits: Decodable, Equatable {
+        let totalCount: Int
+        let nodes: [CommitNode]
+    }
+    struct Thread: Decodable, Equatable { let isResolved: Bool }
+    struct Threads: Decodable, Equatable {
+        let totalCount: Int
+        let nodes: [Thread]
+    }
+    let updatedAt: Date
+    let headRefOid: String
+    let state: String
+    let isDraft: Bool
+    let merged: Bool
+    let mergeable: String
+    let mergeStateStatus: String?
+    let reviewDecision: String?
+    let baseRef: BaseRef?
+    let autoMergeRequest: AutoMerge?
+    let pulseComments: Count
+    let pulseReviews: Count
+    let pulseRequests: Requests
+    let pulseThreads: Threads
+    let pulseCommit: Commits
+}
+
+struct PRPulseResponse: Decodable {
+    struct Repo: Decodable { let pullRequest: PRPulse? }
+    let repository: Repo?
+}
+
 struct PRDetailResponse: Decodable {
     let viewer: Viewer
     let repository: PRRepository?
+    let pulse: PRPulse?
+
+    enum CodingKeys: String, CodingKey { case viewer, repository }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        viewer = try c.decode(Viewer.self, forKey: .viewer)
+        repository = try c.decodeIfPresent(PRRepository.self, forKey: .repository)
+        pulse = (try? PRPulseResponse(from: decoder))?.repository?.pullRequest
+    }
 }
 
 struct IssueDetail: Decodable {
@@ -532,8 +615,8 @@ struct CommitDetailREST: Decodable {
     let files: [PRFile]?
 }
 
-struct RepoSummary: Decodable, Identifiable {
-    struct Language: Decodable {
+struct RepoSummary: Codable, Identifiable {
+    struct Language: Codable {
         let name: String
         let color: String?
     }
@@ -600,7 +683,7 @@ struct ProjectSummary: Decodable, Identifiable {
 struct ProjectsResponse: Decodable {
     struct Org: Decodable {
         let login: String
-        let projectsV2: Nodes<ProjectSummary>
+        let projectsV2: Nodes<ProjectSummary>?
     }
     struct V: Decodable {
         let projectsV2: Nodes<ProjectSummary>
@@ -709,16 +792,16 @@ struct ProjectDetailResponse: Decodable {
     let node: ProjectDetail?
 }
 
-struct NotificationThread: Decodable, Identifiable {
-    struct Subject: Decodable {
+struct NotificationThread: Codable, Identifiable {
+    struct Subject: Codable {
         let title: String
         let url: String?
         let type: String
     }
-    struct Owner: Decodable {
+    struct Owner: Codable {
         let avatarUrl: String?
     }
-    struct Repo: Decodable {
+    struct Repo: Codable {
         let fullName: String
         let owner: Owner?
     }

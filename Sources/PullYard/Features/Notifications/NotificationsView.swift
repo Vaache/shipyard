@@ -8,7 +8,8 @@ struct NotificationsView: View {
     @State private var showAll = false
     @State private var selection: String?
     @State private var lastUpdated: Date?
-    @State private var loadedAll: Bool?
+    @State private var loadedKey: String?
+    @State private var checkingCache = false
     @State private var rows = RowAppearTracker.shared("notifications")
 
     var body: some View {
@@ -43,7 +44,7 @@ struct NotificationsView: View {
                     .padding(.top, 30)
                 }
             }
-            .overlay { if loading && items.isEmpty { ProgressView().controlSize(.small) } }
+            .overlay { if loading && !checkingCache && items.isEmpty { ProgressView().controlSize(.small) } }
             .liveRefresh(updated: lastUpdated, refreshing: loading, error: items.isEmpty ? nil : error) { await load() }
         }
         .navigationTitle("Notifications")
@@ -54,7 +55,7 @@ struct NotificationsView: View {
                     .disabled(!items.contains { $0.unread })
             }
         }
-        .task(id: showAll) { await load() }
+        .task(id: "\(showAll)|\(app.cacheAccount ?? "")") { await load() }
         .onChange(of: app.refreshTick) { Task { await load() } }
         .onLiveTick { await load(live: true) }
         .onChange(of: selection) { _, id in
@@ -64,18 +65,41 @@ struct NotificationsView: View {
         }
     }
 
+    private static func cacheKey(_ all: Bool) -> String {
+        "notifications|\(all ? "all" : "unread")"
+    }
+
     private func load(live: Bool = false) async {
         guard let api = app.api else { return }
+        let all = showAll
+        let account = app.cacheAccount
+        let key = Self.cacheKey(all)
+        let viewKey = "\(account ?? "")|\(key)"
         loading = true
         defer { loading = false }
+        async let request = api.notifications(all: all, live: live)
+        if loadedKey != viewKey {
+            checkingCache = true
+            let snap = await ListCache.load([NotificationThread].self, account: account, key: key)
+            checkingCache = false
+            if let snap, all == showAll, app.api === api {
+                rows.ingest(snap.value.map(\.id), mode: .silent)
+                loadedKey = viewKey
+                items = snap.value
+                lastUpdated = snap.saved
+            } else if loadedKey?.hasPrefix("\(account ?? "")|") != true {
+                items = []
+                lastUpdated = nil
+            }
+        }
         do {
-            let all = showAll
-            let fetched = try await api.notifications(all: all, live: live)
-            guard all == showAll else { return }
-            rows.ingest(fetched.map(\.id), mode: loadedAll == all ? .refresh : .cascade)
-            loadedAll = all
+            let fetched = try await request
+            guard all == showAll, app.api === api else { return }
+            rows.ingest(fetched.map(\.id), mode: loadedKey == viewKey ? .refresh : .cascade)
+            loadedKey = viewKey
             items = fetched
             lastUpdated = Date()
+            ListCache.save(fetched, account: account, key: key)
             if !showAll { app.unreadCount = items.count }
             error = nil
         } catch {
@@ -89,6 +113,13 @@ struct NotificationsView: View {
         try? await api.markNotificationRead(n.id)
         if let i = items.firstIndex(where: { $0.id == n.id }) { items[i].unread = false }
         app.unreadCount = max(0, app.unreadCount - 1)
+        persistChange()
+    }
+
+    private func persistChange() {
+        let account = app.cacheAccount
+        ListCache.save(showAll ? items : items.filter(\.unread), account: account, key: Self.cacheKey(showAll))
+        ListCache.remove(account: account, key: Self.cacheKey(!showAll))
     }
 
     private func markDone(_ n: NotificationThread) async {
@@ -96,6 +127,7 @@ struct NotificationsView: View {
         try? await api.markNotificationDone(n.id)
         items.removeAll { $0.id == n.id }
         if n.unread { app.unreadCount = max(0, app.unreadCount - 1) }
+        persistChange()
     }
 
     private func markAll() async {
@@ -103,6 +135,7 @@ struct NotificationsView: View {
         try? await api.markAllNotificationsRead()
         for i in items.indices { items[i].unread = false }
         app.unreadCount = 0
+        persistChange()
     }
 }
 

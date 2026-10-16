@@ -12,6 +12,8 @@ struct ReposView: View {
     @State private var refreshing = false
     @State private var lastUpdated: Date?
     @State private var rows = RowAppearTracker.shared("repos")
+    @State private var loadedAccount: String?
+    @State private var checkingCache = false
 
     private var visible: [RepoSummary] {
         repos.filter { (!hideArchived || !$0.isArchived) && (text.isEmpty || $0.nameWithOwner.localizedCaseInsensitiveContains(text) || ($0.description ?? "").localizedCaseInsensitiveContains(text)) }
@@ -32,7 +34,7 @@ struct ReposView: View {
                     .onAppear { if r.id == repos.last?.id { Task { await loadMore() } } }
             }
         }
-        .overlay { if loading && repos.isEmpty { ProgressView().controlSize(.small) } }
+        .overlay { if loading && !checkingCache && repos.isEmpty { ProgressView().controlSize(.small) } }
         .liveRefresh(updated: lastUpdated, refreshing: refreshing, error: repos.isEmpty ? nil : error) { await load() }
         .searchable(text: $text, placement: .toolbar, prompt: "Filter repositories")
         .navigationTitle("Repositories")
@@ -42,7 +44,15 @@ struct ReposView: View {
                     .help("Hide archived")
             }
         }
-        .task(id: app.api != nil) { if repos.isEmpty { await load(first: true) } }
+        .task(id: "\(app.cacheAccount ?? "")|\(app.api != nil)") {
+            if loadedAccount != app.cacheAccount {
+                repos = []
+                cursor = nil
+                hasMore = false
+                lastUpdated = nil
+            }
+            if repos.isEmpty { await load(first: true) }
+        }
         .onChange(of: app.refreshTick) { Task { await load() } }
         .onChange(of: text) { _, t in
             if !t.isEmpty, hasMore { Task { await loadAll() } }
@@ -51,17 +61,36 @@ struct ReposView: View {
 
     private func load(first: Bool = false) async {
         guard let api = app.api else { return }
+        let account = app.cacheAccount
+        var cached = false
         loading = true
         refreshing = true
         defer {
             loading = false
             refreshing = false
         }
+        async let request = api.repos(after: nil)
+        var snap: ListSnapshot<[RepoSummary]>?
+        if first, repos.isEmpty {
+            checkingCache = true
+            snap = await ListCache.load([RepoSummary].self, account: account, key: "repos")
+            checkingCache = false
+        }
+        if let snap, repos.isEmpty, app.api === api {
+            cached = true
+            rows.ingest(snap.value.map(\.id), mode: .silent)
+            repos = snap.value
+            loadedAccount = account
+            lastUpdated = snap.saved
+        }
         do {
-            let r = try await api.repos(after: nil)
-            let keep = repos.count > r.nodes.count ? Array(repos.dropFirst(r.nodes.count)).filter { n in !r.nodes.contains { $0.id == n.id } } : []
-            rows.ingest(r.nodes.map(\.id), mode: first ? .cascade : .refresh)
+            let r = try await request
+            guard app.api === api else { return }
+            let keep = !cached && loadedAccount == account && repos.count > r.nodes.count ? Array(repos.dropFirst(r.nodes.count)).filter { n in !r.nodes.contains { $0.id == n.id } } : []
+            rows.ingest(r.nodes.map(\.id), mode: first && !cached ? .cascade : .refresh)
             repos = r.nodes + keep
+            loadedAccount = account
+            ListCache.save(r.nodes, account: account, key: "repos")
             if keep.isEmpty {
                 cursor = r.pageInfo.endCursor
                 hasMore = r.pageInfo.hasNextPage
@@ -78,7 +107,7 @@ struct ReposView: View {
         guard let api = app.api, hasMore, !loading else { return }
         loading = true
         defer { loading = false }
-        if let r = try? await api.repos(after: cursor) {
+        if let r = try? await api.repos(after: cursor), app.api === api {
             let known = Set(repos.map(\.id))
             let added = r.nodes.filter { !known.contains($0.id) }
             rows.ingest(added.map(\.id), mode: .append)
@@ -186,16 +215,16 @@ struct RepoDetailView: View {
             if info == nil { info = nil }
         }
         .task(id: query) {
-            if tab != .code { await model.load(api: app.api, query: query) }
+            if tab != .code { await model.load(api: app.api, account: app.cacheAccount, query: query) }
         }
         .onChange(of: app.refreshTick) {
             Task {
-                if tab != .code { await model.load(api: app.api, query: query) }
+                if tab != .code { await model.load(api: app.api, account: app.cacheAccount, query: query) }
                 else if let code { await code.openDir(code.dir) }
             }
         }
         .onLiveTick {
-            if tab != .code { await model.load(api: app.api, query: query, silent: true) }
+            if tab != .code { await model.load(api: app.api, account: app.cacheAccount, query: query, silent: true) }
         }
     }
 
@@ -256,7 +285,7 @@ struct RepoDetailView: View {
         }
         .overlay { if model.loading && model.items.isEmpty { ProgressView().controlSize(.small) } }
         .liveRefresh(updated: model.lastUpdated, refreshing: model.refreshing, error: model.items.isEmpty ? nil : model.error) {
-            await model.load(api: app.api, query: query, silent: true)
+            await model.load(api: app.api, account: app.cacheAccount, query: query, silent: true)
         }
     }
 }

@@ -997,13 +997,15 @@ struct InspectorPRDetail: View {
             }
         }
         .task(id: ref) {
+            model?.inspectorFilesVisible = false
             let m = app.prModel(ref)
             model = m
-            await m?.load()
+            m?.inspectorFilesVisible = showFiles
+            await m?.load(live: m?.pr != nil)
         }
         .onLiveTick { await model?.load(live: true) }
         .onChange(of: app.refreshTick) { Task { await model?.load(full: true) } }
-        .onChange(of: tab.busy) { _, busy in if !busy { Task { await model?.load() } } }
+        .onChange(of: tab.busy) { _, busy in if !busy { Task { await model?.load(live: true) } } }
         .alert("Error", isPresented: Binding(get: { model?.actionError != nil }, set: { if !$0 { model?.actionError = nil } })) {
             Button("OK") {}
         } message: {
@@ -1114,7 +1116,8 @@ struct InspectorPRDetail: View {
             } label: {
                 Text("Files changed · \(pr.changedFiles)").font(.caption.weight(.semibold))
             }
-            .onChange(of: showFiles) { _, open in if open { Task { await model?.loadFiles() } } }
+            .onChange(of: showFiles) { _, open in model?.inspectorFilesVisible = open }
+            .onDisappear { model?.inspectorFilesVisible = false }
         }
     }
 }

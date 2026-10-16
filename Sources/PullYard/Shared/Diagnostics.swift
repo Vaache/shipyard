@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os
 
@@ -92,6 +93,7 @@ final class Diagnostics: @unchecked Sendable {
     static let enabledKey = "diagnosticsEnabled"
     static let shared = Diagnostics()
     @TaskLocal static var tick: Int?
+    @TaskLocal static var note: String?
 
     private static let enabled = OSAllocatedUnfairLock(initialState: false)
 
@@ -131,6 +133,8 @@ final class Diagnostics: @unchecked Sendable {
     private var generation = 0
     private var observers: [CFRunLoopObserver] = []
     private var busyStart: UInt64 = 0
+    private var modalInIteration = false
+    private static let observedModes: [CFRunLoopMode] = [.commonModes, CFRunLoopMode(RunLoop.Mode.modalPanel.rawValue as CFString)]
     private var panelRefreshInIteration = false
 
     static func now() -> UInt64 {
@@ -308,7 +312,7 @@ final class Diagnostics: @unchecked Sendable {
             bytes: data?.count ?? 0,
             status: http?.statusCode,
             error: error.map(Self.errorText),
-            note: nil,
+            note: Self.note,
             authenticated: authenticated,
             rateLimitRemaining: http?.value(forHTTPHeaderField: "X-RateLimit-Remaining").flatMap { Int($0) },
             rateLimitReset: http?.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap { Int($0) },
@@ -376,9 +380,13 @@ final class Diagnostics: @unchecked Sendable {
         let sleep = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, true, CFIndex.max) { [weak self] _, _ in
             self?.iterationEnded()
         }
+        let entry = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.entry.rawValue, true, 0) { [weak self] _, _ in
+            self?.loopEntered()
+        }
         busyStart = 0
-        for obs in [wake, sleep].compactMap({ $0 }) {
-            CFRunLoopAddObserver(CFRunLoopGetMain(), obs, .commonModes)
+        modalInIteration = false
+        for obs in [wake, sleep, entry].compactMap({ $0 }) {
+            for mode in Self.observedModes { CFRunLoopAddObserver(CFRunLoopGetMain(), obs, mode) }
             observers.append(obs)
         }
     }
@@ -386,20 +394,34 @@ final class Diagnostics: @unchecked Sendable {
     @MainActor
     private func removeObservers() {
         for obs in observers {
-            CFRunLoopRemoveObserver(CFRunLoopGetMain(), obs, .commonModes)
+            for mode in Self.observedModes { CFRunLoopRemoveObserver(CFRunLoopGetMain(), obs, mode) }
         }
         observers = []
     }
 
+    private static var inModalLoop: Bool {
+        CFRunLoopCopyCurrentMode(CFRunLoopGetMain()).map { $0.rawValue as String == RunLoop.Mode.modalPanel.rawValue } ?? false
+    }
+
+    private func loopEntered() {
+        if Self.inModalLoop { modalInIteration = true }
+    }
+
     private func iterationStarted() {
+        guard !Self.inModalLoop else { return }
         busyStart = Self.now()
+        modalInIteration = false
         panelRefreshInIteration = false
     }
 
     private func iterationEnded() {
-        guard busyStart != 0 else { return }
+        guard !Self.inModalLoop, busyStart != 0 else { return }
         let duration = Self.ms(busyStart, Self.now())
         busyStart = 0
+        guard !modalInIteration else {
+            modalInIteration = false
+            return
+        }
         guard duration > Self.slowUIThresholdMs else { return }
         lock.lock()
         slowUI.append(SlowUIRecord(id: makeID(), date: Date(), durationMs: duration))

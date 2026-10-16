@@ -53,7 +53,10 @@ final class PRDetailModel {
     var actionError: String?
     var busy = false
     var tab: PRTab = .conversation {
-        didSet { visitedTabs.insert(tab) }
+        didSet {
+            visitedTabs.insert(tab)
+            ensureFiles()
+        }
     }
     var visitedTabs: Set<PRTab> = [.conversation]
     let commitRows = RowAppearTracker()
@@ -68,6 +71,17 @@ final class PRDetailModel {
     private static var stackCache: [String: (stack: [StackPR], at: Date)] = [:]
     private static let stackTTL: TimeInterval = 600
     @ObservationIgnored private var filesOid: String?
+    @ObservationIgnored private var filesStale = false
+    @ObservationIgnored private var filesStaleMark = 0
+    @ObservationIgnored private var filesPending = false
+    @ObservationIgnored var inspectorFilesVisible = false {
+        didSet { ensureFiles() }
+    }
+    @ObservationIgnored private var pulse: PRPulse?
+    @ObservationIgnored private var needsFull = false
+    @ObservationIgnored private var fullReason: String?
+    @ObservationIgnored private var lastFullFetch: Date?
+    private static let fullFetchInterval: TimeInterval = 300
     @ObservationIgnored private var mergeRecheck: Task<Void, Never>?
     @ObservationIgnored private var mergeRechecks = 0
     var html = ""
@@ -132,9 +146,15 @@ final class PRDetailModel {
 
     var reviewersToReRequest: [String] { staleReviews.map(\.login) }
 
-    func load(full: Bool = false, live: Bool = false) async {
-        if full { reloadFiles = true }
-        if !live { stackRequest = (stackRequest ?? false) || full }
+    func load(full: Bool = false, live: Bool = false, file: String = #fileID, line: Int = #line) async {
+        if full {
+            reloadFiles = true
+            stackRequest = true
+        }
+        if !live {
+            needsFull = true
+            fullReason = "\(full ? "refresh" : "load") \(file.split(separator: "/").last ?? ""):\(line)"
+        }
         if let queuedLoad {
             await queuedLoad.value
             return
@@ -162,14 +182,36 @@ final class PRDetailModel {
     private func fetch() async {
         loading = true
         defer { loading = false }
+        let recent = lastFullFetch.map { Date().timeIntervalSince($0) < Self.fullFetchInterval } ?? false
+        let forced = needsFull ? fullReason : nil
+        needsFull = false
+        fullReason = nil
+        let reason: String
+        if pr == nil {
+            reason = "first"
+        } else if let forced {
+            reason = forced
+        } else if !recent {
+            reason = "stale"
+        } else if pulse == nil {
+            reason = "no baseline"
+        } else {
+            switch await pulseCheck() {
+            case .same: return
+            case .changed: reason = "changed"
+            case .failed: reason = "pulse error"
+            }
+        }
         do {
-            let r = try await api.pullRequest(ref)
+            let r = try await Diagnostics.$note.withValue("full: \(reason)") { try await api.pullRequest(ref) }
             viewerLogin = r.viewer.login
             guard let repo = r.repository, let pr = repo.pullRequest else {
                 notPR = true
                 return
             }
             self.repo = repo
+            pulse = r.pulse
+            lastFullFetch = Date()
             commitRows.seed(pr.allCommits.nodes.map(\.commit.oid))
             checkRows.seed(pr.checks.map(\.id))
             self.pr = pr
@@ -187,16 +229,29 @@ final class PRDetailModel {
                 Task(priority: .utility) { await self.loadStack() }
             }
             scheduleMergeRecheck(pr)
-            let filesStale = reloadFiles || (filesOid != nil && filesOid != pr.headRefOid)
+            if reloadFiles, filesLoaded { markFilesStale() }
             reloadFiles = false
-            if filesLoaded, filesStale {
-                Task(priority: .utility) { await self.loadFiles(force: true) }
-            } else if !filesLoaded, !filesLoading {
-                Task(priority: .utility) { await self.loadFiles() }
-            }
+            ensureFiles()
         } catch {
             if isCancellation(error) { return }
             if pr == nil { self.error = error.localizedDescription } else { refreshError = error.localizedDescription }
+        }
+    }
+
+    private enum PulseResult { case same, changed, failed }
+
+    private func pulseCheck() async -> PulseResult {
+        guard let known = pulse else { return .changed }
+        do {
+            guard let current = try await api.pullRequestPulse(ref) else { return .changed }
+            guard current == known else { return .changed }
+            refreshError = nil
+            lastUpdated = Date()
+            if let pr { scheduleMergeRecheck(pr) }
+            ensureFiles()
+            return .same
+        } catch {
+            return isCancellation(error) ? .same : .failed
         }
     }
 
@@ -262,7 +317,7 @@ final class PRDetailModel {
         mergeRecheck = Task { [weak self] in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
-            await self?.load()
+            await self?.load(live: true)
         }
     }
 
@@ -297,11 +352,34 @@ final class PRDetailModel {
         if s != stack { stack = s }
     }
 
+    private var filesVisible: Bool {
+        tab == .files || inspectorFilesVisible
+    }
+
+    private var filesOutdated: Bool {
+        filesStale || (pr != nil && filesOid != pr?.headRefOid)
+    }
+
+    private func markFilesStale() {
+        filesStale = true
+        filesStaleMark += 1
+    }
+
+    private func ensureFiles() {
+        guard filesVisible, !filesLoading, !filesPending, pr != nil, !filesLoaded || filesOutdated else { return }
+        filesPending = true
+        Task(priority: .utility) {
+            self.filesPending = false
+            await self.loadFiles(force: self.filesLoaded)
+        }
+    }
+
     func loadFiles(force: Bool = false) async {
         guard force || (!filesLoaded && !filesLoading) else { return }
         filesLoading = true
         defer { filesLoading = false }
         let oid = pr?.headRefOid
+        let mark = filesStaleMark
         do {
             let raw = try await api.pullRequestFiles(ref)
             let parsed = await Task.detached(priority: .userInitiated) { raw.map(DiffFile.init) }.value
@@ -311,9 +389,12 @@ final class PRDetailModel {
             fileRows.seed(parsed.map(\.id))
             files = parsed
             filesOid = oid
+            if mark == filesStaleMark { filesStale = false }
             filesVersion += 1
             filesLoaded = true
             filesError = nil
+            filesLoading = false
+            ensureFiles()
         } catch {
             if isCancellation(error) { return }
             filesError = error.localizedDescription

@@ -24,7 +24,7 @@ enum StateFilter: String, CaseIterable, Identifiable {
 @Observable
 @MainActor
 final class SearchListModel {
-    private struct Snapshot {
+    private struct Snapshot: Codable {
         let items: [SearchItem]
         let total: Int
         let cursor: String?
@@ -34,16 +34,23 @@ final class SearchListModel {
 
     private static var cache: [String: Snapshot] = [:]
 
+    static func resetCache() {
+        cache = [:]
+    }
+
     var items: [SearchItem] = []
     var total = 0
     var loading = false
     var refreshing = false
+    var showingCached = false
+    var checkingCache = false
     var lastUpdated: Date?
     var error: String?
     private var cursor: String?
     private var hasMore = false
     private var loadingMore = false
     private var currentQuery = ""
+    private var currentKey = ""
     private var generation = 0
     let rows: RowAppearTracker
 
@@ -51,29 +58,45 @@ final class SearchListModel {
         self.rows = rows
     }
 
-    func load(api: GitHubAPI?, query: String, silent: Bool = false, typing: Bool = false) async {
+    func load(api: GitHubAPI?, account: String?, query: String, silent: Bool = false, typing: Bool = false, persist: Bool = false) async {
         guard let api else { return }
         var switched = false
         var cached = false
-        if query != currentQuery {
+        let key = "\(account ?? "")|\(query)"
+        let diskKey = "search|\(query)"
+        if key != currentKey {
             switched = true
             currentQuery = query
+            currentKey = key
             error = nil
-            if let snap = Self.cache[query] {
+            if let snap = Self.cache[key] {
                 cached = true
-                apply(snap, mode: typing ? .silent : .cascade)
+                apply(snap, mode: .silent)
             } else {
                 items = []
                 total = 0
                 lastUpdated = nil
             }
         }
+        showingCached = cached
         generation += 1
         let gen = generation
         if !silent || switched { loading = true }
         refreshing = true
+        async let fetched = api.search(query)
+        if switched, !cached, persist {
+            checkingCache = true
+            let snap = await ListCache.load(Snapshot.self, account: account, key: diskKey)?.value
+            checkingCache = false
+            guard gen == generation else { return }
+            if let snap {
+                cached = true
+                showingCached = true
+                apply(snap, mode: .silent)
+            }
+        }
         do {
-            let r = try await api.search(query)
+            let r = try await fetched
             guard gen == generation else { return }
             var merged = r.nodes
             var nextCursor = r.pageInfo?.endCursor
@@ -85,15 +108,21 @@ final class SearchListModel {
                 more = hasMore
             }
             let snap = Snapshot(items: merged, total: r.issueCount, cursor: nextCursor, hasMore: more, updated: Date())
-            Self.cache[query] = snap
+            Self.cache[key] = snap
+            if persist {
+                let first = Snapshot(items: r.nodes, total: r.issueCount, cursor: r.pageInfo?.endCursor, hasMore: r.pageInfo?.hasNextPage ?? false, updated: snap.updated)
+                ListCache.save(first, account: account, key: diskKey)
+            }
             apply(snap, mode: typing ? .silent : (switched && !cached ? .cascade : .refresh))
             error = nil
             loading = false
             refreshing = false
+            showingCached = false
         } catch {
             guard gen == generation else { return }
             loading = false
             refreshing = false
+            showingCached = false
             if isCancellation(error) { return }
             self.error = error.localizedDescription
         }
@@ -111,16 +140,17 @@ final class SearchListModel {
     func loadMore(api: GitHubAPI?) async {
         guard let api, hasMore, !loadingMore, let cursor else { return }
         let query = currentQuery
+        let key = currentKey
         loadingMore = true
         defer { loadingMore = false }
-        if let r = try? await api.search(query, after: cursor), query == currentQuery {
+        if let r = try? await api.search(query, after: cursor), key == currentKey {
             let known = Set(items.map(\.id))
             let added = r.nodes.filter { !known.contains($0.id) }
             rows.ingest(added.map(\.id), mode: .append)
             items += added
             self.cursor = r.pageInfo?.endCursor
             hasMore = r.pageInfo?.hasNextPage ?? false
-            Self.cache[query] = Snapshot(items: items, total: total, cursor: self.cursor, hasMore: hasMore, updated: lastUpdated ?? Date())
+            Self.cache[key] = Snapshot(items: items, total: total, cursor: self.cursor, hasMore: hasMore, updated: lastUpdated ?? Date())
         }
     }
 
@@ -205,7 +235,7 @@ struct SearchListView: View {
             .labelsHidden()
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            LoadingBar(active: model.loading && !model.items.isEmpty)
+            LoadingBar(active: model.loading && !model.showingCached && !model.items.isEmpty)
             Divider()
             List(selection: Binding(get: { app.detailRoot }, set: { app.select($0) })) {
                 if let e = model.error, model.items.isEmpty {
@@ -231,10 +261,10 @@ struct SearchListView: View {
                     Text("Nothing here").foregroundStyle(Color.syMuted)
                 }
             }
-            .opacity(model.loading && !model.items.isEmpty ? 0.55 : 1)
+            .opacity(model.loading && !model.showingCached && !model.items.isEmpty ? 0.55 : 1)
             .animation(.easeOut(duration: 0.15), value: model.loading)
             .overlay {
-                if model.loading && model.items.isEmpty { ProgressView().controlSize(.small) }
+                if model.loading && !model.checkingCache && model.items.isEmpty { ProgressView().controlSize(.small) }
             }
             .liveRefresh(updated: model.lastUpdated, refreshing: model.refreshing, error: model.items.isEmpty ? nil : model.error) {
                 await reload(silent: true)
@@ -243,7 +273,7 @@ struct SearchListView: View {
         .searchable(text: $text, placement: .toolbar, prompt: "Filter: text, repo:org/name, label:bug")
         .navigationTitle(title)
         .navigationSubtitle(model.total > 0 ? "\(model.total)" : "")
-        .task(id: "\(query)|\(app.api != nil)") {
+        .task(id: "\(query)|\(app.cacheAccount ?? "")|\(app.api != nil)") {
             if !text.isEmpty { try? await Task.sleep(nanoseconds: 350_000_000) }
             guard !Task.isCancelled else { return }
             let typing = text != loadedText
@@ -267,7 +297,7 @@ struct SearchListView: View {
     }
 
     private func reload(silent: Bool = false, typing: Bool = false) async {
-        await model.load(api: app.api, query: query, silent: silent, typing: typing)
+        await model.load(api: app.api, account: app.cacheAccount, query: query, silent: silent, typing: typing, persist: text.isEmpty)
         if grouped { await model.loadAll(api: app.api) }
     }
 }

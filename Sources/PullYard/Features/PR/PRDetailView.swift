@@ -24,7 +24,7 @@ struct PRDetailView: View {
         .task(id: ref) {
             let m = app.prModel(ref)
             model = m
-            await m?.load()
+            await m?.load(live: m?.pr != nil)
         }
         .onChange(of: app.refreshTick) {
             Task { await model?.load(full: true) }
