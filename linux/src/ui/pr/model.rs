@@ -9,7 +9,7 @@ use serde_json::json;
 use crate::api::models::*;
 use crate::api::queries as q;
 use crate::api::endpoints::StackRefs;
-use crate::api::{ApiError, GitHubApi};
+use crate::api::{ApiError, ErrorKind, GitHubApi};
 use crate::conversation_html::{self, Look};
 use crate::diff::{DiffAnchor, DiffFile};
 use crate::signal::Signal;
@@ -102,7 +102,7 @@ pub struct PrModel {
     outdated_by_path: RefCell<HashMap<String, Vec<ReviewThread>>>,
     active: Cell<bool>,
     queued: Cell<bool>,
-    want_full: Cell<bool>,
+    full_reason: Cell<Option<&'static str>>,
     last_full: Cell<Option<Instant>>,
     stack_fresh: Cell<bool>,
     reload_files: Cell<bool>,
@@ -143,7 +143,7 @@ impl PrModel {
             outdated_by_path: RefCell::new(HashMap::new()),
             active: Cell::new(false),
             queued: Cell::new(false),
-            want_full: Cell::new(false),
+            full_reason: Cell::new(None),
             last_full: Cell::new(None),
             stack_fresh: Cell::new(false),
             reload_files: Cell::new(false),
@@ -247,17 +247,40 @@ impl PrModel {
             self.stack_fresh.set(true);
             self.reload_files.set(true);
         }
-        self.want_full.set(true);
-        self.start();
+        self.force_full(if full { "refresh" } else { "load" });
+    }
+
+    pub fn open(self: &Rc<Self>) {
+        if self.pr.borrow().is_some() {
+            self.refresh_live();
+        } else {
+            self.load(false);
+        }
     }
 
     pub fn refresh_live(self: &Rc<Self>) {
         self.start();
     }
 
-    fn light_ready(&self) -> bool {
-        let recent = self.last_full.get().is_some_and(|t| t.elapsed() < FULL_REFRESH_EVERY);
-        recent && self.pr.borrow().as_ref().is_some_and(|p| p.light.is_known())
+    fn force_full(self: &Rc<Self>, reason: &'static str) {
+        self.full_reason.set(Some(reason));
+        self.start();
+    }
+
+    fn fetch_reason(&self, forced: Option<&'static str>) -> Option<&'static str> {
+        if self.pr.borrow().is_none() {
+            return Some("first");
+        }
+        if forced.is_some() {
+            return forced;
+        }
+        if !self.last_full.get().is_some_and(|t| t.elapsed() < FULL_REFRESH_EVERY) {
+            return Some("stale");
+        }
+        if !self.pr.borrow().as_ref().is_some_and(|p| p.light.is_known()) {
+            return Some("no baseline");
+        }
+        None
     }
 
     fn start(self: &Rc<Self>) {
@@ -270,14 +293,13 @@ impl PrModel {
             loop {
                 me.active.set(true);
                 me.queued.set(false);
-                let full = me.want_full.replace(false) || !me.light_ready();
-                if full {
-                    me.clone().fetch().await;
-                } else {
-                    me.clone().check().await;
+                let reason = me.fetch_reason(me.full_reason.take());
+                match reason {
+                    Some(reason) => me.clone().fetch(reason).await,
+                    None => me.clone().check().await,
                 }
                 me.active.set(false);
-                if !me.queued.get() || (full && !me.want_full.get()) {
+                if !me.queued.get() || (reason.is_some() && me.full_reason.get().is_none()) {
                     me.queued.set(false);
                     break;
                 }
@@ -300,7 +322,8 @@ impl PrModel {
                 self.emit(Change::Busy);
                 self.schedule_merge_recheck(light.merge_unknown());
             }
-            Ok(_) => self.fetch().await,
+            Ok(_) => self.fetch("changed").await,
+            Err(e) if !e.is_transient() && e.kind != ErrorKind::RateLimited => self.fetch("pulse error").await,
             Err(e) => {
                 *self.refresh_error.borrow_mut() = Some(e.message);
                 self.emit(Change::Busy);
@@ -308,12 +331,13 @@ impl PrModel {
         }
     }
 
-    async fn fetch(self: Rc<Self>) {
+    async fn fetch(self: Rc<Self>, reason: &'static str) {
         self.loading.set(true);
         self.emit(Change::Busy);
         let api = self.api.clone();
         let r = self.r.clone();
-        let res = crate::rt::run(async move { api.pull_request(&r).await }).await;
+        let note = format!("full: {reason}");
+        let res = crate::rt::run(crate::diagnostics::with_note(note, async move { api.pull_request(&r).await })).await;
         self.loading.set(false);
         match res {
             Ok(resp) => {
@@ -550,7 +574,7 @@ impl PrModel {
             Ok(()) => {
                 if reload {
                     self.stack_fresh.set(true);
-                    self.load(false);
+                    self.force_full("mutation");
                 }
                 true
             }

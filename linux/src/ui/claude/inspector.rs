@@ -703,7 +703,7 @@ impl PrDetail {
             }
         }
         me.render();
-        model.load(false);
+        model.open();
         (widget, me)
     }
 

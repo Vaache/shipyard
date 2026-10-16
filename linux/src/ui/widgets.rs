@@ -264,6 +264,23 @@ pub fn outcome_icon(o: CheckOutcome) -> gtk::Image {
     }
 }
 
+pub fn rebuild_rows(list: &gtk::ListBox, build: impl FnOnce()) {
+    let scroller = list.ancestor(gtk::ScrolledWindow::static_type()).and_downcast::<gtk::ScrolledWindow>();
+    let pos = scroller.as_ref().map(|s| s.vadjustment().value());
+    let focused = list.root().and_then(|r| r.focus()).is_some_and(|f| f.is_ancestor(list));
+    let focus = list.focus_child().and_downcast::<gtk::ListBoxRow>().map(|r| r.index()).filter(|_| focused);
+    list.remove_all();
+    build();
+    if let (Some(s), Some(v)) = (scroller, pos) {
+        let adj = s.vadjustment();
+        adj.set_value(v);
+        glib::idle_add_local_once(move || adj.set_value(v));
+    }
+    if let Some(row) = focus.and_then(|i| list.row_at_index(i)) {
+        row.grab_focus();
+    }
+}
+
 pub fn scrolled<W: IsA<gtk::Widget>>(child: &W) -> gtk::ScrolledWindow {
     let s = gtk::ScrolledWindow::new();
     s.set_hscrollbar_policy(gtk::PolicyType::Never);
@@ -447,7 +464,10 @@ impl RefreshStatus {
         self.icon.set_visible_child_name(if refreshing { "spin" } else if error.is_some() || paused.is_some() { "warn" } else { "idle" });
         let resume = paused.map(|t| t.with_timezone(&chrono::Local).format("%H:%M").to_string());
         let text = if refreshing {
-            "Updating…".to_string()
+            match updated.filter(|u| !self.compact && (chrono::Utc::now() - *u).num_seconds() >= 60) {
+                Some(u) => format!("Updated {} · updating…", util::refresh_ago(u)),
+                None => "Updating…".to_string(),
+            }
         } else if let Some(at) = &resume {
             if self.compact { "Paused".into() } else { format!("Paused until {at}") }
         } else if error.is_some() {
