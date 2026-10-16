@@ -1265,7 +1265,7 @@ impl RepoDetail {
         }
         let m = self.list_model.clone();
         let q = self.query();
-        crate::rt::spawn_local(async move { m.load(q, silent).await });
+        crate::rt::spawn_local(async move { m.load(q, silent, true).await });
     }
 
     fn switch_tab(self: &Rc<Self>, id: &str) {

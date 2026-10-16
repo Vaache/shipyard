@@ -803,6 +803,40 @@ pub struct StateCount {
 
 #[derive(Debug, Clone, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct LightCheck {
+    #[serde(rename = "__typename", default)]
+    pub typename: String,
+    #[serde(default)]
+    pub database_id: Option<i64>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub conclusion: Option<String>,
+    #[serde(default)]
+    pub completed_at: Option<Date>,
+    #[serde(default)]
+    pub context: Option<String>,
+    #[serde(default)]
+    pub state: Option<String>,
+}
+
+impl LightCheck {
+    fn sort_key(&self) -> (String, String, i64) {
+        (self.typename.clone(), self.name.clone().or_else(|| self.context.clone()).unwrap_or_default(), self.database_id.unwrap_or(0))
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LightThread {
+    #[serde(default)]
+    pub is_resolved: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct LightContexts {
     #[serde(default)]
     pub total_count: i64,
@@ -810,6 +844,8 @@ pub struct LightContexts {
     pub check_run_counts_by_state: Option<Vec<StateCount>>,
     #[serde(default)]
     pub status_context_counts_by_state: Option<Vec<StateCount>>,
+    #[serde(default)]
+    pub nodes: Option<Vec<LightCheck>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default, PartialEq)]
@@ -856,12 +892,36 @@ pub struct PrLight {
     #[serde(default)]
     pub light_reviews: Option<Count>,
     #[serde(default)]
-    pub light_threads: Option<Count>,
+    pub light_threads: Option<LightThreads>,
     #[serde(default)]
     pub light_commits: Option<Nodes<LightCommitNode>>,
 }
 
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LightThreads {
+    #[serde(default)]
+    pub total_count: i64,
+    #[serde(default)]
+    pub nodes: Option<Vec<LightThread>>,
+}
+
 impl PrLight {
+    pub fn normalized(mut self) -> Self {
+        let commits = self.light_commits.iter_mut().flat_map(|c| c.nodes.iter_mut());
+        for node in commits {
+            let Some(contexts) = node.commit.status_check_rollup.as_mut().and_then(|r| r.contexts.as_mut()) else { continue };
+            for counts in [contexts.check_run_counts_by_state.as_mut(), contexts.status_context_counts_by_state.as_mut()].into_iter().flatten() {
+                counts.retain(|c| c.count > 0);
+                counts.sort_by(|a, b| a.state.cmp(&b.state));
+            }
+            if let Some(checks) = contexts.nodes.as_mut() {
+                checks.sort_by_key(|c| c.sort_key());
+            }
+        }
+        self
+    }
+
     pub fn is_known(&self) -> bool {
         self.light_updated_at.is_some() && self.light_head_oid.is_some()
     }
@@ -1494,9 +1554,16 @@ mod tests {
         let light = serde_json::json!({
             "lightUpdatedAt": "2026-10-16T10:37:24Z", "lightHeadOid": "abc", "lightState": "OPEN", "lightDraft": false,
             "lightMergeable": "UNKNOWN", "lightMergeState": "UNKNOWN", "lightDecision": null,
-            "lightComments": { "totalCount": 1 }, "lightReviews": { "totalCount": 2 }, "lightThreads": { "totalCount": 0 },
+            "lightComments": { "totalCount": 1 }, "lightReviews": { "totalCount": 2 },
+            "lightThreads": { "totalCount": 2, "nodes": [{ "isResolved": false }, { "isResolved": true }] },
             "lightCommits": { "totalCount": 2, "nodes": [{ "commit": { "oid": "abc", "statusCheckRollup": { "state": "PENDING", "contexts": {
-                "totalCount": 3, "checkRunCountsByState": [{ "state": "SUCCESS", "count": 2 }, { "state": "IN_PROGRESS", "count": 1 }], "statusContextCountsByState": [] } } } }] }
+                "totalCount": 2,
+                "checkRunCountsByState": [{ "state": "SUCCESS", "count": 1 }, { "state": "IN_PROGRESS", "count": 1 }, { "state": "FAILURE", "count": 0 }],
+                "statusContextCountsByState": [],
+                "nodes": [
+                    { "__typename": "CheckRun", "databaseId": 2, "name": "test", "status": "IN_PROGRESS", "conclusion": null, "completedAt": null },
+                    { "__typename": "CheckRun", "databaseId": 1, "name": "build", "status": "COMPLETED", "conclusion": "SUCCESS", "completedAt": "2026-10-16T10:40:00Z" }
+                ] } } } }] }
         });
         let mut full: serde_json::Value = serde_json::from_str(crate::fixtures::PR_DETAIL).unwrap();
         let pr = full.pointer_mut("/repository/pullRequest").unwrap().as_object_mut().unwrap();
@@ -1509,11 +1576,26 @@ mod tests {
         let alone: PrLight = serde_json::from_value(light.clone()).unwrap();
         assert!(alone.is_known());
         assert!(alone.merge_unknown());
-        assert_eq!(detail.light, alone);
-        let mut moved = light;
-        moved["lightCommits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["checkRunCountsByState"][1]["count"] = serde_json::json!(0);
-        let changed: PrLight = serde_json::from_value(moved).unwrap();
-        assert_ne!(detail.light, changed);
+        assert_eq!(detail.light.clone().normalized(), alone.clone().normalized());
+
+        let mut reordered = light.clone();
+        let contexts = &mut reordered["lightCommits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"];
+        contexts["checkRunCountsByState"] = serde_json::json!([{ "state": "IN_PROGRESS", "count": 1 }, { "state": "SUCCESS", "count": 1 }]);
+        let nodes = contexts["nodes"].as_array_mut().unwrap();
+        nodes.reverse();
+        let reordered: PrLight = serde_json::from_value(reordered).unwrap();
+        assert_eq!(reordered.normalized(), alone.clone().normalized());
+
+        let mut resolved = light.clone();
+        resolved["lightThreads"]["nodes"][0]["isResolved"] = serde_json::json!(true);
+        let resolved: PrLight = serde_json::from_value(resolved).unwrap();
+        assert_ne!(resolved.normalized(), alone.clone().normalized());
+
+        let mut rerun = light.clone();
+        rerun["lightCommits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"][1]["completedAt"] = serde_json::json!("2026-10-16T11:00:00Z");
+        let rerun: PrLight = serde_json::from_value(rerun).unwrap();
+        assert_ne!(rerun.normalized(), alone.normalized());
+
         let plain: PrDetailResponse = serde_json::from_str(crate::fixtures::PR_DETAIL).unwrap();
         assert!(!plain.repository.unwrap().pull_request.unwrap().light.is_known());
     }

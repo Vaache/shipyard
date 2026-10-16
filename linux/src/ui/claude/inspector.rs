@@ -676,6 +676,9 @@ impl PrDetail {
                 if matches!(c, Change::Pr) && me.show_files.get() {
                     me.model.ensure_files();
                 }
+                if matches!(c, Change::Files) && me.show_files.get() {
+                    me.model.refresh_stale_files();
+                }
                 true
             }
             None => false,

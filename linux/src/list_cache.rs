@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, SystemTime};
 
 use chrono::{DateTime, Utc};
@@ -8,6 +10,13 @@ use crate::api::models::SearchItem;
 
 const MAX_AGE: Duration = Duration::from_secs(7 * 24 * 3600);
 const MAX_ENTRIES: usize = 60;
+const REWRITE_AFTER: Duration = Duration::from_secs(3600);
+
+static EPOCHS: LazyLock<Mutex<HashMap<String, u64>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn epochs() -> std::sync::MutexGuard<'static, HashMap<String, u64>> {
+    EPOCHS.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +50,10 @@ fn account_dir(login: &str) -> Option<PathBuf> {
     account_key(login).map(|k| root().join(k))
 }
 
+pub fn fingerprint(token: &str) -> String {
+    format!("{:016x}", fnv1a(&format!("pullyard-account:{token}")))
+}
+
 fn fnv1a(s: &str) -> u64 {
     s.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3))
 }
@@ -49,30 +62,51 @@ fn file_name(query: &str) -> String {
     format!("{:016x}.json", fnv1a(query))
 }
 
-pub fn load(login: &str, query: &str) -> Option<Entry> {
+pub async fn load(login: &str, query: &str) -> Option<Entry> {
     if !enabled() {
         return None;
     }
-    read_entry(&account_dir(login)?, query, Utc::now())
+    let dir = account_dir(login)?;
+    let query = query.to_string();
+    crate::rt::blocking(move || read_entry(&dir, &query, Utc::now())).await
 }
 
 pub fn store(login: &str, entry: Entry) {
     if !enabled() {
         return;
     }
-    let Some(dir) = account_dir(login) else { return };
-    crate::rt::runtime().spawn_blocking(move || {
-        if write_entry(&dir, &entry).is_ok() {
-            prune(&dir, SystemTime::now());
-        }
-    });
+    let Some(key) = account_key(login) else { return };
+    let dir = root().join(&key);
+    let epoch = epochs().get(&key).copied().unwrap_or(0);
+    crate::rt::runtime().spawn_blocking(move || store_in(&dir, &key, epoch, &entry));
 }
 
 pub fn clear(login: &str) {
-    let Some(dir) = account_dir(login) else { return };
+    let Some(key) = account_key(login) else { return };
+    let dir = root().join(&key);
+    *epochs().entry(key).or_default() += 1;
     crate::rt::runtime().spawn_blocking(move || {
+        let _guard = epochs();
         let _ = std::fs::remove_dir_all(dir);
     });
+}
+
+fn store_in(dir: &Path, key: &str, epoch: u64, entry: &Entry) {
+    let guard = epochs();
+    if guard.get(key).copied().unwrap_or(0) != epoch || !should_write(dir, entry, Utc::now()) {
+        return;
+    }
+    if write_entry(dir, entry).is_ok() {
+        prune(dir, SystemTime::now());
+    }
+    drop(guard);
+}
+
+fn should_write(dir: &Path, entry: &Entry, now: DateTime<Utc>) -> bool {
+    let Some(old) = read_entry(dir, &entry.query, now) else { return true };
+    let age = now.signed_duration_since(old.saved_at).to_std().unwrap_or_default();
+    let same = old.total == entry.total && old.has_more == entry.has_more && serde_json::to_value(&old.items).ok() == serde_json::to_value(&entry.items).ok();
+    !same || age >= REWRITE_AFTER
 }
 
 fn read_entry(dir: &Path, query: &str, now: DateTime<Utc>) -> Option<Entry> {
@@ -196,6 +230,34 @@ mod tests {
     }
 
     #[test]
+    fn unchanged_entries_are_not_rewritten() {
+        let dir = temp_dir();
+        let now = Utc::now();
+        let first = entry("q", now);
+        assert!(should_write(&dir, &first, now));
+        write_entry(&dir, &first).unwrap();
+        assert!(!should_write(&dir, &entry("q", now), now));
+        let mut changed = entry("q", now);
+        changed.items.pop();
+        assert!(should_write(&dir, &changed, now));
+        assert!(should_write(&dir, &entry("q", now), now + chrono::Duration::hours(2)));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn stores_queued_before_clear_are_dropped() {
+        let dir = temp_dir();
+        let key = format!("epoch-test-{}", uuid::Uuid::new_v4().simple());
+        let before = epochs().get(&key).copied().unwrap_or(0);
+        *epochs().entry(key.clone()).or_default() += 1;
+        store_in(&dir, &key, before, &entry("q", Utc::now()));
+        assert!(read_entry(&dir, "q", Utc::now()).is_none());
+        store_in(&dir, &key, before + 1, &entry("q", Utc::now()));
+        assert!(read_entry(&dir, "q", Utc::now()).is_some());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn account_keys_are_safe() {
         assert_eq!(account_key("Octo-Cat").as_deref(), Some("octo-cat"));
         assert_eq!(account_key("../x").as_deref(), Some("___x"));
@@ -203,5 +265,8 @@ mod tests {
         assert!(account_key("..").is_none());
         assert_ne!(file_name("a"), file_name("b"));
         assert_eq!(file_name("is:pr"), file_name("is:pr"));
+        assert_eq!(fingerprint("t1"), fingerprint("t1"));
+        assert_ne!(fingerprint("t1"), fingerprint("t2"));
+        assert!(!fingerprint("ghp_secret").contains("secret"));
     }
 }

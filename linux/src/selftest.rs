@@ -84,8 +84,8 @@ pub fn run() -> i32 {
             })
             .await;
             step(&mut failures, "pr light", async {
-                let full = api.pull_request(&pr).await?.repository.and_then(|r| r.pull_request).map(|p| p.light);
-                let light = api.pull_request_light(&pr).await?;
+                let full = api.pull_request(&pr).await?.repository.and_then(|r| r.pull_request).map(|p| p.light.normalized());
+                let light = api.pull_request_light(&pr).await?.map(|l| l.normalized());
                 let known = light.as_ref().is_some_and(|l| l.is_known());
                 Ok(format!("known={known} matchesFull={}", light.is_some() && light == full))
             })

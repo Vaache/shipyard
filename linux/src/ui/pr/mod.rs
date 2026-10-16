@@ -193,7 +193,12 @@ impl PrPage {
                     self.render_actions(&pr);
                 }
             }
-            Change::Files | Change::Reveal(_) => {}
+            Change::Files => {
+                if self.model.tab.get() == PrTab::Files {
+                    self.model.refresh_stale_files();
+                }
+            }
+            Change::Reveal(_) => {}
         }
     }
 

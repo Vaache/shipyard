@@ -70,7 +70,7 @@ fn pr_timeline() -> String {
     )
 }
 
-pub const PR_LIGHT_FRAGMENT: &str = "fragment PrLight on PullRequest { lightUpdatedAt: updatedAt lightHeadOid: headRefOid lightState: state lightDraft: isDraft lightMergeable: mergeable lightMergeState: mergeStateStatus lightDecision: reviewDecision lightComments: comments { totalCount } lightReviews: reviews { totalCount } lightThreads: reviewThreads { totalCount } lightCommits: commits(last: 1) { totalCount nodes { commit { oid statusCheckRollup { state contexts(first: 1) { totalCount checkRunCountsByState { state count } statusContextCountsByState { state count } } } } } } }";
+pub const PR_LIGHT_FRAGMENT: &str = "fragment PrLight on PullRequest { lightUpdatedAt: updatedAt lightHeadOid: headRefOid lightState: state lightDraft: isDraft lightMergeable: mergeable lightMergeState: mergeStateStatus lightDecision: reviewDecision lightComments: comments { totalCount } lightReviews: reviews { totalCount } lightThreads: reviewThreads(first: 100) { totalCount nodes { isResolved } } lightCommits: commits(last: 1) { totalCount nodes { commit { oid statusCheckRollup { state contexts(first: 100) { totalCount checkRunCountsByState { state count } statusContextCountsByState { state count } nodes { __typename ... on CheckRun { databaseId name status conclusion completedAt } ... on StatusContext { context state } } } } } } } }";
 
 pub fn pull_request_light() -> String {
     format!("query($owner: String!, $name: String!, $number: Int!) {{ repository(owner: $owner, name: $name) {{ pullRequest(number: $number) {{ ...PrLight }} }} }}\n{PR_LIGHT_FRAGMENT}")
