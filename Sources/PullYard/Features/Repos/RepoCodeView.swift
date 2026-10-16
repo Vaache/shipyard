@@ -18,6 +18,10 @@ struct RepoCodeView: View {
             if defaultBranch != nil { await model.start(defaultBranch: defaultBranch) }
         }
         .sheet(isPresented: $showQuickOpen) { QuickOpenSheet(model: model) }
+        .focusedSceneValue(\.blame, model.selectedFile != nil && model.file != nil ? blameBinding : nil)
+        .onChange(of: model.blameOn && model.showsMarkdown, initial: true) { _, needsSource in
+            if needsSource { markdownSource = true }
+        }
         .background {
             Button("") { showQuickOpen = true }
                 .keyboardShortcut("p")
@@ -37,7 +41,7 @@ struct RepoCodeView: View {
                         }
                     }
                 } label: {
-                    Label(model.ref.isEmpty ? "…" : model.ref, systemImage: "arrow.branch")
+                    Label(model.ref.isEmpty ? "…" : model.refLabel, systemImage: "arrow.branch")
                         .font(.callout.monospaced().weight(.medium))
                 }
                 .menuStyle(.borderlessButton)
@@ -153,6 +157,7 @@ struct RepoCodeView: View {
             if case .text = model.file {
                 Toggle("Wrap", isOn: $wrap).toggleStyle(.checkbox).controlSize(.small)
             }
+            blameControls
             Menu {
                 Button("Copy path") { copyToPasteboard(path) }
                 if case .text(let s, _) = model.file { Button("Copy contents") { copyToPasteboard(s) } }
@@ -170,6 +175,43 @@ struct RepoCodeView: View {
         .padding(.vertical, 8)
     }
 
+    private var blameBinding: Binding<Bool> {
+        Binding(get: { model.blameOn }, set: { model.setBlame($0) })
+    }
+
+    @ViewBuilder
+    private var blameControls: some View {
+        if model.file != nil {
+            if model.blameOn {
+                if model.blameLoading {
+                    ProgressView().controlSize(.mini)
+                } else if let e = model.blameError {
+                    Label(e, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.syAmber)
+                        .lineLimit(1)
+                    if model.canRetryBlame {
+                        Button("Retry") { Task { await model.retryBlame() } }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                    }
+                }
+            }
+            Toggle("Blame", isOn: blameBinding)
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .help("Show who last changed each line (⌥⌘B)")
+        }
+    }
+
+    private var visibleBlame: BlameMap? {
+        model.blameOn ? model.blame : nil
+    }
+
+    private func openCommit(_ commit: BlameCommit) {
+        app.open(.commit(model.repo, commit.oid), push: true)
+    }
+
     @ViewBuilder
     private func fileBody(_ file: FileContent, path: String) -> some View {
         let ext = (path as NSString).pathExtension.isEmpty ? (path as NSString).lastPathComponent : (path as NSString).pathExtension
@@ -180,7 +222,7 @@ struct RepoCodeView: View {
                     Label("File is too large — showing only part of it", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption).foregroundStyle(Color.syAmber).padding(6)
                 }
-                CodeTextView(text: s, ext: ext, wrap: wrap)
+                CodeTextView(text: s, ext: ext, wrap: wrap, blame: visibleBlame, onOpenCommit: openCommit)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .card(radius: 10, fill: .sySunken)
             }
@@ -188,7 +230,7 @@ struct RepoCodeView: View {
         case .markdown(let html, let source):
             Group {
                 if markdownSource {
-                    CodeTextView(text: source, ext: ext, wrap: true)
+                    CodeTextView(text: source, ext: ext, wrap: true, blame: visibleBlame, onOpenCommit: openCommit)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .card(radius: 10, fill: .sySunken)
                 } else {

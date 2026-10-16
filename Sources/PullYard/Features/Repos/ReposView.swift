@@ -210,7 +210,16 @@ struct RepoDetailView: View {
             }
         }
         .task(id: repo) {
-            if code == nil, let api = app.api { code = RepoCodeModel(repo: repo, api: api) }
+            if code == nil, let api = app.api {
+                let model = RepoCodeModel(repo: repo, api: api)
+                code = model
+                if let request = app.pendingCode, request.repo == repo {
+                    app.pendingCode = nil
+                    tab = .code
+                    model.ref = request.ref
+                    Task { await model.start(at: request) }
+                }
+            }
             info = try? await app.api?.repoInfo(repo)
             if info == nil { info = nil }
         }
@@ -220,7 +229,7 @@ struct RepoDetailView: View {
         .onChange(of: app.refreshTick) {
             Task {
                 if tab != .code { await model.load(api: app.api, account: app.cacheAccount, query: query) }
-                else if let code { await code.openDir(code.dir) }
+                else if let code { await code.refresh() }
             }
         }
         .onLiveTick {

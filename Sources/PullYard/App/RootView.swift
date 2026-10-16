@@ -96,6 +96,7 @@ struct MainView: View {
         .sheet(isPresented: $app.showOpenLink) { OpenLinkSheet() }
         .overlay(alignment: .bottom) {
             VStack(spacing: 8) {
+                ToastBanner()
                 RateLimitBanner()
                 ClipboardBanner()
             }

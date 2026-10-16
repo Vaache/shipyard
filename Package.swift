@@ -12,6 +12,11 @@ let package = Package(
             name: "PullYard",
             dependencies: [.product(name: "SwiftTerm", package: "SwiftTerm")],
             path: "Sources/PullYard"
+        ),
+        .testTarget(
+            name: "PullYardTests",
+            dependencies: ["PullYard"],
+            path: "Tests/PullYardTests"
         )
     ]
 )

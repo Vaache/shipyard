@@ -67,6 +67,13 @@ enum IssueFilter: String, CaseIterable, Identifiable {
     }
 }
 
+struct CodeOpenRequest {
+    let repo: RepoRef
+    let ref: String
+    let path: String
+    let blame: Bool
+}
+
 enum SidebarSection: Hashable {
     case notifications
     case prs(PRFilter)
@@ -93,6 +100,8 @@ final class AppModel {
     var liveTick = 0
     var showOpenLink = false
     var clipboardRoute: Route?
+    var toast: String?
+    var pendingCode: CodeOpenRequest?
     var reviewRequests: [SearchItem] = []
     var myPRs: [SearchItem] = []
     var reviewRequestCount = 0
@@ -106,6 +115,8 @@ final class AppModel {
     let claude = ClaudeWorkspace()
 
     private var lastClipboard: String?
+    private var toastTask: Task<Void, Never>?
+    @ObservationIgnored private var canonicalItems: [ItemRef: ItemRef] = [:]
     private var pollTask: Task<Void, Never>?
     private var prModels: [ItemRef: PRDetailModel] = [:]
     private var prOrder: [ItemRef] = []
@@ -340,6 +351,37 @@ final class AppModel {
             prModels[old] = nil
         }
         return m
+    }
+
+    var frontItem: ItemRef? {
+        guard let ref = ShortLink.ref(route: frontRoute) else { return nil }
+        return canonicalItems[ref] ?? ref
+    }
+
+    func noteCanonical(_ ref: ItemRef, url: String) {
+        guard let canonical = ShortLink.ref(url: url), canonical.number == ref.number else { return }
+        canonicalItems[ref] = canonical
+    }
+
+    func copyShortLink(_ ref: ItemRef) {
+        let link = ShortLink.make(ref)
+        copyToPasteboard(link)
+        showToast("Copied \(link)")
+    }
+
+    func showToast(_ text: String) {
+        toastTask?.cancel()
+        withAnimation(Motion.quick) { toast = text }
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(Motion.fade) { self?.toast = nil }
+        }
+    }
+
+    func openCode(_ repo: RepoRef, ref: String, path: String, blame: Bool) {
+        pendingCode = CodeOpenRequest(repo: repo, ref: ref, path: path, blame: blame)
+        open(.repo(repo), push: true)
     }
 
     func checkClipboard() {

@@ -100,6 +100,7 @@ struct MenuBarView: View {
         }
         .frame(width: 380)
         .surface(.panel)
+        .overlay(alignment: .bottom) { ToastBanner(bottomInset: 54) }
         .onAppear {
             rows.ingest((app.reviewRequests + app.myPRs).map(\.id), mode: .cascade)
             ready = true
@@ -142,6 +143,11 @@ struct MenuBarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(MenuRowStyle())
+            .contextMenu {
+                Button("Open in Browser") { openInBrowser(item.url) }
+                Button("Copy Link") { copyToPasteboard(item.url) }
+                Button("Copy Short Link") { app.copyShortLink(item.ref) }
+            }
             .rowAppear(item.id, rows, bleed: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
         Spacer().frame(height: 6)

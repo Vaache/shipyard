@@ -334,10 +334,12 @@ struct RepoGroupHeader: View {
 
 struct ItemContextMenu: View {
     let item: SearchItem
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         Button("Open in Browser") { openInBrowser(item.url) }
         Button("Copy Link") { copyToPasteboard(item.url) }
+        Button("Copy Short Link") { app.copyShortLink(item.ref) }
         if item.isPR {
             Button("Copy “gh pr checkout”") { copyToPasteboard("gh pr checkout \(item.number) -R \(item.repository.nameWithOwner)") }
         }

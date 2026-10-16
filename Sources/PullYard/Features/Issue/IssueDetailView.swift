@@ -111,6 +111,7 @@ struct IssueDetailView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(issue.title).font(.title2.weight(.bold)).foregroundStyle(Color.syText).textSelection(.enabled)
                     Text("#\(issue.number)").font(.title2).foregroundStyle(Color.syDim)
+                    ShortLinkButton(ref: ShortLink.ref(url: issue.url) ?? ref)
                 }
                 HStack(spacing: 8) {
                     StateBadge(state: issue.visualState)
@@ -156,6 +157,7 @@ struct IssueDetailView: View {
         }
         .navigationTitle(issue.title)
         .navigationSubtitle("\(ref.repo.full) #\(issue.number)")
+        .task(id: issue.url) { app.noteCanonical(ref, url: issue.url) }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if model.busy { ProgressView().controlSize(.small) }
