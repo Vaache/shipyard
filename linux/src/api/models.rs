@@ -1626,6 +1626,8 @@ mod tests {
         let r: BlameResponse = serde_json::from_str(json).unwrap();
         let ranges = r.repository.unwrap().object.unwrap().ranges().unwrap();
         assert_eq!(ranges.len(), 2);
+        assert_eq!(ranges[0].commit.author_name(), "Ann");
+        assert_eq!(ranges[1].commit.author_name(), "bob");
         let tag = r#"{"repository":{"object":{"__typename":"Tag","target":{"__typename":"Commit","blame":{"ranges":[
             {"startingLine":1,"endingLine":1,"age":3,"commit":{"oid":"cccc","abbreviatedOid":"cc","messageHeadline":"Tagged","committedDate":null,"url":"u","author":null}}
         ]}}}}}"#;
@@ -1634,8 +1636,6 @@ mod tests {
         assert_eq!(ranges[0].commit.author_name(), "unknown");
         let tree: BlameResponse = serde_json::from_str(r#"{"repository":{"object":{"__typename":"Tree"}}}"#).unwrap();
         assert!(tree.repository.unwrap().object.unwrap().ranges().is_none());
-        assert_eq!(ranges[0].commit.author_name(), "Ann");
-        assert_eq!(ranges[1].commit.author_name(), "bob");
     }
 
     #[test]

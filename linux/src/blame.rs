@@ -122,7 +122,8 @@ mod tests {
 
     #[test]
     fn display_text_keeps_github_lines() {
-        assert!(matches!(display_text("a\nb\r\nc"), std::borrow::Cow::Borrowed(_)));
+        assert!(matches!(display_text("a\nb\tc"), std::borrow::Cow::Borrowed(_)));
+        assert_eq!(display_text("a\r\nb"), "a\r\nb");
         assert_eq!(display_text("a\rb\r\nc\u{2029}d"), "a\u{240D}b\r\nc\u{00B6}d");
         assert_eq!(display_text("x\r"), "x\u{240D}");
         let shown = display_text("1\r2\n3\u{2029}4\r\n5");
