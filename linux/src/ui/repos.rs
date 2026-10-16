@@ -352,7 +352,17 @@ pub struct CodeModel {
     loading_paths: Cell<bool>,
     dir_cache: RefCell<HashMap<String, Vec<TreeEntry>>>,
     readme_cache: RefCell<HashMap<String, Option<String>>>,
+    pub blame_on: Cell<bool>,
+    blame_cache: RefCell<Vec<(String, BlameState)>>,
+    blame_epoch: Cell<u64>,
     pub changed: crate::signal::Signal<()>,
+}
+
+#[derive(Clone)]
+pub enum BlameState {
+    Loading,
+    Ready(Rc<Vec<BlameRange>>),
+    Failed,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -370,6 +380,7 @@ fn has_readme(entries: &[TreeEntry]) -> bool {
 
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tiff", "svg"];
 const MARKDOWN_EXTS: &[&str] = &["md", "markdown", "mdx"];
+const BLAME_CACHE_SIZE: usize = 50;
 
 impl CodeModel {
     pub fn new(repo: RepoRef, api: GitHubApi) -> Rc<Self> {
@@ -395,6 +406,9 @@ impl CodeModel {
             loading_paths: Cell::new(false),
             dir_cache: RefCell::new(HashMap::new()),
             readme_cache: RefCell::new(HashMap::new()),
+            blame_on: Cell::new(false),
+            blame_cache: RefCell::new(vec![]),
+            blame_epoch: Cell::new(0),
             changed: crate::signal::Signal::new(),
         })
     }
@@ -443,6 +457,7 @@ impl CodeModel {
             return;
         }
         *self.git_ref.borrow_mut() = name;
+        self.blame_on.set(false);
         *self.all_paths.borrow_mut() = None;
         *self.selected_file.borrow_mut() = None;
         *self.file.borrow_mut() = None;
@@ -597,6 +612,36 @@ impl CodeModel {
         }
     }
 
+    pub async fn open_at(self: Rc<Self>, git_ref: String, path: String) {
+        let switching = *self.git_ref.borrow() != git_ref;
+        *self.git_ref.borrow_mut() = git_ref;
+        if switching {
+            *self.all_paths.borrow_mut() = None;
+            let me = self.clone();
+            crate::rt::spawn_local(async move { me.load_branches().await });
+        }
+        let parent = util::parent_path(&path);
+        let empty = self.entries.borrow().is_empty() && !self.loading_dir.get();
+        if (switching || empty) && parent == *self.dir.borrow() {
+            *self.selected_file.borrow_mut() = Some(path.clone());
+            *self.file.borrow_mut() = None;
+            *self.file_error.borrow_mut() = None;
+            self.clone().open_dir(parent).await;
+        }
+        self.reveal(path).await;
+    }
+
+    pub async fn refresh(self: Rc<Self>) {
+        self.blame_cache.borrow_mut().clear();
+        self.blame_epoch.set(self.blame_epoch.get() + 1);
+        let d = self.dir.borrow().clone();
+        let file = self.selected_file.borrow().clone();
+        self.clone().open_dir(d).await;
+        if let Some(path) = file.filter(|p| self.selected_file.borrow().as_deref() == Some(p.as_str())) {
+            self.open_file(path).await;
+        }
+    }
+
     pub async fn reveal(self: Rc<Self>, path: String) {
         let parent = util::parent_path(&path);
         if parent != *self.dir.borrow() {
@@ -612,6 +657,7 @@ impl CodeModel {
         *self.selected_file.borrow_mut() = Some(path.clone());
         *self.file.borrow_mut() = None;
         *self.file_error.borrow_mut() = None;
+        self.ensure_blame();
         self.changed.emit(&());
         let ext = util::extension(&path);
         let api = self.api.clone();
@@ -670,6 +716,83 @@ impl CodeModel {
             Err(e) => *self.file_error.borrow_mut() = Some(e.message),
         }
         self.changed.emit(&());
+    }
+
+    fn blame_key(&self, path: &str) -> String {
+        format!("{}|{}", self.git_ref.borrow(), path)
+    }
+
+    fn cached_blame(&self, key: &str) -> Option<BlameState> {
+        self.blame_cache.borrow().iter().find(|(k, _)| k == key).map(|(_, s)| s.clone())
+    }
+
+    fn store_blame(&self, key: String, state: BlameState) {
+        let mut cache = self.blame_cache.borrow_mut();
+        cache.retain(|(k, _)| *k != key);
+        cache.push((key, state));
+        if cache.len() > BLAME_CACHE_SIZE {
+            let excess = cache.len() - BLAME_CACHE_SIZE;
+            cache.drain(..excess);
+        }
+    }
+
+    pub fn blame_state(&self) -> Option<BlameState> {
+        let path = self.selected_file.borrow().clone()?;
+        self.cached_blame(&self.blame_key(&path))
+    }
+
+    pub fn set_blame(self: &Rc<Self>, on: bool) {
+        if self.blame_on.get() == on {
+            return;
+        }
+        self.blame_on.set(on);
+        self.ensure_blame();
+        self.changed.emit(&());
+    }
+
+    pub fn retry_blame(self: &Rc<Self>) {
+        let Some(path) = self.selected_file.borrow().clone() else { return };
+        let key = self.blame_key(&path);
+        if matches!(self.cached_blame(&key), Some(BlameState::Failed)) {
+            self.blame_cache.borrow_mut().retain(|(k, _)| *k != key);
+        }
+        self.ensure_blame();
+        self.changed.emit(&());
+    }
+
+    fn ensure_blame(self: &Rc<Self>) {
+        if !self.blame_on.get() {
+            return;
+        }
+        let Some(path) = self.selected_file.borrow().clone() else { return };
+        if IMAGE_EXTS.contains(&util::extension(&path).as_str()) {
+            return;
+        }
+        let git_ref = self.git_ref.borrow().clone();
+        let key = self.blame_key(&path);
+        if self.cached_blame(&key).is_some() {
+            return;
+        }
+        self.store_blame(key.clone(), BlameState::Loading);
+        let epoch = self.blame_epoch.get();
+        let me = self.clone();
+        crate::rt::spawn_local(async move {
+            let api = me.api.clone();
+            let repo = me.repo.clone();
+            let res = crate::rt::run(async move { api.blame(&repo, &git_ref, &path).await }).await;
+            let state = match res {
+                Ok(Some(ranges)) if !ranges.is_empty() => BlameState::Ready(Rc::new(ranges)),
+                _ => BlameState::Failed,
+            };
+            if me.blame_epoch.get() != epoch {
+                return;
+            }
+            me.store_blame(key.clone(), state);
+            let current = me.selected_file.borrow().as_ref().map(|p| me.blame_key(p)) == Some(key);
+            if current {
+                me.changed.emit(&());
+            }
+        });
     }
 
     pub async fn load_all_paths(self: Rc<Self>) {
@@ -760,6 +883,21 @@ pub struct CodeBrowser {
     html: RefCell<Option<Rc<HtmlView>>>,
     code: CodeView,
     rendered_key: RefCell<String>,
+    blame_toggle: gtk::ToggleButton,
+    blame_status: gtk::Box,
+    blame_status_label: gtk::Label,
+    blame_spinner: gtk::Spinner,
+    blame_retry: gtk::Button,
+    syncing_blame: Cell<bool>,
+    applied_blame: RefCell<Option<(String, Rc<crate::blame::Blame>)>>,
+}
+
+thread_local! {
+    static LAST_BROWSER: RefCell<std::rc::Weak<CodeBrowser>> = const { RefCell::new(std::rc::Weak::new()) };
+}
+
+fn text_line_count(s: &str) -> usize {
+    s.matches('\n').count() + 1
 }
 
 impl CodeBrowser {
@@ -801,6 +939,18 @@ impl CodeBrowser {
         paned.set_resize_start_child(false);
         paned.set_shrink_start_child(false);
         paned.set_position(300);
+        let blame_toggle = gtk::ToggleButton::with_label("Blame");
+        blame_toggle.set_tooltip_text(Some("Show who last changed each line (Ctrl+Alt+B)"));
+        blame_toggle.set_valign(gtk::Align::Center);
+        let blame_status = hbox(6);
+        blame_status.set_visible(false);
+        let blame_spinner = spinner(12);
+        let blame_status_label = label_with("", &["sy-dim", "sy-small"]);
+        let blame_retry = flat("Retry");
+        blame_retry.add_css_class("fg-accent");
+        blame_status.append(&blame_spinner);
+        blame_status.append(&blame_status_label);
+        blame_status.append(&blame_retry);
         let me = Rc::new(CodeBrowser {
             widget: paned,
             model: model.clone(),
@@ -815,7 +965,27 @@ impl CodeBrowser {
             html: RefCell::new(None),
             code: CodeView::new(),
             rendered_key: RefCell::new(String::new()),
+            blame_toggle: blame_toggle.clone(),
+            blame_status,
+            blame_status_label,
+            blame_spinner,
+            blame_retry: blame_retry.clone(),
+            syncing_blame: Cell::new(false),
+            applied_blame: RefCell::new(None),
         });
+        LAST_BROWSER.with(|b| *b.borrow_mut() = Rc::downgrade(&me));
+        let w = Rc::downgrade(&me);
+        blame_toggle.connect_toggled(move |t| {
+            if let Some(me) = w.upgrade() {
+                if !me.syncing_blame.get() {
+                    me.toggle_blame(t.is_active());
+                }
+            }
+        });
+        let m = model.clone();
+        blame_retry.connect_clicked(move |_| m.retry_blame());
+        let repo = model.repo.clone();
+        me.code.on_blame_activate(move |r| app::open(Route::Commit(repo.clone(), r.commit.oid.clone()), true));
         let w = Rc::downgrade(&me);
         me.content.connect_map(move |_| {
             if let Some(me) = w.upgrade() {
@@ -854,6 +1024,16 @@ impl CodeBrowser {
             glib::Propagation::Stop
         });
         shortcut.add_shortcut(gtk::Shortcut::new(gtk::ShortcutTrigger::parse_string("<Control>p"), Some(action)));
+        let w = Rc::downgrade(&me);
+        let action = gtk::CallbackAction::new(move |_, _| {
+            if let Some(me) = w.upgrade() {
+                if me.blame_available() {
+                    me.toggle_blame(!me.model.blame_on.get());
+                }
+            }
+            glib::Propagation::Stop
+        });
+        shortcut.add_shortcut(gtk::Shortcut::new(gtk::ShortcutTrigger::parse_string("<Control><Alt>b"), Some(action)));
         me.widget.add_controller(shortcut);
         let w = Rc::downgrade(&me);
         model.changed.connect(move |_| match w.upgrade() {
@@ -908,7 +1088,8 @@ impl CodeBrowser {
     fn render(self: &Rc<Self>) {
         let m = &self.model;
         let git_ref = m.git_ref.borrow().clone();
-        self.branch_button.set_label(if git_ref.is_empty() { "…" } else { &git_ref });
+        let shown = if git_ref.len() == 40 && git_ref.chars().all(|c| c.is_ascii_hexdigit()) { &git_ref[..7] } else { git_ref.as_str() };
+        self.branch_button.set_label(if git_ref.is_empty() { "…" } else { shown });
         let menu = Menu::new();
         for b in m.branches.borrow().iter() {
             let name = b.name.clone();
@@ -993,8 +1174,79 @@ impl CodeBrowser {
         self.render_content();
     }
 
-    fn render_content(self: &Rc<Self>) {
+    fn blame_available(&self) -> bool {
+        self.model.selected_file.borrow().is_some() && matches!(self.model.file.borrow().as_ref(), Some(FileContent::Text(..)) | Some(FileContent::Markdown(..)))
+    }
+
+    fn toggle_blame(self: &Rc<Self>, on: bool) {
+        if on && matches!(self.model.file.borrow().as_ref(), Some(FileContent::Markdown(..))) && !self.markdown_source.get() {
+            self.markdown_source.set(true);
+            self.rendered_key.borrow_mut().clear();
+        }
+        if self.model.blame_on.get() == on {
+            self.render_content();
+        } else {
+            self.model.set_blame(on);
+        }
+    }
+
+    fn sync_blame(self: &Rc<Self>) {
         let m = &self.model;
+        let available = self.blame_available();
+        let on = m.blame_on.get() && available;
+        self.syncing_blame.set(true);
+        self.blame_toggle.set_visible(available);
+        self.blame_toggle.set_active(on);
+        self.syncing_blame.set(false);
+        let state = if on { m.blame_state() } else { None };
+        match &state {
+            Some(BlameState::Loading) => {
+                self.blame_status.set_visible(true);
+                self.blame_spinner.set_visible(true);
+                self.blame_retry.set_visible(false);
+                self.blame_status_label.set_text("Loading blame…");
+            }
+            Some(BlameState::Failed) => {
+                self.blame_status.set_visible(true);
+                self.blame_spinner.set_visible(false);
+                self.blame_retry.set_visible(true);
+                self.blame_status_label.set_text("Blame unavailable for this file");
+            }
+            _ => self.blame_status.set_visible(false),
+        }
+        let blame = {
+            let file = m.file.borrow();
+            let text = match file.as_ref() {
+                Some(FileContent::Text(s, _)) => Some(s.as_str()),
+                Some(FileContent::Markdown(_, s)) if self.markdown_source.get() => Some(s.as_str()),
+                _ => None,
+            };
+            match (state, text, m.selected_file.borrow().clone()) {
+                (Some(BlameState::Ready(ranges)), Some(text), Some(path)) => {
+                    let key = format!("{}|{}|{}", m.git_ref.borrow(), path, text.len());
+                    let cached = self.applied_blame.borrow().as_ref().filter(|(k, b)| *k == key && Rc::ptr_eq(&b.ranges, &ranges)).map(|(_, b)| b.clone());
+                    Some(cached.unwrap_or_else(|| {
+                        let b = Rc::new(crate::blame::Blame::new(ranges, text_line_count(text)));
+                        *self.applied_blame.borrow_mut() = Some((key, b.clone()));
+                        b
+                    }))
+                }
+                _ => None,
+            }
+        };
+        self.code.set_blame(blame);
+    }
+
+    fn render_content(self: &Rc<Self>) {
+        self.render_file_content();
+        self.sync_blame();
+    }
+
+    fn render_file_content(self: &Rc<Self>) {
+        let m = &self.model;
+        if m.blame_on.get() && matches!(m.file.borrow().as_ref(), Some(FileContent::Markdown(..))) {
+            self.markdown_source.set(true);
+        }
         let selected = m.selected_file.borrow().clone();
         if selected.is_none() && self.content.is_mapped() {
             m.ensure_readme();
@@ -1106,6 +1358,10 @@ impl CodeBrowser {
             b.append(&chip(&util::plural(lines, "line", "lines"), "muted", None, false));
         }
         b.append(&spacer());
+        detach(&self.blame_status);
+        b.append(&self.blame_status);
+        detach(&self.blame_toggle);
+        b.append(&self.blame_toggle);
         if let Some(FileContent::Markdown(..)) = file {
             let toggles = hbox(0);
             toggles.add_css_class("linked");
@@ -1121,7 +1377,11 @@ impl CodeBrowser {
             source.connect_toggled(move |t| {
                 if let Some(me) = w.upgrade() {
                     me.markdown_source.set(t.is_active());
-                    me.render_content();
+                    if !t.is_active() && me.model.blame_on.get() {
+                        me.model.set_blame(false);
+                    } else {
+                        me.render_content();
+                    }
                 }
             });
             toggles.append(&preview);
@@ -1212,6 +1472,22 @@ impl CodeBrowser {
             }
         }
         wrapper.upcast()
+    }
+}
+
+pub fn show_blame(path: String, git_ref: Option<String>) {
+    let Some(browser) = LAST_BROWSER.with(|b| b.borrow().upgrade()) else { return };
+    let m = browser.model.clone();
+    let git_ref = git_ref.or_else(|| Some(m.git_ref.borrow().clone()).filter(|r| !r.is_empty()));
+    let Some(git_ref) = git_ref else { return };
+    m.blame_on.set(true);
+    crate::rt::spawn_local(async move { m.open_at(git_ref, path).await });
+}
+
+pub fn open_blame(repo: RepoRef, git_ref: String, path: String) {
+    app::open(Route::Repo(repo.clone()), true);
+    if LAST_BROWSER.with(|b| b.borrow().upgrade().is_some_and(|b| b.model.repo == repo)) {
+        show_blame(path, Some(git_ref));
     }
 }
 
@@ -1613,8 +1889,7 @@ pub fn detail_page(repo: &RepoRef) -> adw::NavigationPage {
         Some(me) => {
             if me.tabs.active() == "code" {
                 let m = me.code_model.clone();
-                let d = m.dir.borrow().clone();
-                crate::rt::spawn_local(async move { m.open_dir(d).await });
+                crate::rt::spawn_local(async move { m.refresh().await });
             } else {
                 me.reload_list(false);
             }

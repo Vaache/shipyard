@@ -504,6 +504,9 @@ impl Board {
             if let Some(u) = url.clone() {
                 let u2 = u.clone();
                 m.item("Open in Browser", move || util::open_url(&u2));
+                if let Some(route) = util::parse_github_url(&u, false).filter(|r| r.short_link().is_some()) {
+                    m.item("Copy Short Link", move || super::item_row::copy_short_link(&route));
+                }
                 m.item("Copy Link", move || util::copy(&u));
             }
             m

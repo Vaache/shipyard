@@ -180,15 +180,22 @@ fn libadwaita_has_css_vars() -> bool {
     adw::major_version() > 1 || adw::minor_version() >= 6
 }
 
-fn palette_css() -> String {
-    let brand = is_brand();
-    let dark = is_dark();
-    let palette = match (brand, dark) {
+fn current_palette() -> &'static Palette {
+    match (is_brand(), is_dark()) {
         (true, false) => &BRAND_LIGHT,
         (true, true) => &BRAND_DARK,
         (false, false) => &SYSTEM_LIGHT,
         (false, true) => &SYSTEM_DARK,
-    };
+    }
+}
+
+pub fn token_hex(name: &str) -> Option<&'static str> {
+    current_palette().entries.iter().find(|(k, _)| *k == name).map(|(_, v)| *v).filter(|v| v.starts_with('#'))
+}
+
+fn palette_css() -> String {
+    let brand = is_brand();
+    let palette = current_palette();
     let mut css = String::new();
     for (k, v) in palette.entries {
         css.push_str(&format!("@define-color sy_{k} {v};\n"));
@@ -288,6 +295,7 @@ list.sy-sidebar-list > row:selected { background-color: alpha(@sy_text, 0.07); b
 .composer-box { background-color: @sy_sunken; border-radius: 8px; padding: 4px; }
 .composer-box textview, .composer-box textview text { background-color: transparent; }
 .code-view, .code-view text { background-color: @sy_sunken; font-family: monospace; font-size: 12px; }
+.blame-gutter { font-family: monospace; font-size: 11px; color: @sy_muted; background-color: alpha(@sy_text, 0.03); border-right: 1px solid @sy_line; }
 .log-view text { font-family: monospace; font-size: 11px; }
 .refresh-footer { border-top: 1px solid @sy_line; padding: 3px; font-size: 0.82em; color: @sy_muted; }
 .tab-strip { padding: 4px 12px 0 12px; }

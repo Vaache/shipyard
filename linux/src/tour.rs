@@ -100,6 +100,14 @@ pub fn run(_app: Rc<App>) {
     let rr = r.clone();
     p.act(|| app::set_section(Section::Prs(PrFilter::ReviewRequested))).wait(3000);
     p.act(move || app::select(Some(Route::Pr(rr)))).wait(9000).shot("03-pr-conversation");
+    p.act(|| {
+        if let Some(r) = app::visible_route() {
+            crate::ui::item_row::copy_short_link(&r);
+        }
+    })
+    .wait(600)
+    .shot("03-pr-short-link")
+    .wait(2000);
     let model = move || app::pr_model(&r);
     let m = model.clone();
     p.act(move || {
@@ -109,6 +117,19 @@ pub fn run(_app: Rc<App>) {
     })
     .wait(7000)
     .shot("04-pr-files");
+    let m = model.clone();
+    p.act(move || {
+        let Some(m) = m() else { return };
+        let Some(oid) = m.pr.borrow().as_ref().map(|p| p.head_ref_oid.clone()) else { return };
+        let file = m.files.borrow().iter().filter(|f| f.status != "removed").max_by_key(|f| f.additions + f.deletions).map(|f| f.id.clone());
+        if let Some(path) = file {
+            crate::ui::repos::open_blame(m.r.repo.clone(), oid, path);
+        }
+    })
+    .wait(8000)
+    .shot("04b-pr-diff-blame")
+    .act(app::back)
+    .wait(1500);
     let m = model.clone();
     p.act(move || {
         if let Some(m) = m() {
@@ -161,6 +182,7 @@ pub fn run(_app: Rc<App>) {
     p.act(|| app::set_section(Section::Repos)).wait(5000).shot("13-repos");
     let rp = repo.clone();
     p.act(move || app::select(Some(Route::Repo(rp)))).wait(8000).shot("14-repo");
+    p.act(|| crate::ui::repos::show_blame(crate::brand::env_var("TOUR_BLAME_PATH").unwrap_or_else(|| "Package.swift".into()), None)).wait(7000).shot("14-repo-blame");
     p.act(|| app::set_section(Section::Projects)).wait(5000).shot("15-projects");
     p.act(|| app::set_section(Section::Claude)).wait(4000).shot("16-claude");
     p.act(|| {
@@ -188,7 +210,7 @@ pub fn run(_app: Rc<App>) {
     for (at, f) in p.steps.drain(..) {
         glib::timeout_add_local_once(Duration::from_millis(at), f);
     }
-    glib::timeout_add_local_once(Duration::from_secs(240), || {
+    glib::timeout_add_local_once(Duration::from_secs(260), || {
         eprintln!("tour: timed out");
         app::finish_smoke(3);
     });

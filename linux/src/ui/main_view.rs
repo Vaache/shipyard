@@ -17,6 +17,7 @@ pub struct MainView {
     nav: adw::NavigationView,
     cache: RefCell<HashMap<String, gtk::Widget>>,
     claude_view: RefCell<Option<gtk::Widget>>,
+    routes: RefCell<Vec<(gtk::glib::WeakRef<adw::NavigationPage>, Route)>>,
 }
 
 fn empty_page() -> adw::NavigationPage {
@@ -69,12 +70,16 @@ impl MainView {
         paned.set_wide_handle(false);
         split.set_content(Some(&paned));
 
-        let me = Rc::new(MainView { widget: split.upcast(), content, detail, nav, cache: RefCell::new(HashMap::new()), claude_view: RefCell::new(None) });
+        let me = Rc::new(MainView { widget: split.upcast(), content, detail, nav, cache: RefCell::new(HashMap::new()), claude_view: RefCell::new(None), routes: RefCell::new(vec![]) });
+        me.nav.connect_visible_page_notify(|_| {
+            gtk::glib::idle_add_local_once(app::sync_actions);
+        });
         me.show_section(app::section());
         let weak = Rc::downgrade(&me);
         app::get().section_changed.connect(move |s| match weak.upgrade() {
             Some(me) => {
                 me.show_section(*s);
+                gtk::glib::idle_add_local_once(app::sync_actions);
                 true
             }
             None => false,
@@ -122,6 +127,11 @@ impl MainView {
             }
             Some(r) => {
                 let page = super::route_page(&r);
+                {
+                    let mut routes = self.routes.borrow_mut();
+                    routes.retain(|(w, _)| w.upgrade().is_some_and(|p| p.parent().is_some()));
+                    routes.push((page.downgrade(), r));
+                }
                 if push {
                     self.nav.push(&page);
                 } else {
@@ -129,6 +139,11 @@ impl MainView {
                 }
             }
         }
+    }
+
+    pub fn visible_route(&self) -> Option<Route> {
+        let page = self.nav.visible_page()?;
+        self.routes.borrow().iter().rev().find(|(w, _)| w.upgrade().as_ref() == Some(&page)).map(|(_, r)| r.clone())
     }
 
     pub fn back(&self) {

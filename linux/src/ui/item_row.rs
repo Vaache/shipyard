@@ -2,8 +2,8 @@ use adw::prelude::*;
 
 use super::menu::Menu;
 use super::widgets::*;
-use crate::api::models::SearchItem;
-use crate::util;
+use crate::api::models::{Route, SearchItem};
+use crate::{app, util};
 
 pub fn item_row(item: &SearchItem, show_repo: bool) -> gtk::Box {
     let row = hbox(10);
@@ -66,12 +66,33 @@ pub fn item_row(item: &SearchItem, show_repo: bool) -> gtk::Box {
     row
 }
 
+pub fn copy_short_link(route: &Route) {
+    if let Some(link) = route.short_link() {
+        util::copy(&link);
+        app::toast(&format!("Copied {link}"));
+    }
+}
+
+pub fn short_link_button(route: &Route) -> gtk::Button {
+    let b = gtk::Button::with_label("#");
+    b.add_css_class("flat");
+    b.add_css_class("sy-mono");
+    b.add_css_class("sy-bold");
+    let link = route.short_link().unwrap_or_default();
+    b.set_tooltip_text(Some(&format!("Copy short link {link} (Ctrl+Shift+C)")));
+    let r = route.clone();
+    b.connect_clicked(move |_| copy_short_link(&r));
+    b
+}
+
 pub fn item_menu(item: &SearchItem) -> Menu {
     let menu = Menu::ctx();
     let url = item.url.clone();
     menu.item("Open in Browser", move || util::open_url(&url));
     let url = item.url.clone();
     menu.item("Copy Link", move || util::copy(&url));
+    let route = item.route();
+    menu.item("Copy Short Link", move || copy_short_link(&route));
     if item.is_pr() {
         let cmd = format!("gh pr checkout {} -R {}", item.number, item.repository.name_with_owner);
         menu.item("Copy “gh pr checkout”", move || util::copy(&cmd));

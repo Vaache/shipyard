@@ -1,6 +1,7 @@
 mod api;
 mod app;
 mod auth;
+mod blame;
 mod brand;
 mod claude;
 mod conversation_html;
