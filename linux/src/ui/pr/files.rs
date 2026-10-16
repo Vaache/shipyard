@@ -20,6 +20,7 @@ pub struct FilesTab {
     rows: RefCell<Vec<FlatRow>>,
     row_keys: RefCell<Vec<RowKey>>,
     rows_open: Cell<Option<bool>>,
+    rows_filter: RefCell<String>,
     file_list_sig: Cell<Option<u64>>,
     view: gtk::ListView,
     file_list: gtk::ListBox,
@@ -137,6 +138,7 @@ impl FilesTab {
             rows: RefCell::new(vec![]),
             row_keys: RefCell::new(vec![]),
             rows_open: Cell::new(None),
+            rows_filter: RefCell::new(String::new()),
             file_list_sig: Cell::new(None),
             view,
             file_list: file_list.clone(),
@@ -219,6 +221,7 @@ impl FilesTab {
 
     fn rebuild(self: &Rc<Self>) {
         let _span = crate::diagnostics::ui_span("pr.diff");
+        let started = std::time::Instant::now();
         let m = &self.model;
         if !m.files_loaded.get() {
             if let Some(e) = m.files_error.borrow().clone() {
@@ -247,7 +250,8 @@ impl FilesTab {
         let open = Some(m.pr.borrow().as_ref().map(|p| p.is_open()).unwrap_or(false));
         let old = self.row_keys.replace(vec![]);
         let n = self.store.n_items() as usize;
-        let (prefix, suffix) = if self.rows_open.get() != open || old.len() != n {
+        let full = self.rows_open.get() != open || old.len() != n || self.rows_filter.borrow().as_str() != filter;
+        let (prefix, suffix) = if full {
             (0, 0)
         } else {
             let prefix = old.iter().zip(&keys).take_while(|(a, b)| a == b).count();
@@ -259,8 +263,12 @@ impl FilesTab {
         let objs: Vec<glib::BoxedAnyObject> = rows[prefix..rows.len() - suffix].iter().map(|r| glib::BoxedAnyObject::new(r.clone())).collect();
         if removed > 0 || !objs.is_empty() {
             self.store.splice(prefix as u32, removed as u32, &objs);
+            if crate::diagnostics::enabled() {
+                after_next_paint(&self.view, move || crate::diagnostics::ui_elapsed("pr.diff.frame", started));
+            }
         }
         self.rows_open.set(open);
+        *self.rows_filter.borrow_mut() = filter;
         *self.row_keys.borrow_mut() = keys;
         *self.rows.borrow_mut() = rows;
         self.rebuild_file_list();

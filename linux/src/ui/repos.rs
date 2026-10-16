@@ -341,6 +341,8 @@ pub struct CodeModel {
     pub dir_error: RefCell<Option<String>>,
     pub readme: RefCell<Option<String>>,
     pub readme_state: Cell<ReadmeState>,
+    pub readme_error: RefCell<Option<String>>,
+    readme_inflight: RefCell<Option<String>>,
     pub selected_file: RefCell<Option<String>>,
     pub file: RefCell<Option<FileContent>>,
     pub file_size: Cell<Option<i64>>,
@@ -359,6 +361,7 @@ pub enum ReadmeState {
     Pending,
     Loading,
     Loaded,
+    Failed,
 }
 
 fn has_readme(entries: &[TreeEntry]) -> bool {
@@ -381,6 +384,8 @@ impl CodeModel {
             dir_error: RefCell::new(None),
             readme: RefCell::new(None),
             readme_state: Cell::new(ReadmeState::None),
+            readme_error: RefCell::new(None),
+            readme_inflight: RefCell::new(None),
             selected_file: RefCell::new(None),
             file: RefCell::new(None),
             file_size: Cell::new(None),
@@ -457,13 +462,8 @@ impl CodeModel {
         *self.dir.borrow_mut() = path.clone();
         let cached = self.dir_cache.borrow().get(&key).cloned();
         if let Some(entries) = cached {
-            let readme = self.readme_cache.borrow().get(&key).cloned();
-            self.readme_state.set(match (&readme, has_readme(&entries)) {
-                (_, false) => ReadmeState::None,
-                (Some(_), true) => ReadmeState::Loaded,
-                (None, true) => ReadmeState::Pending,
-            });
-            *self.readme.borrow_mut() = readme.flatten();
+            self.readme_state.set(self.readme_state_for(&key, has_readme(&entries)));
+            *self.readme.borrow_mut() = self.readme_cache.borrow().get(&key).cloned().flatten();
             *self.entries.borrow_mut() = entries;
             *self.dir_error.borrow_mut() = None;
         } else if switching {
@@ -498,15 +498,16 @@ impl CodeModel {
                         util::natural_cmp(&a.name, &b.name)
                     });
                     *self.dir_error.borrow_mut() = None;
-                    if has_readme(&list) {
-                        if self.readme_state.get() != ReadmeState::Loading {
-                            self.readme_state.set(ReadmeState::Pending);
+                    let state = self.readme_state_for(&key, has_readme(&list));
+                    match state {
+                        ReadmeState::None => {
+                            *self.readme.borrow_mut() = None;
+                            self.readme_cache.borrow_mut().remove(&key);
                         }
-                    } else {
-                        *self.readme.borrow_mut() = None;
-                        self.readme_state.set(ReadmeState::None);
-                        self.readme_cache.borrow_mut().remove(&key);
+                        ReadmeState::Loaded => *self.readme.borrow_mut() = self.readme_cache.borrow().get(&key).cloned().flatten(),
+                        _ => {}
                     }
+                    self.readme_state.set(state);
                     *self.entries.borrow_mut() = list.clone();
                     self.dir_cache.borrow_mut().insert(key, list);
                 }
@@ -517,28 +518,72 @@ impl CodeModel {
         self.changed.emit(&());
     }
 
+    fn current_key(&self) -> String {
+        format!("{}|{}", self.git_ref.borrow(), self.dir.borrow())
+    }
+
+    fn readme_state_for(&self, key: &str, has: bool) -> ReadmeState {
+        if !has {
+            ReadmeState::None
+        } else if self.readme_cache.borrow().contains_key(key) {
+            ReadmeState::Loaded
+        } else if self.readme_inflight.borrow().as_deref() == Some(key) {
+            ReadmeState::Loading
+        } else {
+            ReadmeState::Pending
+        }
+    }
+
     pub fn ensure_readme(self: &Rc<Self>) {
         if self.readme_state.get() != ReadmeState::Pending {
             return;
         }
         self.readme_state.set(ReadmeState::Loading);
-        let me = self.clone();
-        crate::rt::spawn_local(async move { me.load_readme().await });
-    }
-
-    async fn load_readme(self: Rc<Self>) {
-        let git_ref = self.git_ref.borrow().clone();
-        let path = self.dir.borrow().clone();
-        let api = self.api.clone();
-        let repo = self.repo.clone();
-        let (r, p) = (git_ref.clone(), path.clone());
-        let html = crate::rt::run(async move { api.readme_html(&repo, &r, &p).await }).await.ok().flatten();
-        if *self.dir.borrow() != path || *self.git_ref.borrow() != git_ref {
+        let key = self.current_key();
+        if self.readme_inflight.borrow().as_deref() == Some(key.as_str()) {
             return;
         }
-        self.readme_cache.borrow_mut().insert(format!("{git_ref}|{path}"), html.clone());
-        *self.readme.borrow_mut() = html;
-        self.readme_state.set(ReadmeState::Loaded);
+        *self.readme_inflight.borrow_mut() = Some(key.clone());
+        let me = self.clone();
+        crate::rt::spawn_local(async move { me.load_readme(key).await });
+    }
+
+    pub fn retry_readme(self: &Rc<Self>) {
+        if self.readme_state.get() == ReadmeState::Failed {
+            self.readme_state.set(ReadmeState::Pending);
+            *self.readme_error.borrow_mut() = None;
+            self.ensure_readme();
+            self.changed.emit(&());
+        }
+    }
+
+    async fn load_readme(self: Rc<Self>, key: String) {
+        let api = self.api.clone();
+        let repo = self.repo.clone();
+        let (r, p) = (self.git_ref.borrow().clone(), self.dir.borrow().clone());
+        let res = crate::rt::run(async move { api.readme_html(&repo, &r, &p).await }).await;
+        if self.readme_inflight.borrow().as_deref() == Some(key.as_str()) {
+            *self.readme_inflight.borrow_mut() = None;
+        }
+        let current = self.current_key() == key;
+        match res {
+            Ok(html) => {
+                self.readme_cache.borrow_mut().insert(key, html.clone());
+                if !current {
+                    return;
+                }
+                *self.readme.borrow_mut() = html;
+                *self.readme_error.borrow_mut() = None;
+                self.readme_state.set(ReadmeState::Loaded);
+            }
+            Err(e) => {
+                if !current {
+                    return;
+                }
+                *self.readme_error.borrow_mut() = Some(e.message);
+                self.readme_state.set(ReadmeState::Failed);
+            }
+        }
         self.changed.emit(&());
     }
 
@@ -956,9 +1001,11 @@ impl CodeBrowser {
         }
         let file = m.file.borrow().clone();
         let error = m.file_error.borrow().clone();
-        let readme_waiting = matches!(m.readme_state.get(), ReadmeState::Pending | ReadmeState::Loading);
+        let no_readme = m.readme.borrow().is_none();
+        let readme_waiting = no_readme && matches!(m.readme_state.get(), ReadmeState::Pending | ReadmeState::Loading);
+        let readme_failed = if no_readme && m.readme_state.get() == ReadmeState::Failed { m.readme_error.borrow().clone() } else { None };
         let key = format!(
-            "{:?}|{}|{}|{}|{}|{}|{}|{}",
+            "{:?}|{}|{}|{}|{}|{:?}|{}|{}|{}",
             selected,
             match &file {
                 Some(FileContent::Text(t, _)) => format!("t{}", t.len()),
@@ -970,6 +1017,7 @@ impl CodeBrowser {
             error.clone().unwrap_or_default(),
             m.readme.borrow().as_ref().map(|r| r.len()).unwrap_or(0),
             readme_waiting,
+            readme_failed,
             m.loading_dir.get(),
             self.markdown_source.get(),
             self.wrap.get()
@@ -1013,6 +1061,11 @@ impl CodeBrowser {
             }
             holder.append(&html.view);
             self.content.set_child(Some(&holder));
+            return;
+        }
+        if let Some(e) = readme_failed {
+            let mm = m.clone();
+            self.content.set_child(Some(&error_state(&format!("Couldn't load README: {e}"), Some(Box::new(move || mm.retry_readme())))));
             return;
         }
         if readme_waiting {

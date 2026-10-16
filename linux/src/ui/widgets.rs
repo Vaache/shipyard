@@ -309,6 +309,23 @@ pub fn loading() -> gtk::Widget {
     s.upcast()
 }
 
+pub fn after_next_paint<W: IsA<gtk::Widget>>(w: &W, f: impl FnOnce() + 'static) {
+    let Some(clock) = w.frame_clock() else { return };
+    let pending = RefCell::new(Some(f));
+    let handler: Rc<RefCell<Option<glib::SignalHandlerId>>> = Rc::new(RefCell::new(None));
+    let h = handler.clone();
+    let id = clock.connect_after_paint(move |c| {
+        if let Some(f) = pending.borrow_mut().take() {
+            f();
+        }
+        if let Some(id) = h.borrow_mut().take() {
+            c.disconnect(id);
+        }
+    });
+    *handler.borrow_mut() = Some(id);
+    clock.request_phase(gdk::FrameClockPhase::PAINT);
+}
+
 pub fn spinner(size: i32) -> gtk::Spinner {
     let s = gtk::Spinner::new();
     s.set_spinning(true);
