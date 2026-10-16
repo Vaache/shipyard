@@ -418,6 +418,7 @@ fn ci_section(state: &Rc<State>, ci: &Rc<CiFix>, body: &gtk::Box) {
     let cs = gtk::ScrolledWindow::new();
     cs.set_child(Some(&list));
     cs.set_max_content_height(150);
+    cs.set_min_content_height(ci.failures.borrow().len().min(4) as i32 * 30 + 16);
     cs.set_propagate_natural_height(true);
     body.append(&frame(&cs, "sy-card-flat"));
     let boxes = Rc::new(boxes);
