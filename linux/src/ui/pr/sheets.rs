@@ -483,7 +483,7 @@ fn show_log(view: &gtk::TextView, buffer: &gtk::TextBuffer) {
     view.scroll_mark_onscreen(&mark);
 }
 
-pub fn job_log(api: GitHubApi, repo: RepoRef, check: CheckContext) {
+pub fn job_log(api: GitHubApi, repo: RepoRef, check: CheckContext, fix: Option<Rc<dyn Fn(Option<String>)>>) {
     let sheet = Sheet::new(&check.workflow_name().map(|w| format!("{w} / {}", check.title())).unwrap_or_else(|| check.title()), 980, 640);
     let stack = gtk::Stack::new();
     stack.add_named(&loading(), Some("loading"));
@@ -507,13 +507,24 @@ pub fn job_log(api: GitHubApi, repo: RepoRef, check: CheckContext) {
         sheet.footer.append(&open);
     }
     sheet.add_footer_spacer();
+    let log: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+    if let Some(fix) = fix {
+        let b = tinted("Fix with Claude Code", "coral");
+        let d = sheet.dialog.clone();
+        let l = log.clone();
+        b.connect_clicked(move |_| {
+            let text = l.borrow().clone();
+            d.close();
+            fix(text);
+        });
+        sheet.footer.append(&b);
+    }
     let close = button("Close");
     let d = sheet.dialog.clone();
     close.connect_clicked(move |_| {
         d.close();
     });
     sheet.footer.append(&close);
-    let log: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
     let l = log.clone();
     copy.connect_clicked(move |_| {
         if let Some(s) = l.borrow().as_ref() {

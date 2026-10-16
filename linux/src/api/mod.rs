@@ -514,6 +514,34 @@ impl GitHubApi {
         Ok(String::from_utf8_lossy(&bytes).to_string())
     }
 
+    pub async fn plain_tail(&self, url: &str, max_bytes: usize) -> ApiResult<(String, bool)> {
+        let mut probe = diagnostics::begin_rest("GET", url);
+        let mut resp = net(&mut probe, self.inner.plain.get(url).timeout(Duration::from_secs(300)).send().await)?;
+        let status = resp.status();
+        probe.response(status.as_u16(), resp.headers());
+        let mut buf: Vec<u8> = Vec::new();
+        let mut total = 0;
+        while let Some(chunk) = net(&mut probe, resp.chunk().await)? {
+            total += chunk.len();
+            buf.extend_from_slice(&chunk);
+            if buf.len() > max_bytes + max_bytes / 4 {
+                buf.drain(..buf.len() - max_bytes);
+            }
+        }
+        if buf.len() > max_bytes {
+            buf.drain(..buf.len() - max_bytes);
+        }
+        probe.body(total);
+        probe.track(check_status(status, &buf))?;
+        let cut = total > buf.len();
+        let mut text = String::from_utf8_lossy(&buf).into_owned();
+        if cut {
+            let first = text.find('\n').map(|i| i + 1).unwrap_or(0);
+            text.drain(..first);
+        }
+        Ok((text, cut))
+    }
+
     pub async fn fetch(&self, path: &str, accept: &str) -> ApiResult<Option<Vec<u8>>> {
         match self.fetch_attempt(path, accept, false).await {
             Err(e) if e.is_transient() => {

@@ -1,6 +1,7 @@
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
-use std::rc::Rc;
+use std::collections::{HashMap, HashSet};
+use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
 use adw::prelude::*;
 
@@ -8,8 +9,11 @@ use super::dialogs::{self, Sheet};
 use super::pr::model::PrModel;
 use super::widgets::*;
 use crate::api::models::*;
+use crate::ci_fix::{self, Details, Failure, PrInfo};
 use crate::claude::accounts;
 use crate::claude::launcher::{self, PermissionMode, Target};
+use crate::claude::workspace::Tab;
+use crate::claude::TabState;
 use crate::fix_prompt::{self, FixOptions, FoundFixPrompt};
 use crate::{app, local_repo, settings, util};
 
@@ -56,8 +60,113 @@ pub fn banner(pr: &PullRequestDetail, action: impl Fn() + 'static) -> Option<gtk
     Some(b)
 }
 
+thread_local! {
+    static CI_SESSIONS: RefCell<HashMap<String, Weak<Tab>>> = RefCell::new(HashMap::new());
+}
+
+pub fn ci_session(r: &ItemRef) -> Option<(Rc<Tab>, TabState)> {
+    let tab = CI_SESSIONS.with(|m| m.borrow().get(&r.title()).and_then(Weak::upgrade))?;
+    let ws = app::try_get()?.claude.clone();
+    if !ws.tabs.borrow().iter().any(|t| t.id == tab.id) {
+        return None;
+    }
+    let state = tab.state();
+    matches!(state, TabState::Working | TabState::Waiting | TabState::Active).then_some((tab, state))
+}
+
+pub fn ci_banner(pr: &PullRequestDetail, r: &ItemRef, action: impl Fn() + 'static) -> Option<gtk::Box> {
+    if !pr.is_open() {
+        return None;
+    }
+    let failing = ci_fix::failing(pr).len();
+    if failing == 0 {
+        return None;
+    }
+    let b = hbox(8);
+    b.add_css_class("banner-box");
+    b.add_css_class("red");
+    b.set_vexpand(false);
+    b.set_valign(gtk::Align::Start);
+    margins(&b, 6, 16, 0, 16);
+    b.append(&icon_tile("sy-x-circle-symbolic", "red", 18));
+    b.append(&label_with(&util::plural(failing as i64, "check failing", "checks failing"), &["sy-text"]));
+    if let Some((tab, state)) = ci_session(r) {
+        b.append(&label_with("·", &["sy-dim"]));
+        let (text, class) = match state {
+            TabState::Working => ("Fix running", "sy-muted"),
+            TabState::Waiting => ("Fix needs your input", "fg-amber"),
+            _ => ("Fix session open", "sy-muted"),
+        };
+        if state == TabState::Working {
+            b.append(&spinner(12));
+        }
+        b.append(&label_with(text, &[class]));
+        let show = link_button("Show");
+        let id = tab.id;
+        show.connect_clicked(move |_| {
+            app::set_section(app::Section::Claude);
+            app::get().claude.select(id);
+        });
+        b.append(&show);
+    }
+    b.append(&spacer());
+    let btn = tinted("Fix with Claude Code", "coral");
+    btn.add_css_class("banner-button");
+    btn.set_valign(gtk::Align::Center);
+    btn.set_vexpand(false);
+    btn.connect_clicked(move |_| action());
+    b.append(&btn);
+    Some(b)
+}
+
+struct CiFix {
+    failures: RefCell<Vec<Failure>>,
+    selected: RefCell<HashSet<String>>,
+    checks: HashMap<String, CheckContext>,
+    requested: RefCell<HashSet<String>>,
+    seed_log: RefCell<Option<(String, String)>>,
+    limit: Arc<tokio::sync::Semaphore>,
+    nonce: String,
+    status: RefCell<HashMap<String, gtk::Box>>,
+    tasks: RefCell<Vec<tokio::task::AbortHandle>>,
+}
+
+impl CiFix {
+    fn loading(&self) -> bool {
+        let selected = self.selected.borrow();
+        self.failures.borrow().iter().any(|f| selected.contains(&f.id) && f.is_pending())
+    }
+
+    fn render_status(&self, f: &Failure) {
+        let Some(b) = self.status.borrow().get(&f.id).cloned() else { return };
+        clear(&b);
+        if f.is_pending() && !self.requested.borrow().contains(&f.id) {
+            b.append(&label_with("Select to fetch the log", &["sy-dim", "sy-small"]));
+            return;
+        }
+        if f.is_pending() {
+            b.append(&spinner(12));
+        }
+        let class = if matches!(f.details, Details::Unavailable(_)) { "fg-amber" } else { "sy-muted" };
+        let l = label_with(&f.summary(), &[class, "sy-small"]);
+        if matches!(f.details, Details::Unavailable(_)) {
+            l.set_tooltip_text(Some("Uncheck and check again to retry"));
+        }
+        l.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        l.set_max_width_chars(36);
+        b.append(&l);
+    }
+
+    fn cancel(&self) {
+        for t in self.tasks.borrow_mut().drain(..) {
+            t.abort();
+        }
+    }
+}
+
 struct State {
     model: Rc<PrModel>,
+    ci: Option<Rc<CiFix>>,
     pr: PullRequestDetail,
     found: Option<FoundFixPrompt>,
     use_reviewer: Cell<bool>,
@@ -82,6 +191,12 @@ impl State {
 
     fn generated(&self) -> String {
         let options = self.options.borrow().clone();
+        if let Some(ci) = &self.ci {
+            let failures = ci.failures.borrow();
+            let selected = ci.selected.borrow();
+            let chosen: Vec<&Failure> = failures.iter().filter(|f| selected.contains(&f.id)).collect();
+            return ci_fix::build(&PrInfo::new(&self.pr, &self.model.r.repo), &chosen, &options, &ci.nonce);
+        }
         if self.use_reviewer.get() {
             if let Some(f) = &self.found {
                 return fix_prompt::wrap(f, &self.pr, &options);
@@ -111,7 +226,59 @@ impl State {
         self.count.set_text(&p.chars().count().to_string());
         let target = self.target.get();
         self.launch.set_label(if target == Target::Copy { "Copy" } else { "Launch" });
-        self.launch.set_sensitive(!p.trim().is_empty() && (target == Target::Copy || self.folder.borrow().is_some()));
+        let loading = self.ci.as_ref().is_some_and(|c| c.loading());
+        let empty = self.ci.as_ref().is_some_and(|c| c.selected.borrow().is_empty());
+        self.launch.set_sensitive(!p.trim().is_empty() && !loading && !empty && (target == Target::Copy || self.folder.borrow().is_some()));
+        self.launch.set_tooltip_text(if loading { Some("Collecting CI logs…") } else { None });
+        self.prompt_view.set_editable(!loading);
+    }
+
+    fn ci_fetch(self: &Rc<Self>, id: &str) {
+        let Some(ci) = &self.ci else { return };
+        let Some(check) = ci.checks.get(id).cloned() else { return };
+        if !ci.requested.borrow_mut().insert(id.to_string()) {
+            return;
+        }
+        let log = {
+            let mut seed = ci.seed_log.borrow_mut();
+            if seed.as_ref().is_some_and(|(s, _)| s == id) {
+                seed.take().map(|(_, l)| l)
+            } else {
+                None
+            }
+        };
+        if let Some(f) = ci.failures.borrow_mut().iter_mut().find(|f| f.id == id) {
+            if matches!(f.details, Details::Unavailable(_)) {
+                f.details = Details::Pending;
+                f.notes.clear();
+            }
+            ci.render_status(f);
+        }
+        let handle = crate::rt::spawn(ci_fix::collect(self.model.api.clone(), self.model.r.repo.clone(), check, ci.limit.clone(), log));
+        ci.tasks.borrow_mut().push(handle.abort_handle());
+        let w = Rc::downgrade(self);
+        crate::rt::spawn_local(async move {
+            let Ok(f) = handle.await else { return };
+            if let Some(st) = w.upgrade() {
+                st.ci_result(f);
+            }
+        });
+    }
+
+    fn ci_result(&self, f: Failure) {
+        let Some(ci) = &self.ci else { return };
+        if let Some(slot) = ci.failures.borrow_mut().iter_mut().find(|x| x.id == f.id) {
+            *slot = f.clone();
+        }
+        if matches!(f.details, Details::Unavailable(_)) {
+            ci.requested.borrow_mut().remove(&f.id);
+        }
+        ci.render_status(&f);
+        if self.custom.borrow().is_none() {
+            self.refresh_prompt();
+        } else {
+            self.update();
+        }
     }
 
     fn render_folder(self: &Rc<Self>) {
@@ -158,7 +325,115 @@ impl State {
 }
 
 pub fn show(model: Rc<PrModel>) {
+    present(model, None);
+}
+
+pub fn show_ci(model: Rc<PrModel>, focus: Option<String>) {
+    open_ci(model, focus, None, None);
+}
+
+pub fn show_ci_with_log(model: Rc<PrModel>, id: String, log: String) {
+    open_ci(model, Some(id.clone()), Some((id, log)), None);
+}
+
+pub fn show_ci_prefetched(model: Rc<PrModel>, failures: Vec<Failure>) {
+    open_ci(model, None, None, Some(failures));
+}
+
+fn open_ci(model: Rc<PrModel>, focus: Option<String>, seed_log: Option<(String, String)>, prefetched: Option<Vec<Failure>>) {
     let Some(pr) = model.pr.borrow().clone() else { return };
+    let fetch = prefetched.is_none();
+    let checks: HashMap<String, CheckContext> = if fetch { ci_fix::failing(&pr).into_iter().map(|c| (c.id(), c)).collect() } else { HashMap::new() };
+    let failures = prefetched.unwrap_or_else(|| ci_fix::failing(&pr).iter().map(Failure::from_check).collect());
+    if failures.is_empty() {
+        app::toast("No failing checks on the latest commit");
+        return;
+    }
+    let selected: HashSet<String> = match focus.filter(|id| failures.iter().any(|f| &f.id == id)) {
+        Some(id) => HashSet::from([id]),
+        None => failures.iter().map(|f| f.id.clone()).collect(),
+    };
+    let order: Vec<String> = failures.iter().map(|f| f.id.clone()).filter(|id| selected.contains(id)).collect();
+    let ci = Rc::new(CiFix {
+        failures: RefCell::new(failures),
+        selected: RefCell::new(selected),
+        checks,
+        requested: RefCell::new(HashSet::new()),
+        seed_log: RefCell::new(seed_log),
+        limit: Arc::new(tokio::sync::Semaphore::new(ci_fix::CONCURRENCY)),
+        nonce: ci_fix::nonce(),
+        status: RefCell::new(HashMap::new()),
+        tasks: RefCell::new(vec![]),
+    });
+    let Some(state) = present(model, Some(ci)) else { return };
+    for id in order {
+        state.ci_fetch(&id);
+    }
+    state.update();
+}
+
+fn ci_section(state: &Rc<State>, ci: &Rc<CiFix>, body: &gtk::Box) {
+    let ch = hbox(6);
+    let t = label_with("Failing checks", &["sy-muted", "sy-small", "sy-bold"]);
+    t.set_hexpand(true);
+    ch.append(&t);
+    let all = link_button("All");
+    let none = link_button("None");
+    ch.append(&all);
+    ch.append(&none);
+    body.append(&ch);
+    let list = vbox(4);
+    pad(&list, 8);
+    let mut boxes: Vec<gtk::CheckButton> = vec![];
+    for f in ci.failures.borrow().iter() {
+        let cbtn = gtk::CheckButton::new();
+        cbtn.set_active(ci.selected.borrow().contains(&f.id));
+        let row = hbox(6);
+        row.append(&outcome_icon(CheckOutcome::Failure));
+        let name = ellipsized(&f.name, &["sy-text"]);
+        name.set_hexpand(true);
+        row.append(&name);
+        let status = hbox(4);
+        ci.status.borrow_mut().insert(f.id.clone(), status.clone());
+        row.append(&status);
+        cbtn.set_child(Some(&row));
+        let st = state.clone();
+        let c = ci.clone();
+        let id = f.id.clone();
+        cbtn.connect_toggled(move |b| {
+            if b.is_active() {
+                c.selected.borrow_mut().insert(id.clone());
+                st.ci_fetch(&id);
+            } else {
+                c.selected.borrow_mut().remove(&id);
+            }
+            st.refresh_prompt();
+        });
+        list.append(&cbtn);
+        boxes.push(cbtn);
+    }
+    for f in ci.failures.borrow().iter() {
+        ci.render_status(f);
+    }
+    let cs = gtk::ScrolledWindow::new();
+    cs.set_child(Some(&list));
+    cs.set_max_content_height(150);
+    cs.set_min_content_height(ci.failures.borrow().len().min(4) as i32 * 30 + 16);
+    cs.set_propagate_natural_height(true);
+    body.append(&frame(&cs, "sy-card-flat"));
+    let boxes = Rc::new(boxes);
+    let bx = boxes.clone();
+    all.connect_clicked(move |_| bx.iter().for_each(|b| b.set_active(true)));
+    let bx = boxes.clone();
+    none.connect_clicked(move |_| bx.iter().for_each(|b| b.set_active(false)));
+    let note = hbox(6);
+    note.append(&icon("dialog-information-symbolic", 14));
+    note.append(&wrap_label("Log excerpts and annotations go into the prompt as untrusted data. Review it before you launch.", &["sy-muted", "sy-small"]));
+    body.append(&note);
+}
+
+fn present(model: Rc<PrModel>, ci: Option<Rc<CiFix>>) -> Option<Rc<State>> {
+    let pr = model.pr.borrow().clone()?;
     let sheet = Sheet::new("Fix with Claude Code", 780, 680);
     let head = hbox(10);
     head.append(&icon_tile("sy-sparkles-symbolic", "coral", 30));
@@ -197,9 +472,10 @@ pub fn show(model: Rc<PrModel>) {
     }
     let state = Rc::new(State {
         model: model.clone(),
+        ci: ci.clone(),
         pr: pr.clone(),
         found: found.clone(),
-        use_reviewer: Cell::new(found.is_some()),
+        use_reviewer: Cell::new(ci.is_none() && found.is_some()),
         selected: RefCell::new(initial),
         options: RefCell::new(FixOptions::default()),
         custom: RefCell::new(None),
@@ -216,6 +492,7 @@ pub fn show(model: Rc<PrModel>) {
 
     let composed_box = vbox(4);
     match &found {
+        _ if ci.is_some() => {}
         Some(f) => {
             let toggles = hbox(0);
             toggles.add_css_class("linked");
@@ -318,7 +595,10 @@ pub fn show(model: Rc<PrModel>) {
             b.set_active(false);
         }
     });
-    sheet.body.append(&composed_box);
+    match &ci {
+        Some(c) => ci_section(&state, c, &sheet.body),
+        None => sheet.body.append(&composed_box),
+    }
 
     let opts = hbox(16);
     let commit = gtk::CheckButton::with_label("Commit");
@@ -348,7 +628,9 @@ pub fn show(model: Rc<PrModel>) {
     });
     opts.append(&commit);
     opts.append(&push);
-    opts.append(&reply);
+    if ci.is_none() {
+        opts.append(&reply);
+    }
     sheet.body.append(&opts);
 
     let ph = hbox(6);
@@ -410,12 +692,16 @@ pub fn show(model: Rc<PrModel>) {
     let st = state.clone();
     launch.connect_clicked(move |_| {
         let prompt = st.prompt();
-        let name = format!("Fix PR #{}: {}", st.pr.number, st.pr.title);
+        let name = if st.ci.is_some() { format!("Fix CI on PR #{}: {}", st.pr.number, st.pr.title) } else { format!("Fix PR #{}: {}", st.pr.number, st.pr.title) };
         let folder = st.folder.borrow().clone();
         let target = st.target.get();
         if target == Target::App {
             if let Some(f) = folder {
-                app::get().claude.new_session(&f, Some(prompt), Some(name), None, None);
+                let tab = app::get().claude.new_session(&f, Some(prompt), Some(name), None, None);
+                if st.ci.is_some() {
+                    CI_SESSIONS.with(|m| m.borrow_mut().insert(st.model.r.title(), Rc::downgrade(&tab)));
+                    app::get().claude.emit(crate::claude::workspace::WsEvent::TabState);
+                }
                 app::set_section(app::Section::Claude);
                 d.close();
             }
@@ -442,5 +728,9 @@ pub fn show(model: Rc<PrModel>) {
         st.detecting.set(false);
         st.render_folder();
     });
+    if let Some(c) = ci {
+        sheet.dialog.connect_closed(move |_| c.cancel());
+    }
     sheet.present();
+    Some(state)
 }

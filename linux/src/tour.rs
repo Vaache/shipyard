@@ -8,7 +8,8 @@ use gtk::glib;
 
 use crate::api::models::*;
 use crate::app::{self, App, IssueFilter, PrFilter, Section};
-use crate::ui::pr::model::PrTab;
+use crate::ci_fix::{self, Details, Failure};
+use crate::ui::pr::model::{Change, PrModel, PrTab};
 
 thread_local! {
     static DIR: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
@@ -88,6 +89,40 @@ impl Plan {
     fn shot(&mut self, name: &'static str) -> &mut Self {
         self.act(move || capture(name))
     }
+}
+
+fn inject_failing_checks(m: &PrModel) {
+    let Ok(checks) = serde_json::from_str::<Vec<CheckContext>>(crate::fixtures::TOUR_FAILING_CHECKS) else { return };
+    {
+        let mut pr = m.pr.borrow_mut();
+        let Some(pr) = pr.as_mut() else { return };
+        let rollup = StatusRollup { state: "FAILURE".into(), contexts: Some(Nodes { nodes: checks, total_count: None }) };
+        match pr.last_commit.nodes.first_mut() {
+            Some(n) => n.commit.status_check_rollup = Some(rollup),
+            None => pr.last_commit.nodes.push(LastCommitNode { commit: LastCommit { oid: pr.head_ref_oid.clone(), committed_date: None, status_check_rollup: Some(rollup) } }),
+        }
+    }
+    m.emit(Change::Pr);
+}
+
+fn tour_failures(m: &PrModel) -> Vec<Failure> {
+    let Some(pr) = m.pr.borrow().clone() else { return vec![] };
+    ci_fix::failing(&pr)
+        .iter()
+        .map(|c| {
+            let mut f = Failure::from_check(c);
+            f.details = Details::Log(ci_fix::excerpt(crate::fixtures::CI_LOG));
+            f.annotations = vec![CheckAnnotation {
+                path: "Tests/SwiftTermTests/SearchTests.swift".into(),
+                start_line: Some(42),
+                end_line: Some(42),
+                annotation_level: Some("failure".into()),
+                title: Some("SearchTests.testStaleResultsAreDropped".into()),
+                message: "XCTAssertEqual failed: (\"2\") is not equal to (\"1\")".into(),
+            }];
+            f
+        })
+        .collect()
 }
 
 pub fn run(_app: Rc<App>) {
@@ -176,6 +211,39 @@ pub fn run(_app: Rc<App>) {
         .wait(2500)
         .shot("09-fix-with-claude")
         .act(close_dialog);
+    let m = model.clone();
+    p.wait(800)
+        .act(move || {
+            if let Some(m) = m() {
+                inject_failing_checks(&m);
+            }
+        })
+        .wait(1500)
+        .shot("09b-ci-failing-banner");
+    let m = model.clone();
+    p.act(move || {
+        if let Some(m) = m() {
+            m.set_tab(PrTab::Checks);
+        }
+    })
+    .wait(2000)
+    .shot("09c-ci-checks");
+    let m = model.clone();
+    p.act(move || {
+        if let Some(m) = m() {
+            let failures = tour_failures(&m);
+            crate::ui::fix_claude::show_ci_prefetched(m, failures);
+        }
+    })
+    .wait(2500)
+    .shot("09d-fix-ci-with-claude")
+    .act(close_dialog);
+    let m = model.clone();
+    p.wait(800).act(move || {
+        if let Some(m) = m() {
+            m.set_tab(PrTab::Conversation);
+        }
+    });
     p.wait(800).act(|| app::set_section(Section::Issues(IssueFilter::Mine))).wait(5000).shot("10-issues");
     p.act(move || app::select(Some(Route::Issue(issue)))).wait(7000).shot("11-issue");
     p.act(|| app::set_section(Section::Notifications)).wait(5000).shot("12-notifications");

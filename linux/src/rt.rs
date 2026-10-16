@@ -28,6 +28,19 @@ where
     }
 }
 
+pub fn spawn<F, T>(future: F) -> tokio::task::JoinHandle<T>
+where
+    F: Future<Output = T> + Send + 'static,
+    T: Send + 'static,
+{
+    let tick = crate::diagnostics::current_tick();
+    if tick == 0 {
+        RUNTIME.spawn(future)
+    } else {
+        RUNTIME.spawn(crate::diagnostics::TICK.scope(tick, future))
+    }
+}
+
 pub async fn blocking<F, T>(f: F) -> T
 where
     F: FnOnce() -> T + Send + 'static,
