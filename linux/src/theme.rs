@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 
 
@@ -160,6 +160,7 @@ thread_local! {
     static APP_PROVIDER: gtk::CssProvider = gtk::CssProvider::new();
     static DYNAMIC_PROVIDER: gtk::CssProvider = gtk::CssProvider::new();
     static DYNAMIC: RefCell<(HashSet<String>, String)> = RefCell::new((HashSet::new(), String::new()));
+    static DYNAMIC_PENDING: Cell<bool> = const { Cell::new(false) };
     static CHANGED: Signal<()> = Signal::new();
 }
 
@@ -362,17 +363,31 @@ pub fn hex_class(hex: &str) -> String {
     let h = crate::util::clean_hex(hex).to_lowercase();
     let h = if h.len() == 3 { h.chars().flat_map(|c| [c, c]).collect() } else { h };
     let class = format!("hex-{h}");
-    DYNAMIC.with(|d| {
+    let schedule = DYNAMIC.with(|d| {
         let mut d = d.borrow_mut();
-        if d.0.insert(h.clone()) {
-            d.1.push_str(&format!(
-                ".{class}.label-chip {{ background-color: alpha(#{h}, 0.22); border: 1px solid alpha(#{h}, 0.7); border-radius: 999px; padding: 0 7px; font-size: 0.78em; font-weight: 500; }}\n.{class}.dot {{ background-color: #{h}; border-radius: 999px; min-width: 8px; min-height: 8px; }}\n.{class}.fg {{ color: #{h}; }}\n"
-            ));
-            let css = d.1.clone();
-            DYNAMIC_PROVIDER.with(|p| p.load_from_string(&css));
+        if !d.0.insert(h.clone()) {
+            return false;
         }
+        d.1.push_str(&format!(
+            ".{class}.label-chip {{ background-color: alpha(#{h}, 0.22); border: 1px solid alpha(#{h}, 0.7); border-radius: 999px; padding: 0 7px; font-size: 0.78em; font-weight: 500; }}\n.{class}.dot {{ background-color: #{h}; border-radius: 999px; min-width: 8px; min-height: 8px; }}\n.{class}.fg {{ color: #{h}; }}\n"
+        ));
+        !DYNAMIC_PENDING.replace(true)
     });
+    if schedule {
+        gtk::glib::idle_add_local_full(gtk::glib::Priority::HIGH_IDLE, || {
+            flush_dynamic();
+            gtk::glib::ControlFlow::Break
+        });
+    }
     class
+}
+
+fn flush_dynamic() {
+    DYNAMIC_PENDING.set(false);
+    DYNAMIC.with(|d| {
+        let d = d.borrow();
+        DYNAMIC_PROVIDER.with(|p| p.load_from_string(&d.1));
+    });
 }
 
 const PROJECT_COLORS: &[&str] = &["sky", "violet", "coral", "orange", "teal", "green", "indigo", "amber"];

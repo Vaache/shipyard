@@ -425,40 +425,59 @@ pub fn filter_errors(s: &str) -> String {
     }
 }
 
-fn set_log(view: &gtk::TextView, text: &str) {
-    let buffer = view.buffer();
-    buffer.set_text(text);
-    let table = buffer.tag_table();
-    let tag = |name: &str, color: &str| -> gtk::TextTag {
-        if let Some(t) = table.lookup(name) {
-            return t;
-        }
+struct LogText {
+    text: String,
+    tags: Vec<(i32, usize)>,
+}
+
+const LOG_TAGS: [(&str, &str); 3] = [("err", "#e01b24"), ("warn", "#e66100"), ("group", "#3584e4")];
+
+fn log_text(text: String) -> LogText {
+    let tags = text
+        .split('\n')
+        .enumerate()
+        .filter_map(|(i, line)| {
+            let kind = if line.contains("##[error]") {
+                0
+            } else if line.contains("##[warning]") {
+                1
+            } else if line.starts_with("##[group]") {
+                2
+            } else {
+                return None;
+            };
+            Some((i as i32, kind))
+        })
+        .collect();
+    LogText { text, tags }
+}
+
+fn log_tag_table() -> gtk::TextTagTable {
+    let table = gtk::TextTagTable::new();
+    for (name, color) in LOG_TAGS {
         let t = gtk::TextTag::new(Some(name));
         t.set_foreground(Some(color));
         table.add(&t);
-        t
-    };
-    let err = tag("err", "#e01b24");
-    let warn = tag("warn", "#e66100");
-    let group = tag("group", "#3584e4");
-    for (i, line) in text.split('\n').enumerate() {
-        let t = if line.contains("##[error]") {
-            Some(&err)
-        } else if line.contains("##[warning]") {
-            Some(&warn)
-        } else if line.starts_with("##[group]") {
-            Some(&group)
-        } else {
-            None
-        };
-        if let Some(t) = t {
-            if let Some(start) = buffer.iter_at_line(i as i32) {
-                let mut end = start;
-                end.forward_to_line_end();
-                buffer.apply_tag(t, &start, &end);
-            }
-        }
     }
+    table
+}
+
+fn log_buffer(table: &gtk::TextTagTable, log: &LogText) -> gtk::TextBuffer {
+    let _span = crate::diagnostics::ui_span("cilog.render");
+    let buffer = gtk::TextBuffer::new(Some(table));
+    buffer.set_text(&log.text);
+    let tags: Vec<Option<gtk::TextTag>> = LOG_TAGS.iter().map(|(name, _)| table.lookup(name)).collect();
+    for &(line, kind) in &log.tags {
+        let (Some(t), Some(start)) = (tags[kind].as_ref(), buffer.iter_at_line(line)) else { continue };
+        let mut end = start;
+        end.forward_to_line_end();
+        buffer.apply_tag(t, &start, &end);
+    }
+    buffer
+}
+
+fn show_log(view: &gtk::TextView, buffer: &gtk::TextBuffer) {
+    view.set_buffer(Some(buffer));
     let end = buffer.end_iter();
     let mark = buffer.create_mark(None, &end, false);
     view.scroll_mark_onscreen(&mark);
@@ -501,23 +520,60 @@ pub fn job_log(api: GitHubApi, repo: RepoRef, check: CheckContext) {
             util::copy(s);
         }
     });
-    let l = log.clone();
+    let table = log_tag_table();
+    let full: Rc<RefCell<Option<gtk::TextBuffer>>> = Rc::new(RefCell::new(None));
+    let errors: Rc<RefCell<Option<gtk::TextBuffer>>> = Rc::new(RefCell::new(None));
+    let errors_text: Rc<RefCell<Option<LogText>>> = Rc::new(RefCell::new(None));
+    let errors_buffer = {
+        let table = table.clone();
+        let errors = errors.clone();
+        let errors_text = errors_text.clone();
+        Rc::new(move || -> Option<gtk::TextBuffer> {
+            if let Some(b) = errors.borrow().as_ref() {
+                return Some(b.clone());
+            }
+            let b = log_buffer(&table, errors_text.borrow().as_ref()?);
+            *errors.borrow_mut() = Some(b.clone());
+            Some(b)
+        })
+    };
+    let f = full.clone();
     let v = view.clone();
+    let eb = errors_buffer.clone();
     errors_only.connect_toggled(move |c| {
-        if let Some(s) = l.borrow().as_ref() {
-            set_log(&v, &if c.is_active() { filter_errors(s) } else { s.clone() });
+        let buffer = if c.is_active() { eb() } else { f.borrow().clone() };
+        if let Some(b) = buffer {
+            show_log(&v, &b);
         }
     });
     sheet.present();
     let Some(job) = check.database_id else { return };
     crate::rt::spawn_local(async move {
-        let res = crate::rt::run(async move { api.job_log(&repo, job).await.map(|raw| clean_log(&raw)) }).await;
+        let res = crate::rt::run(async move { api.job_log(&repo, job).await }).await;
+        let res = match res {
+            Ok(raw) => Ok(crate::rt::blocking(move || {
+                let text = clean_log(&raw);
+                let errors = log_text(filter_errors(&text));
+                (log_text(text), errors)
+            })
+            .await),
+            Err(e) => Err(e),
+        };
         match res {
-            Ok(text) => {
-                set_log(&view, &text);
-                *log.borrow_mut() = Some(text);
+            Ok((text, errs)) => {
+                let buffer = log_buffer(&table, &text);
+                *errors_text.borrow_mut() = Some(errs);
+                let target = if errors_only.is_active() { errors_buffer() } else { Some(buffer.clone()) };
+                *full.borrow_mut() = Some(buffer);
+                if let Some(b) = target {
+                    show_log(&view, &b);
+                }
+                *log.borrow_mut() = Some(text.text);
                 copy.set_sensitive(true);
                 stack.set_visible_child_name("log");
+                gtk::glib::idle_add_local_once(move || {
+                    errors_buffer();
+                });
             }
             Err(e) => {
                 stack.add_named(&error_state(&e.message, None), Some("error"));
