@@ -30,7 +30,7 @@ struct PRDetailView: View {
             Task { await model?.load(full: true) }
         }
         .onChange(of: app.liveTick) {
-            Task { await model?.load() }
+            Diagnostics.liveTask { await model?.load() }
         }
     }
 }

@@ -13,13 +13,36 @@ struct RequestGroup: Identifiable {
     let errors: Int
 }
 
+struct RateLimitState: Identifiable {
+    var id: String { bucket }
+    let bucket: String
+    let remaining: Int
+    let reset: Int?
+
+    static func latest(_ newestFirst: [RequestRecord]) -> [RateLimitState] {
+        var seen: [String: RateLimitState] = [:]
+        for r in newestFirst {
+            guard let bucket = r.rateLimitBucket, seen[bucket] == nil, let remaining = r.rateLimitRemaining else { continue }
+            seen[bucket] = RateLimitState(bucket: bucket, remaining: remaining, reset: r.rateLimitReset)
+        }
+        return seen.values.sorted { $0.bucket < $1.bucket }
+    }
+
+    var resetText: String? {
+        reset.map { Date(timeIntervalSince1970: TimeInterval($0)).formatted(date: .omitted, time: .standard) }
+    }
+
+    var summary: String {
+        "\(bucket) \(remaining)" + (resetText.map { " (resets \($0))" } ?? "")
+    }
+}
+
 struct DiagnosticsStats {
     let count: Int
     let liveTick: Int
     let bytes: Int
     let avgMs: Double
     let p95Ms: Double
-    let rateLimit: RequestRecord?
 
     init(_ requests: [RequestRecord]) {
         count = requests.count
@@ -28,7 +51,6 @@ struct DiagnosticsStats {
         let durations = requests.map(\.durationMs)
         avgMs = durations.isEmpty ? 0 : durations.reduce(0, +) / Double(durations.count)
         p95Ms = Self.p95(durations)
-        rateLimit = requests.first { $0.rateLimitRemaining != nil }
     }
 
     static func p95(_ values: [Double]) -> Double {
@@ -48,7 +70,7 @@ struct DiagnosticsStats {
                 avgMs: durations.reduce(0, +) / Double(durations.count),
                 p95Ms: p95(durations),
                 bytes: items.reduce(0) { $0 + $1.bytes },
-                errors: items.filter { $0.error != nil || ($0.status ?? 200) >= 400 }.count
+                errors: items.filter(\.failed).count
             )
         }
         .sorted { $0.count == $1.count ? $0.name < $1.name : $0.count > $1.count }
@@ -75,6 +97,10 @@ struct DiagnosticsView: View {
     @State private var snapshot = DiagnosticsSnapshot(version: -1)
     @State private var tab = DiagnosticsTab.requests
     @State private var filter = ""
+    @State private var paused = false
+    @State private var selection = Set<RequestRecord.ID>()
+    @State private var groupSelection = Set<RequestGroup.ID>()
+    @State private var exportError: String?
 
     private var requests: [RequestRecord] {
         let q = filter.trimmingCharacters(in: .whitespaces)
@@ -100,10 +126,29 @@ struct DiagnosticsView: View {
         .surface(.panel)
         .task {
             while !Task.isCancelled {
-                if let s = Diagnostics.shared.snapshot(ifNewerThan: snapshot.version) { snapshot = s }
+                if !isHolding { refreshSnapshot() }
                 try? await Task.sleep(for: .seconds(1))
             }
         }
+        .alert("Couldn't export diagnostics", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(exportError ?? "")
+        }
+    }
+
+    private var isHolding: Bool {
+        paused || !selection.isEmpty || !groupSelection.isEmpty
+    }
+
+    private func refreshSnapshot() {
+        guard let s = Diagnostics.shared.snapshot(ifNewerThan: snapshot.version) else { return }
+        Diagnostics.shared.markPanelRefresh()
+        snapshot = s
+    }
+
+    private var activeTicks: [TickRecord] {
+        snapshot.ticks.filter { $0.requests > 0 }
     }
 
     private func summary(_ stats: DiagnosticsStats) -> some View {
@@ -112,10 +157,14 @@ struct DiagnosticsView: View {
                 metric("Requests", "\(stats.count)", detail: "\(stats.liveTick) live-tick · \(stats.count - stats.liveTick) user")
                 metric("Data", Self.bytes(stats.bytes))
                 metric("Avg", Self.ms(stats.avgMs), detail: "p95 \(Self.ms(stats.p95Ms))")
-                metric("Rate limit", stats.rateLimit?.rateLimitRemaining.map(String.init) ?? "—", detail: rateLimitDetail(stats.rateLimit))
+                metric("Live tick avg", activeTicks.isEmpty ? "—" : Self.ms(activeTicks.map(\.durationMs).reduce(0, +) / Double(activeTicks.count)), detail: "\(activeTicks.count) ticks with requests")
             }
             GridRow {
-                metric("Live ticks", tickSummary, detail: "last \(min(snapshot.ticks.count, 10)), newest first")
+                metric("Rate limit", rateLimits.isEmpty ? "—" : rateLimits.map { "\($0.bucket) \($0.remaining)" }.joined(separator: "  "), detail: rateLimits.isEmpty ? "no headers yet" : rateLimits.compactMap { s in s.resetText.map { "\(s.bucket) resets \($0)" } }.joined(separator: " · "))
+                    .gridCellColumns(4)
+            }
+            GridRow {
+                metric("Live ticks", tickSummary, detail: "ms/requests, last \(min(activeTicks.count, 10)) with requests, newest first")
                     .gridCellColumns(3)
                 metric("Slow UI", "\(snapshot.slowUI.count)", detail: snapshot.slowUI.map(\.durationMs).max().map { "max \(Self.ms($0))" } ?? "main thread > 16 ms")
             }
@@ -135,16 +184,14 @@ struct DiagnosticsView: View {
         }
     }
 
-    private var tickSummary: String {
-        let last = snapshot.ticks.prefix(10)
-        guard !last.isEmpty else { return "—" }
-        return last.map { "\(Int($0.durationMs.rounded()))/\($0.requests)" }.joined(separator: "  ")
+    private var rateLimits: [RateLimitState] {
+        RateLimitState.latest(snapshot.requests)
     }
 
-    private func rateLimitDetail(_ r: RequestRecord?) -> String {
-        guard let r else { return "no headers yet" }
-        let reset = r.rateLimitReset.map { "resets " + Date(timeIntervalSince1970: TimeInterval($0)).formatted(date: .omitted, time: .standard) } ?? ""
-        return [r.rateLimitResource, reset].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    private var tickSummary: String {
+        let last = activeTicks.prefix(10)
+        guard !last.isEmpty else { return "—" }
+        return last.map { "\(Int($0.durationMs.rounded()))/\($0.requests)" }.joined(separator: "  ")
     }
 
     private func toolbar(_ stats: DiagnosticsStats, _ filtered: [RequestRecord]) -> some View {
@@ -159,11 +206,15 @@ struct DiagnosticsView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 240)
             Spacer()
+            Toggle(isHolding && !paused ? "Paused (selection)" : "Pause", isOn: $paused)
+                .toggleStyle(.button)
             Button("Copy Summary") { copySummary(stats, filtered) }
             Button("Export…") { export() }
             Button("Clear", role: .destructive) {
                 Diagnostics.shared.clear()
-                if let s = Diagnostics.shared.snapshot(ifNewerThan: snapshot.version) { snapshot = s }
+                selection = []
+                groupSelection = []
+                refreshSnapshot()
             }
         }
     }
@@ -172,12 +223,12 @@ struct DiagnosticsView: View {
     private func content(_ filtered: [RequestRecord]) -> some View {
         switch tab {
         case .requests:
-            Table(filtered) {
+            Table(filtered, selection: $selection) {
                 TableColumn("Time") { r in Text(r.date.formatted(date: .omitted, time: .standard)).monospacedDigit() }
                     .width(min: 70, ideal: 80)
                 TableColumn("Kind") { r in Text(r.kind.rawValue) }
                     .width(min: 50, ideal: 60)
-                TableColumn("Name") { r in Text(r.name).lineLimit(1).help(r.name) }
+                TableColumn("Name") { r in Text(r.name).lineLimit(1).help(r.path) }
                     .width(min: 180, ideal: 320)
                 TableColumn("Origin") { r in Text(r.origin.rawValue).foregroundStyle(r.origin == .liveTick ? Color.syMuted : Color.syText) }
                     .width(min: 60, ideal: 70)
@@ -187,11 +238,13 @@ struct DiagnosticsView: View {
                     .width(min: 60, ideal: 70)
                 TableColumn("Status") { r in statusText(r) }
                     .width(min: 50, ideal: 120)
-                TableColumn("Remaining") { r in Text(r.rateLimitRemaining.map(String.init) ?? "").monospacedDigit() }
+                TableColumn("Remaining") { r in Text(r.rateLimitRemaining.map(String.init) ?? "").monospacedDigit().help(r.rateLimitBucket ?? "") }
                     .width(min: 60, ideal: 70)
+                TableColumn("Path") { r in Text(r.path).lineLimit(1).truncationMode(.middle).foregroundStyle(Color.syMuted).help(r.path) }
+                    .width(min: 120, ideal: 260)
             }
         case .grouped:
-            Table(DiagnosticsStats.groups(filtered)) {
+            Table(DiagnosticsStats.groups(filtered), selection: $groupSelection) {
                 TableColumn("Name") { g in Text(g.name).lineLimit(1).help(g.name) }
                     .width(min: 200, ideal: 360)
                 TableColumn("Kind") { g in Text(g.kind.rawValue) }
@@ -222,19 +275,22 @@ struct DiagnosticsView: View {
     }
 
     private func statusText(_ r: RequestRecord) -> some View {
-        let failed = r.error != nil || (r.status ?? 200) >= 400
-        return Text(r.error ?? r.status.map(String.init) ?? "")
+        let text = [r.status.map(String.init), r.error, r.note].compactMap { $0 }.joined(separator: " · ")
+        return Text(text)
             .lineLimit(1)
-            .help(r.error ?? "")
-            .foregroundStyle(failed ? Color.syCoral : Color.syText)
+            .help(text)
+            .foregroundStyle(r.failed ? Color.syCoral : r.note != nil ? Color.syAmber : Color.syText)
     }
 
     private func copySummary(_ stats: DiagnosticsStats, _ filtered: [RequestRecord]) {
         var lines = ["PullYard diagnostics, \(Date().formatted(date: .abbreviated, time: .standard))"]
         if !filter.isEmpty { lines.append("Filter: \(filter)") }
         lines.append("Requests: \(stats.count) (\(stats.liveTick) live-tick, \(stats.count - stats.liveTick) user), \(Self.bytes(stats.bytes)), avg \(Self.ms(stats.avgMs)), p95 \(Self.ms(stats.p95Ms))")
-        if let r = stats.rateLimit, let remaining = r.rateLimitRemaining {
-            lines.append("Rate limit: \(remaining) remaining, \(rateLimitDetail(r))")
+        if !rateLimits.isEmpty {
+            lines.append("Rate limit: " + rateLimits.map(\.summary).joined(separator: ", "))
+        }
+        if !activeTicks.isEmpty {
+            lines.append("Live ticks: \(activeTicks.count) with requests, avg \(Self.ms(activeTicks.map(\.durationMs).reduce(0, +) / Double(activeTicks.count)))")
         }
         lines.append("Live ticks (ms/requests, newest first): \(tickSummary)")
         lines.append("Slow UI (>16 ms): \(snapshot.slowUI.count)" + (snapshot.slowUI.map(\.durationMs).max().map { ", max \(Self.ms($0))" } ?? ""))
@@ -251,9 +307,13 @@ struct DiagnosticsView: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "jsonl") ?? .json]
         panel.nameFieldStringValue = "pullyard-diagnostics-\(Self.fileStamp.string(from: Date())).jsonl"
-        let data = DiagnosticsExport.jsonLines(snapshot)
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? data.write(to: url, options: .atomic)
+        let current = Diagnostics.shared.snapshot(ifNewerThan: -1) ?? snapshot
+        do {
+            try DiagnosticsExport.jsonLines(current).write(to: url, options: .atomic)
+        } catch {
+            exportError = error.localizedDescription
+        }
     }
 
     private static let fileStamp: DateFormatter = {
@@ -282,11 +342,14 @@ enum DiagnosticsExport {
         let ts: Date
         var kind: String?
         var name: String?
+        var path: String?
         var origin: String?
         let durationMs: Double
         var bytes: Int?
         var status: Int?
         var error: String?
+        var note: String?
+        var authenticated: Bool?
         var rateLimitRemaining: Int?
         var rateLimitReset: Int?
         var rateLimitResource: String?
@@ -302,7 +365,7 @@ enum DiagnosticsExport {
     static func jsonLines(_ s: DiagnosticsSnapshot) -> Data {
         var lines: [Line] = []
         for r in s.requests {
-            lines.append(Line(type: "request", ts: r.date, kind: r.kind.rawValue, name: r.name, origin: r.origin.rawValue, durationMs: r.durationMs, bytes: r.bytes, status: r.status, error: r.error, rateLimitRemaining: r.rateLimitRemaining, rateLimitReset: r.rateLimitReset, rateLimitResource: r.rateLimitResource))
+            lines.append(Line(type: "request", ts: r.date, kind: r.kind.rawValue, name: r.name, path: r.path, origin: r.origin.rawValue, durationMs: r.durationMs, bytes: r.bytes, status: r.status, error: r.error, note: r.note, authenticated: r.authenticated ? nil : false, rateLimitRemaining: r.rateLimitRemaining, rateLimitReset: r.rateLimitReset, rateLimitResource: r.rateLimitResource))
         }
         for t in s.ticks {
             lines.append(Line(type: "tick", ts: t.date, durationMs: t.durationMs, requests: t.requests))

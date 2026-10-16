@@ -251,7 +251,7 @@ struct SearchListView: View {
             await reload(typing: typing)
         }
         .onChange(of: app.refreshTick) { Task { await reload() } }
-        .onChange(of: app.liveTick) { Task { await reload(silent: true) } }
+        .onChange(of: app.liveTick) { Diagnostics.liveTask { await reload(silent: true) } }
     }
 
     private func row(_ item: SearchItem) -> some View {

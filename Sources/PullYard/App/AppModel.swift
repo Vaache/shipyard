@@ -306,7 +306,7 @@ final class AppModel {
         Diagnostics.shared.beginTick()
         lastLiveRefresh = Date()
         liveTick += 1
-        Task { await refreshBadges() }
+        Diagnostics.liveTask { await self.refreshBadges() }
     }
 
     func refreshBadges() async {

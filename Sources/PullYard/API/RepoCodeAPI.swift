@@ -50,7 +50,7 @@ struct GitTreeREST: Decodable {
 
 extension GitHubAPI {
     static let gitObjectQuery = """
-    query($owner: String!, $name: String!, $expr: String!) { repository(owner: $owner, name: $name) { object(expression: $expr) { __typename
+    query GitObject($owner: String!, $name: String!, $expr: String!) { repository(owner: $owner, name: $name) { object(expression: $expr) { __typename
       ... on Tree { entries { name path type object { ... on Blob { byteSize isBinary } } } }
       ... on Blob { byteSize isBinary isTruncated text }
     } } }
@@ -92,7 +92,7 @@ extension GitHubAPI {
         req.setValue(accept, forHTTPHeaderField: "Accept")
         req.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         req.setValue("PullYard-macOS", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await Diagnostics.track(.rest, Diagnostics.restName("GET", req.url)) { try await URLSession.shared.data(for: req) }
+        let (data, response) = try await Diagnostics.track(.rest, Diagnostics.restName("GET", req.url), url: req.url) { try await URLSession.shared.data(for: req) }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 404 { return nil }
         guard (200..<300).contains(status) else { throw APIError(message: "GitHub \(status)", status: status) }

@@ -6,21 +6,21 @@ enum Q {
     """
 
     static let prItem = """
-    query($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { pullRequest(number: $num) { __typename ...PRItem } } }
+    query PrItem($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { pullRequest(number: $num) { __typename ...PRItem } } }
     """ + prItemFragment
 
     static let repoPullRequests = """
-    query($o: String!, $n: String!, $b: String, $states: [PullRequestState!], $first: Int!) { repository(owner: $o, name: $n) { pullRequests(headRefName: $b, states: $states, first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { __typename ...PRItem } } } }
+    query RepoPullRequests($o: String!, $n: String!, $b: String, $states: [PullRequestState!], $first: Int!) { repository(owner: $o, name: $n) { pullRequests(headRefName: $b, states: $states, first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { __typename ...PRItem } } } }
     """ + prItemFragment
 
     static let stackNode = "fragment StackPR on PullRequest { number title state isDraft headRefName baseRefName }"
 
     static let prStack = """
-    query($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { defaultBranchRef { name } pullRequest(number: $num) { ...StackPR stack { entries(first: 30) { nodes { position pullRequest { ...StackPR } } } } } } }
+    query PrStack($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { defaultBranchRef { name } pullRequest(number: $num) { ...StackPR stack { entries(first: 30) { nodes { position pullRequest { ...StackPR } } } } } } }
     """ + stackNode
 
     static let prStackNeighbors = """
-    query($o: String!, $n: String!, $head: String!, $base: String!) { repository(owner: $o, name: $n) {
+    query PrStackNeighbors($o: String!, $n: String!, $head: String!, $base: String!) { repository(owner: $o, name: $n) {
       parents: pullRequests(headRefName: $base, states: [OPEN, MERGED], first: 3, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...StackPR } }
       children: pullRequests(baseRefName: $head, states: [OPEN, MERGED], first: 5, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...StackPR } }
     } }
@@ -32,11 +32,11 @@ enum Q {
     """
 
     static let search = """
-    query($q: String!, $after: String) { search(query: $q, type: ISSUE, first: 40, after: $after) { issueCount pageInfo { hasNextPage endCursor } nodes { __typename ...PRItem ...IssueItem } } }
+    query Search($q: String!, $after: String) { search(query: $q, type: ISSUE, first: 40, after: $after) { issueCount pageInfo { hasNextPage endCursor } nodes { __typename ...PRItem ...IssueItem } } }
     """ + itemFragments
 
     static let badges = """
-    query {
+    query Badges {
       rr: search(query: "is:pr is:open review-requested:@me archived:false sort:updated-desc", type: ISSUE, first: 10) { issueCount nodes { __typename ...PRItem ...IssueItem } }
       mine: search(query: "is:pr is:open author:@me archived:false sort:updated-desc", type: ISSUE, first: 10) { issueCount nodes { __typename ...PRItem ...IssueItem } }
     }
@@ -65,7 +65,7 @@ enum Q {
     """
 
     static let pullRequest = """
-    query($owner: String!, $name: String!, $number: Int!) {
+    query PullRequest($owner: String!, $name: String!, $number: Int!) {
       viewer { login }
       repository(owner: $owner, name: $name) {
         viewerPermission mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed deleteBranchOnMerge autoMergeAllowed viewerDefaultMergeMethod
@@ -100,7 +100,7 @@ enum Q {
     """
 
     static let issue = """
-    query($owner: String!, $name: String!, $number: Int!) {
+    query Issue($owner: String!, $name: String!, $number: Int!) {
       viewer { login }
       repository(owner: $owner, name: $name) {
         issueOrPullRequest(number: $number) { __typename
@@ -116,14 +116,14 @@ enum Q {
     """
 
     static let repos = """
-    query($after: String) { viewer { repositories(first: 50, after: $after, orderBy: {field: PUSHED_AT, direction: DESC}, ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
+    query Repos($after: String) { viewer { repositories(first: 50, after: $after, orderBy: {field: PUSHED_AT, direction: DESC}, ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
       totalCount pageInfo { hasNextPage endCursor }
       nodes { nameWithOwner description isPrivate isFork isArchived stargazerCount pushedAt url primaryLanguage { name color } pullRequests(states: OPEN) { totalCount } issues(states: OPEN) { totalCount } }
     } } }
     """
 
     static let repoInfo = """
-    query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { nameWithOwner description url isPrivate stargazerCount forkCount defaultBranchRef { name } pullRequests(states: OPEN) { totalCount } issues(states: OPEN) { totalCount } } }
+    query RepoInfo($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { nameWithOwner description url isPrivate stargazerCount forkCount defaultBranchRef { name } pullRequests(states: OPEN) { totalCount } issues(states: OPEN) { totalCount } } }
     """
 
     static let projectFragment = """
@@ -131,14 +131,14 @@ enum Q {
     """
 
     static let projects = """
-    query { viewer {
+    query Projects { viewer {
       projectsV2(first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...ProjectItem } }
       organizations(first: 30) { nodes { login projectsV2(first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...ProjectItem } } } }
     } }
     """ + projectFragment
 
     static let project = """
-    query($id: ID!, $after: String) { node(id: $id) { ... on ProjectV2 { id title url
+    query Project($id: ID!, $after: String) { node(id: $id) { ... on ProjectV2 { id title url
       fields(first: 50) { nodes { __typename
         ... on ProjectV2SingleSelectField { id name options { id name color } }
         ... on ProjectV2Field { id name }
@@ -156,29 +156,29 @@ enum Q {
     """
 
     static let moveProjectItem = """
-    mutation($p: ID!, $i: ID!, $f: ID!, $o: String!) { updateProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $f, value: {singleSelectOptionId: $o}}) { projectV2Item { id } } }
+    mutation MoveProjectItem($p: ID!, $i: ID!, $f: ID!, $o: String!) { updateProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $f, value: {singleSelectOptionId: $o}}) { projectV2Item { id } } }
     """
 
     static let clearProjectItem = """
-    mutation($p: ID!, $i: ID!, $f: ID!) { clearProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $f}) { projectV2Item { id } } }
+    mutation ClearProjectItem($p: ID!, $i: ID!, $f: ID!) { clearProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $f}) { projectV2Item { id } } }
     """
 
-    static let addComment = "mutation($id: ID!, $b: String!) { addComment(input: {subjectId: $id, body: $b}) { clientMutationId } }"
-    static let addReview = "mutation($id: ID!, $e: PullRequestReviewEvent!, $b: String, $th: [DraftPullRequestReviewThread]) { addPullRequestReview(input: {pullRequestId: $id, event: $e, body: $b, threads: $th}) { clientMutationId } }"
-    static let replyThread = "mutation($id: ID!, $b: String!) { addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $id, body: $b}) { clientMutationId } }"
-    static let resolveThread = "mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { clientMutationId } }"
-    static let unresolveThread = "mutation($id: ID!) { unresolveReviewThread(input: {threadId: $id}) { clientMutationId } }"
-    static let merge = "mutation($id: ID!, $m: PullRequestMergeMethod!, $t: String, $b: String) { mergePullRequest(input: {pullRequestId: $id, mergeMethod: $m, commitHeadline: $t, commitBody: $b}) { clientMutationId } }"
-    static let enableAutoMerge = "mutation($id: ID!, $m: PullRequestMergeMethod!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $m}) { clientMutationId } }"
-    static let disableAutoMerge = "mutation($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId } }"
-    static let closePR = "mutation($id: ID!) { closePullRequest(input: {pullRequestId: $id}) { clientMutationId } }"
-    static let reopenPR = "mutation($id: ID!) { reopenPullRequest(input: {pullRequestId: $id}) { clientMutationId } }"
-    static let readyForReview = "mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { clientMutationId } }"
-    static let convertToDraft = "mutation($id: ID!) { convertPullRequestToDraft(input: {pullRequestId: $id}) { clientMutationId } }"
-    static let updateBranch = "mutation($id: ID!) { updatePullRequestBranch(input: {pullRequestId: $id}) { clientMutationId } }"
-    static let editPR = "mutation($id: ID!, $t: String!, $b: String!) { updatePullRequest(input: {pullRequestId: $id, title: $t, body: $b}) { clientMutationId } }"
-    static let markViewed = "mutation($id: ID!, $p: String!) { markFileAsViewed(input: {pullRequestId: $id, path: $p}) { clientMutationId } }"
-    static let unmarkViewed = "mutation($id: ID!, $p: String!) { unmarkFileAsViewed(input: {pullRequestId: $id, path: $p}) { clientMutationId } }"
-    static let closeIssue = "mutation($id: ID!) { closeIssue(input: {issueId: $id}) { clientMutationId } }"
-    static let reopenIssue = "mutation($id: ID!) { reopenIssue(input: {issueId: $id}) { clientMutationId } }"
+    static let addComment = "mutation AddComment($id: ID!, $b: String!) { addComment(input: {subjectId: $id, body: $b}) { clientMutationId } }"
+    static let addReview = "mutation AddReview($id: ID!, $e: PullRequestReviewEvent!, $b: String, $th: [DraftPullRequestReviewThread]) { addPullRequestReview(input: {pullRequestId: $id, event: $e, body: $b, threads: $th}) { clientMutationId } }"
+    static let replyThread = "mutation ReplyThread($id: ID!, $b: String!) { addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $id, body: $b}) { clientMutationId } }"
+    static let resolveThread = "mutation ResolveThread($id: ID!) { resolveReviewThread(input: {threadId: $id}) { clientMutationId } }"
+    static let unresolveThread = "mutation UnresolveThread($id: ID!) { unresolveReviewThread(input: {threadId: $id}) { clientMutationId } }"
+    static let merge = "mutation Merge($id: ID!, $m: PullRequestMergeMethod!, $t: String, $b: String) { mergePullRequest(input: {pullRequestId: $id, mergeMethod: $m, commitHeadline: $t, commitBody: $b}) { clientMutationId } }"
+    static let enableAutoMerge = "mutation EnableAutoMerge($id: ID!, $m: PullRequestMergeMethod!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $m}) { clientMutationId } }"
+    static let disableAutoMerge = "mutation DisableAutoMerge($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId } }"
+    static let closePR = "mutation ClosePR($id: ID!) { closePullRequest(input: {pullRequestId: $id}) { clientMutationId } }"
+    static let reopenPR = "mutation ReopenPR($id: ID!) { reopenPullRequest(input: {pullRequestId: $id}) { clientMutationId } }"
+    static let readyForReview = "mutation ReadyForReview($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { clientMutationId } }"
+    static let convertToDraft = "mutation ConvertToDraft($id: ID!) { convertPullRequestToDraft(input: {pullRequestId: $id}) { clientMutationId } }"
+    static let updateBranch = "mutation UpdateBranch($id: ID!) { updatePullRequestBranch(input: {pullRequestId: $id}) { clientMutationId } }"
+    static let editPR = "mutation EditPR($id: ID!, $t: String!, $b: String!) { updatePullRequest(input: {pullRequestId: $id, title: $t, body: $b}) { clientMutationId } }"
+    static let markViewed = "mutation MarkViewed($id: ID!, $p: String!) { markFileAsViewed(input: {pullRequestId: $id, path: $p}) { clientMutationId } }"
+    static let unmarkViewed = "mutation UnmarkViewed($id: ID!, $p: String!) { unmarkFileAsViewed(input: {pullRequestId: $id, path: $p}) { clientMutationId } }"
+    static let closeIssue = "mutation CloseIssue($id: ID!) { closeIssue(input: {issueId: $id}) { clientMutationId } }"
+    static let reopenIssue = "mutation ReopenIssue($id: ID!) { reopenIssue(input: {issueId: $id}) { clientMutationId } }"
 }

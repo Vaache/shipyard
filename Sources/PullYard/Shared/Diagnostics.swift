@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 enum RequestKind: String, Codable {
     case graphql, rest
@@ -14,14 +15,24 @@ struct RequestRecord: Identifiable {
     let date: Date
     let kind: RequestKind
     let name: String
+    let path: String
     let origin: RequestOrigin
     let durationMs: Double
     let bytes: Int
     let status: Int?
-    let error: String?
+    var error: String?
+    var note: String?
+    let authenticated: Bool
     let rateLimitRemaining: Int?
     let rateLimitReset: Int?
     let rateLimitResource: String?
+
+    var failed: Bool { error != nil || (status ?? 200) >= 400 }
+
+    var rateLimitBucket: String? {
+        guard let resource = rateLimitResource else { return nil }
+        return authenticated ? resource : resource + " (unauthenticated)"
+    }
 }
 
 struct TickRecord: Identifiable {
@@ -62,6 +73,11 @@ struct RingBuffer<Element> {
         }
     }
 
+    mutating func update(where match: (Element) -> Bool, _ change: (inout Element) -> Void) {
+        guard let i = storage.lastIndex(where: match) else { return }
+        change(&storage[i])
+    }
+
     mutating func removeAll() {
         storage = []
         head = 0
@@ -75,11 +91,19 @@ struct RingBuffer<Element> {
 final class Diagnostics: @unchecked Sendable {
     static let enabledKey = "diagnosticsEnabled"
     static let shared = Diagnostics()
-    nonisolated(unsafe) static private(set) var isEnabled = false
+    @TaskLocal static var tick: Int?
+
+    private static let enabled = OSAllocatedUnfairLock(initialState: false)
+
+    static var isEnabled: Bool {
+        enabled.withLock { $0 }
+    }
 
     struct Token {
         let start: UInt64
+        let date: Date
         let tick: Int?
+        let generation: Int
     }
 
     private struct OpenTick {
@@ -92,8 +116,8 @@ final class Diagnostics: @unchecked Sendable {
         var requests = 0
     }
 
-    private static let tickIdleNs: UInt64 = 300_000_000
-    private static let tickMinNs: UInt64 = 1_000_000_000
+    private static let tickSettleNs: UInt64 = 300_000_000
+    private static let tickFirstRequestNs: UInt64 = 1_000_000_000
     private static let tickMaxNs: UInt64 = 30_000_000_000
     private static let slowUIThresholdMs = 16.0
 
@@ -104,10 +128,12 @@ final class Diagnostics: @unchecked Sendable {
     private var openTick: OpenTick?
     private var nextID = 0
     private var version = 0
-    private var observer: CFRunLoopObserver?
+    private var generation = 0
+    private var observers: [CFRunLoopObserver] = []
     private var busyStart: UInt64 = 0
+    private var panelRefreshInIteration = false
 
-    private static func now() -> UInt64 {
+    static func now() -> UInt64 {
         DispatchTime.now().uptimeNanoseconds
     }
 
@@ -122,13 +148,12 @@ final class Diagnostics: @unchecked Sendable {
 
     @MainActor
     func setEnabled(_ on: Bool) {
-        Self.isEnabled = on
-        if on { installObserver() } else { removeObserver() }
-        if !on {
-            lock.lock()
-            openTick = nil
-            lock.unlock()
-        }
+        lock.lock()
+        Self.enabled.withLock { $0 = on }
+        generation += 1
+        openTick = nil
+        lock.unlock()
+        if on { installObservers() } else { removeObservers() }
     }
 
     func snapshot(ifNewerThan known: Int) -> DiagnosticsSnapshot? {
@@ -143,7 +168,7 @@ final class Diagnostics: @unchecked Sendable {
         requests.removeAll()
         ticks.removeAll()
         slowUI.removeAll()
-        openTick = nil
+        generation += 1
         version += 1
         lock.unlock()
     }
@@ -153,77 +178,145 @@ final class Diagnostics: @unchecked Sendable {
         return nextID
     }
 
-    static func track(_ kind: RequestKind, _ name: @autoclosure () -> String, _ operation: () async throws -> (Data, URLResponse)) async throws -> (Data, URLResponse) {
-        guard isEnabled else { return try await operation() }
+    static func track(_ kind: RequestKind, _ name: @autoclosure () -> String, url: @autoclosure () -> URL?, authenticated: Bool = true, _ operation: () async throws -> (Data, URLResponse)) async throws -> (Data, URLResponse) {
+        let (data, response, _) = try await measure(kind, name(), url: url(), authenticated: authenticated, operation)
+        return (data, response)
+    }
+
+    static func measure(_ kind: RequestKind, _ name: @autoclosure () -> String, url: @autoclosure () -> URL?, authenticated: Bool = true, _ operation: () async throws -> (Data, URLResponse)) async throws -> (Data, URLResponse, Int?) {
+        guard isEnabled else {
+            let (data, response) = try await operation()
+            return (data, response, nil)
+        }
         let token = shared.begin()
         do {
-            let result = try await operation()
-            shared.finish(token, kind: kind, name: name(), data: result.0, response: result.1, error: nil)
-            return result
+            let (data, response) = try await operation()
+            let id = shared.finish(token, kind: kind, name: name(), url: url(), authenticated: authenticated, data: data, response: response, error: nil)
+            return (data, response, id)
         } catch {
-            shared.finish(token, kind: kind, name: name(), data: nil, response: nil, error: error)
+            shared.finish(token, kind: kind, name: name(), url: url(), authenticated: authenticated, data: nil, response: nil, error: error)
             throw error
         }
     }
 
-    static func restName(_ method: String, _ url: URL?) -> String {
-        "\(method) \(url?.path ?? "?")"
+    func annotate(_ id: Int, note: String? = nil, error: String? = nil) {
+        lock.lock()
+        defer { lock.unlock() }
+        requests.update(where: { $0.id == id }) { r in
+            if let note { r.note = note }
+            if let error { r.error = error }
+        }
+        version += 1
     }
 
-    static func graphQLName(_ query: String, caller: String) -> String {
+    static func graphQLName(_ query: String) -> String {
         let scanner = Scanner(string: query)
         scanner.charactersToBeSkipped = .whitespacesAndNewlines
         if scanner.scanString("query") != nil || scanner.scanString("mutation") != nil || scanner.scanString("subscription") != nil,
            let name = scanner.scanCharacters(from: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))) {
             return name
         }
-        return caller.split(separator: "(").first.map(String.init) ?? caller
+        return "anonymous"
+    }
+
+    static func restName(_ method: String, _ url: URL?) -> String {
+        "\(method) \(normalizedPath(url?.path ?? "/"))"
+    }
+
+    static func normalizedPath(_ path: String) -> String {
+        var parts = path.split(separator: "/").map(String.init)
+        if parts.first == "repos", parts.count >= 3 {
+            parts[1] = "{owner}"
+            parts[2] = "{repo}"
+            let rest = Array(parts.dropFirst(3))
+            let collapse: [([String], String)] = [(["contents"], "{path}"), (["readme"], "{path}"), (["git", "refs", "heads"], "{branch}"), (["git", "trees"], "{sha}"), (["commits"], "{sha}")]
+            for (prefix, placeholder) in collapse where rest.starts(with: prefix) && rest.count > prefix.count {
+                parts = Array(parts.prefix(3)) + prefix + [placeholder] + (prefix == ["commits"] || prefix == ["git", "trees"] ? Array(rest.dropFirst(prefix.count + 1)) : [])
+                break
+            }
+        }
+        parts = parts.map { p in
+            if p.allSatisfy(\.isNumber) { return "{n}" }
+            if p.count == 40, p.allSatisfy(\.isHexDigit) { return "{sha}" }
+            return p
+        }
+        return "/" + parts.joined(separator: "/")
+    }
+
+    static func errorText(_ e: Error) -> String {
+        if e is CancellationError { return "cancelled" }
+        if let u = e as? URLError {
+            switch u.code {
+            case .cancelled: return "cancelled"
+            case .timedOut: return "timeout"
+            default: return "URLError \(u.code.rawValue)"
+            }
+        }
+        return e.localizedDescription
+    }
+
+    @MainActor
+    @discardableResult
+    static func liveTask(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        guard isEnabled, let id = shared.currentTick() else { return Task { await operation() } }
+        return $tick.withValue(id) { Task { await operation() } }
+    }
+
+    private func currentTick() -> Int? {
+        lock.lock()
+        defer { lock.unlock() }
+        return openTick?.id
     }
 
     private func begin() -> Token {
         let start = Self.now()
+        let date = Date()
+        let tickID = Self.tick
         lock.lock()
         defer { lock.unlock() }
-        guard var tick = openTick else { return Token(start: start, tick: nil) }
-        tick.inflight += 1
-        tick.requests += 1
-        tick.lastActivity = start
-        openTick = tick
-        return Token(start: start, tick: tick.id)
+        if let tickID, var tick = openTick, tick.id == tickID {
+            tick.inflight += 1
+            tick.requests += 1
+            tick.lastActivity = start
+            openTick = tick
+        }
+        return Token(start: start, date: date, tick: tickID, generation: generation)
     }
 
-    private func finish(_ token: Token, kind: RequestKind, name: String, data: Data?, response: URLResponse?, error: Error?) {
+    @discardableResult
+    private func finish(_ token: Token, kind: RequestKind, name: String, url: URL?, authenticated: Bool, data: Data?, response: URLResponse?, error: Error?) -> Int? {
         let end = Self.now()
         let http = response as? HTTPURLResponse
-        let errorText: String? = error.map { e in
-            if e is CancellationError || (e as? URLError)?.code == .cancelled { return "cancelled" }
-            return e.localizedDescription
-        }
         lock.lock()
         defer { lock.unlock() }
+        if let id = token.tick, var tick = openTick, tick.id == id {
+            tick.inflight -= 1
+            tick.lastActivity = end
+            tick.lastEnd = end
+            openTick = tick
+            if tick.inflight == 0 { scheduleTickCheck(after: Self.tickSettleNs) }
+        }
+        guard Self.isEnabled, token.generation == generation else { return nil }
         let record = RequestRecord(
             id: makeID(),
-            date: Date(),
+            date: token.date,
             kind: kind,
             name: name,
+            path: url?.path ?? "",
             origin: token.tick == nil ? .user : .liveTick,
             durationMs: Self.ms(token.start, end),
             bytes: data?.count ?? 0,
             status: http?.statusCode,
-            error: errorText,
+            error: error.map(Self.errorText),
+            note: nil,
+            authenticated: authenticated,
             rateLimitRemaining: http?.value(forHTTPHeaderField: "X-RateLimit-Remaining").flatMap { Int($0) },
             rateLimitReset: http?.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap { Int($0) },
             rateLimitResource: http?.value(forHTTPHeaderField: "X-RateLimit-Resource")
         )
         requests.append(record)
         version += 1
-        if let id = token.tick, var tick = openTick, tick.id == id {
-            tick.inflight -= 1
-            tick.lastActivity = end
-            tick.lastEnd = end
-            openTick = tick
-            if tick.inflight == 0 { scheduleTickCheck(after: Self.tickIdleNs) }
-        }
+        return record.id
     }
 
     @MainActor
@@ -234,7 +327,7 @@ final class Diagnostics: @unchecked Sendable {
         closeTickLocked()
         openTick = OpenTick(id: makeID(), date: Date(), start: start, lastActivity: start)
         lock.unlock()
-        scheduleTickCheck(after: Self.tickMinNs)
+        scheduleTickCheck(after: Self.tickSettleNs)
     }
 
     private func scheduleTickCheck(after ns: UInt64) {
@@ -250,10 +343,11 @@ final class Diagnostics: @unchecked Sendable {
         guard let tick = openTick else { return }
         let age = now &- tick.start
         let idle = now &- tick.lastActivity
-        if age >= Self.tickMaxNs || (tick.inflight == 0 && age >= Self.tickMinNs && idle >= Self.tickIdleNs) {
+        let waitingForFirst = tick.requests == 0 && age < Self.tickFirstRequestNs
+        if age >= Self.tickMaxNs || (tick.inflight == 0 && idle >= Self.tickSettleNs && !waitingForFirst) {
             closeTickLocked()
         } else if tick.inflight == 0 {
-            let wait = max(Self.tickMinNs &- min(age, Self.tickMinNs), Self.tickIdleNs &- min(idle, Self.tickIdleNs))
+            let wait = waitingForFirst ? Self.tickFirstRequestNs &- age : Self.tickSettleNs &- min(idle, Self.tickSettleNs)
             scheduleTickCheck(after: max(wait, 10_000_000))
         } else {
             scheduleTickCheck(after: Self.tickMaxNs &- age)
@@ -269,36 +363,47 @@ final class Diagnostics: @unchecked Sendable {
     }
 
     @MainActor
-    private func installObserver() {
-        guard observer == nil else { return }
-        let activities = CFRunLoopActivity.afterWaiting.rawValue | CFRunLoopActivity.beforeWaiting.rawValue
-        let obs = CFRunLoopObserverCreateWithHandler(nil, activities, true, 0) { [weak self] _, activity in
-            self?.runLoopActivity(activity)
-        }
-        observer = obs
-        busyStart = 0
-        CFRunLoopAddObserver(CFRunLoopGetMain(), obs, .commonModes)
+    func markPanelRefresh() {
+        panelRefreshInIteration = true
     }
 
     @MainActor
-    private func removeObserver() {
-        guard let obs = observer else { return }
-        CFRunLoopRemoveObserver(CFRunLoopGetMain(), obs, .commonModes)
-        observer = nil
+    private func installObservers() {
+        guard observers.isEmpty else { return }
+        let wake = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.afterWaiting.rawValue, true, 0) { [weak self] _, _ in
+            self?.iterationStarted()
+        }
+        let sleep = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, true, CFIndex.max) { [weak self] _, _ in
+            self?.iterationEnded()
+        }
+        busyStart = 0
+        for obs in [wake, sleep].compactMap({ $0 }) {
+            CFRunLoopAddObserver(CFRunLoopGetMain(), obs, .commonModes)
+            observers.append(obs)
+        }
     }
 
-    private func runLoopActivity(_ activity: CFRunLoopActivity) {
-        if activity == .afterWaiting {
-            busyStart = Self.now()
-            return
+    @MainActor
+    private func removeObservers() {
+        for obs in observers {
+            CFRunLoopRemoveObserver(CFRunLoopGetMain(), obs, .commonModes)
         }
+        observers = []
+    }
+
+    private func iterationStarted() {
+        busyStart = Self.now()
+        panelRefreshInIteration = false
+    }
+
+    private func iterationEnded() {
         guard busyStart != 0 else { return }
         let duration = Self.ms(busyStart, Self.now())
         busyStart = 0
         guard duration > Self.slowUIThresholdMs else { return }
         lock.lock()
         slowUI.append(SlowUIRecord(id: makeID(), date: Date(), durationMs: duration))
-        version += 1
+        if !panelRefreshInIteration { version += 1 }
         lock.unlock()
     }
 }
