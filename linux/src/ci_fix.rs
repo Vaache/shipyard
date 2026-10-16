@@ -92,6 +92,10 @@ pub fn tail(s: &str, max: usize) -> &str {
     rest.find('\n').map(|i| &rest[i + 1..]).unwrap_or(rest)
 }
 
+fn printable(s: &str) -> String {
+    s.chars().filter(|c| !c.is_control() || matches!(c, '\n' | '\t')).collect()
+}
+
 pub fn one_line(s: &str) -> String {
     let flat: String = s.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     clip(&flat.split_whitespace().collect::<Vec<_>>().join(" "), META_CAP)
@@ -102,7 +106,7 @@ pub fn clean(raw: &str) -> Vec<String> {
         .split('\n')
         .map(|line| {
             let l = line.strip_prefix('\u{feff}').unwrap_or(line).trim_end_matches('\r');
-            clip(strip_ansi(strip_timestamp(l)).trim_end(), LINE_CAP)
+            clip(printable(&strip_ansi(strip_timestamp(l))).trim_end(), LINE_CAP)
         })
         .filter(|l| l != "##[endgroup]")
         .collect();
@@ -386,7 +390,8 @@ fn annotations_text(list: &[CheckAnnotation], cap: usize) -> String {
 }
 
 fn output_text(title: &Option<String>, summary: &Option<String>, text: &Option<String>) -> String {
-    [title, summary, text].iter().filter_map(|p| p.as_deref()).map(str::trim).filter(|p| !p.is_empty()).collect::<Vec<_>>().join("\n\n")
+    let joined = [title, summary, text].iter().filter_map(|p| p.as_deref()).map(str::trim).filter(|p| !p.is_empty()).collect::<Vec<_>>().join("\n\n");
+    printable(&strip_ansi(&joined.replace("\r\n", "\n")))
 }
 
 impl Failure {
@@ -593,6 +598,8 @@ mod tests {
     fn cleans_timestamps_bom_and_groups() {
         let raw = "\u{feff}2026-10-16T10:00:00.1234567Z ##[group]Run cargo test\r\n2026-10-16T10:00:01.0000000Z \u{1b}[1mCompiling\u{1b}[0m app\n2026-10-16T10:00:02.0000000Z ##[endgroup]\nno stamp here\n\n";
         assert_eq!(clean(raw), vec!["##[group]Run cargo test", "Compiling app", "no stamp here"]);
+        assert_eq!(clean("a\u{8}b\u{0}c\td"), vec!["abc\td"]);
+        assert_eq!(output_text(&Some("T\u{7}".into()), &None, &Some("x\r\ny".into())), "T\n\nx\ny");
     }
 
     #[test]

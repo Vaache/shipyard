@@ -149,6 +149,9 @@ impl CiFix {
         }
         let class = if matches!(f.details, Details::Unavailable(_)) { "fg-amber" } else { "sy-muted" };
         let l = label_with(&f.summary(), &[class, "sy-small"]);
+        if matches!(f.details, Details::Unavailable(_)) {
+            l.set_tooltip_text(Some("Uncheck and check again to retry"));
+        }
         l.set_ellipsize(gtk::pango::EllipsizeMode::End);
         l.set_max_width_chars(36);
         b.append(&l);
@@ -244,7 +247,11 @@ impl State {
                 None
             }
         };
-        if let Some(f) = ci.failures.borrow().iter().find(|f| f.id == id) {
+        if let Some(f) = ci.failures.borrow_mut().iter_mut().find(|f| f.id == id) {
+            if matches!(f.details, Details::Unavailable(_)) {
+                f.details = Details::Pending;
+                f.notes.clear();
+            }
             ci.render_status(f);
         }
         let handle = crate::rt::spawn(ci_fix::collect(self.model.api.clone(), self.model.r.repo.clone(), check, ci.limit.clone(), log));
@@ -262,6 +269,9 @@ impl State {
         let Some(ci) = &self.ci else { return };
         if let Some(slot) = ci.failures.borrow_mut().iter_mut().find(|x| x.id == f.id) {
             *slot = f.clone();
+        }
+        if matches!(f.details, Details::Unavailable(_)) {
+            ci.requested.borrow_mut().remove(&f.id);
         }
         ci.render_status(&f);
         if self.custom.borrow().is_none() {
