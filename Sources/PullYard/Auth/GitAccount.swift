@@ -67,15 +67,9 @@ enum GitProvider: String, Codable, CaseIterable, Identifiable {
 
     var requestShort: String { self == .gitlab ? "MR" : "PR" }
 
-    var numberPrefix: String { self == .gitlab ? "!" : "#" }
+    var repositoriesTitle: String { self == .gitlab ? "Projects" : "Repositories" }
 
-    var supportedFilters: [PRFilter] {
-        switch self {
-        case .github, .githubEnterprise, .gitea: return PRFilter.allCases
-        case .gitlab: return [.reviewRequested, .mine, .assigned]
-        case .bitbucket: return [.reviewRequested, .mine]
-        }
-    }
+    var numberPrefix: String { self == .gitlab ? "!" : "#" }
 
     var tokenPlaceholder: String {
         switch self {

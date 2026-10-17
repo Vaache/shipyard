@@ -67,14 +67,14 @@ struct MenuBarView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         section("Review requests", count: app.reviewRequestCount, items: app.reviewRequests, filter: .reviewRequested)
                         section("My open \(app.provider.requestShort)s", count: app.myPRCount, items: app.myPRs, filter: .mine)
-                        if app.forge == nil {
+                        if app.forge == nil || app.forgeCaps.hasInbox {
                             Button {
                                 app.section = .notifications
                                 show(nil)
                             } label: {
                                 HStack(spacing: 8) {
                                     IconTile(systemImage: "bell.fill", color: .syAmber, size: 16)
-                                    Text("Notifications").foregroundStyle(Color.syText)
+                                    Text(app.forgeCaps.inboxTitle.flatMap { app.forge == nil ? nil : $0 } ?? "Notifications").foregroundStyle(Color.syText)
                                     Spacer()
                                     if app.unreadCount > 0 { ChipView(text: app.unreadCount >= 50 ? "50+" : "\(app.unreadCount)", color: .syAmber) }
                                 }

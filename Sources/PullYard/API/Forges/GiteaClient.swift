@@ -47,6 +47,10 @@ final class GiteaClient: ForgeClient {
         return ForgeUser(login: u.login, name: u.fullName?.isEmpty == false ? u.fullName : nil, avatarUrl: u.avatarUrl, id: String(u.id))
     }
 
+    func capabilities() async -> ForgeCapabilities {
+        ForgeCapabilities(pullFilters: PRFilter.allCases)
+    }
+
     func pullRequests(_ filter: PRFilter, state: StateFilter) async throws -> [SearchItem] {
         let flag: String
         switch filter {

@@ -1,5 +1,38 @@
 import SwiftUI
 
+enum ForgeListKind: Hashable {
+    case pulls(PRFilter)
+    case pullsByProject
+    case issues(IssueFilter)
+
+    var key: String {
+        switch self {
+        case .pulls(let f): return "pr-\(f.rawValue)"
+        case .pullsByProject: return "pr-grouped"
+        case .issues(let f): return "issue-\(f.rawValue)"
+        }
+    }
+
+    var grouped: Bool { self == .pullsByProject }
+
+    func title(_ provider: GitProvider) -> String {
+        switch self {
+        case .pulls(let f): return f.title
+        case .pullsByProject: return "My \(provider.requestShort)s by project"
+        case .issues(let f): return "Issues: \(f.title)"
+        }
+    }
+
+    @MainActor
+    func fetch(_ forge: ForgeClient, state: StateFilter) async throws -> [SearchItem] {
+        switch self {
+        case .pulls(let f): return try await forge.pullRequests(f, state: state)
+        case .pullsByProject: return try await forge.pullRequests(.mine, state: state)
+        case .issues(let f): return try await forge.issues(f, state: state)
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class ForgeListModel {
@@ -22,9 +55,9 @@ final class ForgeListModel {
         self.rows = rows
     }
 
-    func load(_ forge: ForgeClient?, account: String, filter: PRFilter, state: StateFilter, silent: Bool = false) async {
+    func load(_ forge: ForgeClient?, account: String, kind: ForgeListKind, state: StateFilter, silent: Bool = false) async {
         guard let forge else { return }
-        let key = "\(account)|\(filter.rawValue)|\(state.rawValue)"
+        let key = "\(account)|\(kind.key)|\(state.rawValue)"
         var switched = false
         if key != currentKey {
             switched = true
@@ -50,7 +83,7 @@ final class ForgeListModel {
             }
         }
         do {
-            let fresh = try await forge.pullRequests(filter, state: state)
+            let fresh = try await kind.fetch(forge, state: state)
             guard gen == generation else { return }
             let updated = Date()
             Self.cache[key] = (fresh, updated)
@@ -66,15 +99,27 @@ final class ForgeListModel {
 }
 
 struct ForgeListView: View {
-    let filter: PRFilter
+    let kind: ForgeListKind
     @Environment(AppModel.self) private var app
     @State private var model: ForgeListModel
     @State private var stateFilter: StateFilter = .open
     @State private var text = ""
+    @State private var collapsed: Set<String> = []
 
-    init(filter: PRFilter) {
-        self.filter = filter
-        _model = State(initialValue: ForgeListModel(rows: .shared("forge|\(filter.rawValue)")))
+    init(kind: ForgeListKind) {
+        self.kind = kind
+        _model = State(initialValue: ForgeListModel(rows: .shared("forge|\(kind.key)")))
+    }
+
+    private func groups(_ items: [SearchItem]) -> [RepoGroup] {
+        var order: [String] = []
+        var byRepo: [String: [SearchItem]] = [:]
+        for item in items {
+            let key = item.repository.nameWithOwner
+            if byRepo[key] == nil { order.append(key) }
+            byRepo[key, default: []].append(item)
+        }
+        return order.map { RepoGroup(id: $0, items: byRepo[$0] ?? []) }
     }
 
     private var visible: [SearchItem] {
@@ -101,13 +146,19 @@ struct ForgeListView: View {
                 if let e = model.error, model.items.isEmpty {
                     Text(e).foregroundStyle(.red).font(.caption).textSelection(.enabled)
                 }
-                ForEach(items) { item in
-                    ItemRow(item: item, numberPrefix: app.provider.numberPrefix)
-                        .rowAppear(item.id, model.rows)
-                        .tag(item.id)
-                        .listRowSeparator(.visible)
-                        .listRowSeparatorTint(Color.syLine)
-                        .contextMenu { ForgeItemContextMenu(item: item) }
+                if kind.grouped {
+                    ForEach(groups(items)) { group in
+                        let open = !collapsed.contains(group.id) || !text.isEmpty
+                        Section {
+                            if open { ForEach(group.items) { row($0, showRepo: false) } }
+                        } header: {
+                            RepoGroupHeader(group: group, expanded: open) {
+                                if collapsed.contains(group.id) { collapsed.remove(group.id) } else { collapsed.insert(group.id) }
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(items) { row($0, showRepo: true) }
                 }
                 if items.isEmpty, !model.loading, model.error == nil {
                     Text("Nothing here").foregroundStyle(Color.syMuted)
@@ -123,15 +174,24 @@ struct ForgeListView: View {
             }
         }
         .searchable(text: $text, placement: .toolbar, prompt: "Filter: title, repository, author")
-        .navigationTitle(filter.title)
-        .navigationSubtitle(items.isEmpty ? "" : "\(items.count) \(app.provider.requestShort)")
+        .navigationTitle(kind.title(app.provider))
+        .navigationSubtitle(items.isEmpty ? "" : "\(items.count)")
         .task(id: "\(stateFilter.rawValue)|\(app.account?.id ?? "")") { await reload() }
         .onChange(of: app.refreshTick) { Task { await reload() } }
         .onLiveTick { await reload(silent: true) }
     }
 
+    private func row(_ item: SearchItem, showRepo: Bool) -> some View {
+        ItemRow(item: item, showRepo: showRepo, numberPrefix: item.isPR ? app.provider.numberPrefix : "#")
+            .rowAppear(item.id, model.rows)
+            .tag(item.id)
+            .listRowSeparator(.visible)
+            .listRowSeparatorTint(Color.syLine)
+            .contextMenu { ForgeItemContextMenu(item: item) }
+    }
+
     private func reload(silent: Bool = false) async {
-        await model.load(app.forge, account: app.account?.id ?? "", filter: filter, state: stateFilter, silent: silent)
+        await model.load(app.forge, account: app.account?.id ?? "", kind: kind, state: stateFilter, silent: silent)
     }
 }
 
@@ -173,7 +233,7 @@ struct ForgeItemDetailView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 8) {
                     StateBadge(state: item.visualState)
-                    Text("\(item.repository.nameWithOwner)\(provider.numberPrefix)\(item.number)")
+                    Text("\(item.repository.nameWithOwner)\(item.isPR ? provider.numberPrefix : "#")\(item.number)")
                         .font(.callout.monospaced())
                         .foregroundStyle(Color.syMuted)
                         .textSelection(.enabled)
@@ -208,7 +268,7 @@ struct ForgeItemDetailView: View {
                 }
                 .controlSize(.large)
                 .padding(.top, 4)
-                Label("Changed files, comments and review for \(provider.title) are coming in a later version. Open the \(provider.requestTitle) in the browser to review it.", systemImage: "info.circle")
+                Label(item.isPR ? "Changed files, comments and review for \(provider.title) are coming in a later version. Open the \(provider.requestTitle) in the browser to review it." : "Comments for \(provider.title) issues are coming in a later version. Open the issue in the browser to reply.", systemImage: "info.circle")
                     .font(.callout)
                     .foregroundStyle(Color.syMuted)
                     .padding(12)

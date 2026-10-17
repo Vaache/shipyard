@@ -168,9 +168,30 @@ struct SidebarView: View {
 
     @ViewBuilder
     private var forgeSections: some View {
+        let caps = app.forgeCaps
+        if let inbox = caps.inboxTitle {
+            Section("Inbox") {
+                SidebarRow(section: .notifications, title: inbox, icon: "bell.fill", color: .syAmber, count: app.unreadCount)
+            }
+        }
         Section(app.provider.requestsTitle) {
-            ForEach(app.provider.supportedFilters) { f in
+            ForEach(caps.pullFilters) { f in
                 SidebarRow(section: .prs(f), title: f.title, icon: f.tileIcon, color: f.tint, count: f == .reviewRequested ? app.reviewRequestCount : (f == .mine ? app.myPRCount : 0))
+            }
+            if caps.pullFilters.contains(.mine) {
+                SidebarRow(section: .myPRsByRepo, title: "My \(app.provider.requestShort)s by project", icon: "folder.fill", color: .syCoral)
+            }
+        }
+        if !caps.issueFilters.isEmpty {
+            Section("Issues") {
+                ForEach(caps.issueFilters) { f in
+                    SidebarRow(section: .issues(f), title: f.title, icon: f.tileIcon, color: f.tint)
+                }
+            }
+        }
+        if caps.repositories {
+            Section("Code") {
+                SidebarRow(section: .repos, title: app.provider.repositoriesTitle, icon: "book.closed.fill", color: .syTeal)
             }
         }
     }
@@ -353,9 +374,18 @@ struct ContentColumn: View {
 
     @ViewBuilder
     private var forgeContent: some View {
+        let account = app.account?.id ?? ""
         switch app.section {
-        case .prs(let f) where app.provider.supportedFilters.contains(f):
-            ForgeListView(filter: f).id("forge-\(f.rawValue)-\(app.account?.id ?? "")")
+        case .prs(let f) where app.forgeSupports(app.section):
+            ForgeListView(kind: .pulls(f)).id("forge-pr-\(f.rawValue)-\(account)")
+        case .myPRsByRepo where app.forgeSupports(app.section):
+            ForgeListView(kind: .pullsByProject).id("forge-pr-grouped-\(account)")
+        case .issues(let f) where app.forgeSupports(app.section):
+            ForgeListView(kind: .issues(f)).id("forge-issue-\(f.rawValue)-\(account)")
+        case .notifications where app.forgeSupports(app.section):
+            ForgeInboxView().id("forge-inbox-\(account)")
+        case .repos where app.forgeSupports(app.section):
+            ForgeReposView().id("forge-repos-\(account)")
         case .claude:
             ClaudeProjectsColumn()
         default:

@@ -94,6 +94,7 @@ final class AppModel {
     var forge: ForgeClient?
     var account: GitAccount?
     var forgeSelection: SearchItem?
+    var forgeCaps = ForgeCapabilities(pullFilters: [.reviewRequested, .mine])
     var showAddAccount = false
     var lockedAccount: GitAccount?
     var unlockRequest: GitAccount?
@@ -347,10 +348,15 @@ final class AppModel {
         user = account.user
         scopes = []
         ListCache.activate(account.cacheKey)
-        let supported = account.provider.supportedFilters
-        let keep: Bool
-        if case .prs(let f) = section { keep = supported.contains(f) } else { keep = section == .claude }
-        if !keep { section = .prs(supported.first ?? .mine) }
+        forgeCaps = ForgeCapabilities(pullFilters: [.reviewRequested, .mine])
+        if !forgeSupports(section) { section = .prs(.reviewRequested) }
+        Task {
+            let caps = await client.capabilities()
+            guard forge === client else { return }
+            forgeCaps = caps
+            if !forgeSupports(section) { section = .prs(caps.pullFilters.first ?? .mine) }
+            await refreshBadges()
+        }
         detailRoot = nil
         detailPath = []
         forgeSelection = nil
@@ -690,8 +696,20 @@ final class AppModel {
         lastBadgeRefresh = Date()
     }
 
+    func forgeSupports(_ section: SidebarSection?) -> Bool {
+        switch section {
+        case .prs(let f)?: return forgeCaps.pullFilters.contains(f)
+        case .myPRsByRepo?: return forgeCaps.pullFilters.contains(.mine)
+        case .issues(let f)?: return forgeCaps.issueFilters.contains(f)
+        case .notifications?: return forgeCaps.hasInbox
+        case .repos?: return forgeCaps.repositories
+        case .claude?: return true
+        default: return false
+        }
+    }
+
     private func refreshForgeBadges(_ forge: ForgeClient) async {
-        let supported = forge.provider.supportedFilters
+        let supported = forgeCaps.pullFilters
         if supported.contains(.reviewRequested), let rr = try? await forge.pullRequests(.reviewRequested, state: .open), self.forge === forge {
             reviewRequests = Array(rr.prefix(10))
             reviewRequestCount = rr.count
@@ -700,7 +718,11 @@ final class AppModel {
             myPRs = Array(mine.prefix(10))
             myPRCount = mine.count
         }
-        unreadCount = 0
+        if forgeCaps.hasInbox, let inbox = try? await forge.notifications(), self.forge === forge {
+            unreadCount = inbox.filter(\.unread).count
+        } else if !forgeCaps.hasInbox {
+            unreadCount = 0
+        }
         lastBadgeRefresh = Date()
     }
 }

@@ -80,6 +80,10 @@ final class BitbucketClient: ForgeClient {
         return ForgeUser(login: u.nickname ?? u.username ?? u.displayName ?? u.uuid, name: u.displayName, avatarUrl: u.links?.avatar?.href, id: u.uuid)
     }
 
+    func capabilities() async -> ForgeCapabilities {
+        ForgeCapabilities(pullFilters: [.reviewRequested, .mine])
+    }
+
     func pullRequests(_ filter: PRFilter, state: StateFilter) async throws -> [SearchItem] {
         let key = "\(filter.rawValue)|\(state.rawValue)"
         if let hit = cache[key], Date().timeIntervalSince(hit.at) < Self.cacheTTL { return hit.items }

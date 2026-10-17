@@ -4,6 +4,7 @@ import XCTest
 final class StubProtocol: URLProtocol {
     nonisolated(unsafe) static var routes: [String: (Int, String)] = [:]
     nonisolated(unsafe) static var requests: [URLRequest] = []
+    nonisolated(unsafe) static var queryRoutes: [(String, Int, String)] = []
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -11,7 +12,10 @@ final class StubProtocol: URLProtocol {
     override func startLoading() {
         Self.requests.append(request)
         let path = request.url?.path ?? ""
-        let (status, body) = Self.routes.first { path.hasSuffix($0.key) }?.value ?? (404, #"{"message":"not found"}"#)
+        let full = request.url?.absoluteString ?? ""
+        let (status, body) = Self.queryRoutes.first { full.contains($0.0) }.map { ($0.1, $0.2) }
+            ?? Self.routes.first { path.hasSuffix($0.key) }?.value
+            ?? (404, #"{"message":"not found"}"#)
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
@@ -25,6 +29,7 @@ final class StubProtocol: URLProtocol {
 final class ForgeClientTests: XCTestCase {
     override func setUp() {
         StubProtocol.routes = [:]
+        StubProtocol.queryRoutes = []
         StubProtocol.requests = []
         ForgeHTTP.protocolClasses = [StubProtocol.self]
     }
@@ -65,11 +70,61 @@ final class ForgeClientTests: XCTestCase {
         XCTAssertEqual(StubProtocol.requests.last?.value(forHTTPHeaderField: "Authorization"), "Bearer glpat-x")
     }
 
-    func testGitLabUnsupportedFilterReturnsEmpty() async throws {
+    func testGitLabMentionedComesFromTodos() async throws {
+        StubProtocol.queryRoutes = [
+            ("action=mentioned&state=pending", 200, """
+            [{"id":1,"action_name":"mentioned","target_type":"MergeRequest","state":"pending","created_at":"2026-10-01T10:00:00Z",
+              "target":{"iid":4,"title":"Mention me","web_url":"https://gitlab.com/g/p/-/merge_requests/4","state":"opened",
+                "created_at":"2026-10-01T09:00:00Z","updated_at":"2026-10-01T10:00:00Z","references":{"full":"g/p!4"},"labels":["bug"]}},
+             {"id":2,"action_name":"mentioned","target_type":"MergeRequest","state":"pending","created_at":"2026-10-01T10:00:00Z","target":{"broken":true}}]
+            """)
+        ]
+        StubProtocol.routes = ["/api/v4/todos": (200, "[]")]
         let client = GitLabClient(account: account(.gitlab, host: "gitlab.com", login: "sofia"), credential: GitCredential(token: "t"))
         let items = try await client.pullRequests(.mentioned, state: .open)
-        XCTAssertTrue(items.isEmpty)
-        XCTAssertTrue(StubProtocol.requests.isEmpty)
+        XCTAssertEqual(items.map(\.number), [4])
+        XCTAssertEqual(items.first?.labels?.nodes.first?.name, "bug")
+        XCTAssertEqual(items.first?.repository.nameWithOwner, "g/p")
+    }
+
+    func testGitLabIssuesAndInbox() async throws {
+        StubProtocol.routes = [
+            "/api/v4/issues": (200, """
+            [{"iid":9,"title":"Crash","web_url":"https://gitlab.com/g/p/-/issues/9","state":"opened",
+              "created_at":"2026-10-01T09:00:00Z","updated_at":"2026-10-02T09:00:00Z","references":{"full":"g/sub/p#9"},
+              "author":{"username":"max","avatar_url":null},"user_notes_count":1,"labels":[{"name":"p1","color":"#00ff00"}]}]
+            """),
+            "/api/v4/todos": (200, """
+            [{"id":77,"action_name":"review_requested","target_type":"MergeRequest","target_url":"https://gitlab.com/g/p/-/merge_requests/4",
+              "state":"pending","created_at":"2026-10-01T10:00:00Z","author":{"username":"max","avatar_url":null},
+              "project":{"path_with_namespace":"g/p"},"target":{"iid":4,"title":"Review this"}}]
+            """),
+            "/api/v4/todos/77/mark_as_done": (201, "{}")
+        ]
+        let client = GitLabClient(account: account(.gitlab, host: "gitlab.com", login: "sofia"), credential: GitCredential(token: "t"))
+        let issues = try await client.issues(.assigned, state: .open)
+        XCTAssertEqual(issues.first?.isPR, false)
+        XCTAssertEqual(issues.first?.issueState, "OPEN")
+        XCTAssertEqual(issues.first?.repository.nameWithOwner, "g/sub/p")
+        XCTAssertTrue(StubProtocol.requests.last?.url?.query?.contains("scope=assigned_to_me") == true)
+        let inbox = try await client.notifications()
+        XCTAssertEqual(inbox.first?.reason, "Review requested")
+        XCTAssertEqual(inbox.first?.title, "Review this")
+        XCTAssertEqual(inbox.first?.kind, "MR")
+        try await client.markDone(try XCTUnwrap(inbox.first))
+        XCTAssertEqual(StubProtocol.requests.last?.httpMethod, "POST")
+    }
+
+    func testGitLabReviewedOnlyWhenApprovalFilterWorks() async throws {
+        StubProtocol.queryRoutes = [("pullyard-probe-", 200, #"[{"iid":1,"title":"x","web_url":"https://gitlab.com/g/p/-/merge_requests/1","state":"opened","created_at":"2026-10-01T09:00:00Z","updated_at":"2026-10-01T09:00:00Z"}]"#)]
+        let free = GitLabClient(account: account(.gitlab, host: "gitlab.com", login: "sofia"), credential: GitCredential(token: "t"))
+        let freeCaps = await free.capabilities()
+        XCTAssertFalse(freeCaps.pullFilters.contains(.reviewed))
+        XCTAssertEqual(freeCaps.inboxTitle, "To-Do List")
+        StubProtocol.queryRoutes = [("pullyard-probe-", 200, "[]")]
+        let premium = GitLabClient(account: account(.gitlab, host: "gitlab.com", login: "sofia"), credential: GitCredential(token: "t"))
+        let premiumCaps = await premium.capabilities()
+        XCTAssertTrue(premiumCaps.pullFilters.contains(.reviewed))
     }
 
     func testBitbucketMineAcrossWorkspaces() async throws {
