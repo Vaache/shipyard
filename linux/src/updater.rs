@@ -197,11 +197,6 @@ pub async fn check_on_launch() {
     if !settings::read(|s| s.update_auto_check) {
         return;
     }
-    if let Some(last) = settings::read(|s| s.update_last_check) {
-        if Utc::now().timestamp() - last < CHECK_INTERVAL {
-            return;
-        }
-    }
     check(false).await;
 }
 

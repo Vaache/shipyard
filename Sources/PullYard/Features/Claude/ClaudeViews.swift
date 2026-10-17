@@ -55,7 +55,7 @@ struct ClaudeProjectsColumn: View {
                 case .loggedOut:
                     Label("Not signed in to Claude — sign in on the right", systemImage: "person.crop.circle.badge.exclamationmark")
                         .foregroundStyle(Color.syAmber)
-                    if ClaudeProfiles.shared.profiles.count > 1 {
+                    if ClaudeProfiles.shared.visible.count > 1 {
                         ClaudeProfileSwitcher()
                     }
                 case .notInstalled:

@@ -124,9 +124,22 @@ Pick one on the welcome screen:
 
 The token is stored in the macOS Keychain, Windows Credential Manager or the Secret Service keyring on Linux.
 
+### GitLab, Bitbucket, Gitea and GitHub Enterprise (macOS)
+
+The welcome screen has a tab for each service:
+
+- **GitHub Enterprise Server**: your server address, then `gh auth login --hostname …`, a personal access token or Device Flow. Everything works as on github.com.
+- **GitLab** (gitlab.com or self-managed): `glab auth login`, a personal access token with the `api` scope, or Device Flow with your own OAuth application (GitLab 17.1+).
+- **Bitbucket Cloud**: your Atlassian account email and an [API token](https://id.atlassian.com/manage-profile/security/api-tokens).
+- **Gitea / Forgejo** (Codeberg or your own server): an access token.
+
+For GitLab, Bitbucket and Gitea PullYard shows your review requests and your own merge or pull requests; open one in the browser to review it. Changed files, comments and review for these services come later.
+
+You can add several accounts and switch between them from the sidebar or Settings. Each account has its own Claude Code sign-in: the first account keeps the Claude Code you already use (`~/.claude`, shared with Terminal), and every account you add later starts with a separate, empty Claude Code profile that you sign in to once. Switching keeps every sign-in; PullYard only shows and runs the Claude Code profiles of the active account. Signing out of an account also signs out its Claude Code profiles and leaves the others alone.
+
 ## Privacy
 
-PullYard has no backend and no analytics. It talks to `api.github.com` directly and runs the `claude` CLI you installed. It never reads your Claude credentials; you sign in through `claude auth login` in your browser.
+PullYard has no backend and no analytics. It talks to `api.github.com` (or the GitLab, Bitbucket or Gitea server you sign in to) directly and runs the `claude` CLI you installed. It never reads your Claude credentials; you sign in through `claude auth login` in your browser.
 
 ## Build from source
 

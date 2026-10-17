@@ -66,20 +66,22 @@ struct MenuBarView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
                         section("Review requests", count: app.reviewRequestCount, items: app.reviewRequests, filter: .reviewRequested)
-                        section("My open PRs", count: app.myPRCount, items: app.myPRs, filter: .mine)
-                        Button {
-                            app.section = .notifications
-                            show(nil)
-                        } label: {
-                            HStack(spacing: 8) {
-                                IconTile(systemImage: "bell.fill", color: .syAmber, size: 16)
-                                Text("Notifications").foregroundStyle(Color.syText)
-                                Spacer()
-                                if app.unreadCount > 0 { ChipView(text: app.unreadCount >= 50 ? "50+" : "\(app.unreadCount)", color: .syAmber) }
+                        section("My open \(app.provider.requestShort)s", count: app.myPRCount, items: app.myPRs, filter: .mine)
+                        if app.forge == nil || app.forgeCaps.hasInbox {
+                            Button {
+                                app.section = .notifications
+                                show(nil)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    IconTile(systemImage: "bell.fill", color: .syAmber, size: 16)
+                                    Text(app.forgeCaps.inboxTitle.flatMap { app.forge == nil ? nil : $0 } ?? "Notifications").foregroundStyle(Color.syText)
+                                    Spacer()
+                                    if app.unreadCount > 0 { ChipView(text: app.unreadCount >= 50 ? "50+" : "\(app.unreadCount)", color: .syAmber) }
+                                }
+                                .contentShape(Rectangle())
                             }
-                            .contentShape(Rectangle())
+                            .buttonStyle(MenuRowStyle())
                         }
-                        .buttonStyle(MenuRowStyle())
                     }
                     .padding(6)
                 }
@@ -129,12 +131,12 @@ struct MenuBarView: View {
             Text("Nothing here").font(.callout).foregroundStyle(Color.syDim).padding(.horizontal, 8).padding(.bottom, 6)
         }
         ForEach(items) { item in
-            Button { show(item.route) } label: {
+            Button { open(item) } label: {
                 HStack(alignment: .top, spacing: 8) {
                     StateBadge(state: item.visualState, compact: true)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(item.title).fontWeight(.medium).foregroundStyle(Color.syText).lineLimit(1)
-                        Text("\(item.repository.nameWithOwner)#\(item.number) · \(item.author?.login ?? "") · \(Fmt.rel(item.updatedAt))")
+                        Text("\(item.repository.nameWithOwner)\(app.provider.numberPrefix)\(item.number) · \(item.author?.login ?? "") · \(Fmt.rel(item.updatedAt))")
                             .font(.caption).foregroundStyle(Color.syMuted).lineLimit(1)
                     }
                     Spacer(minLength: 4)
@@ -146,11 +148,20 @@ struct MenuBarView: View {
             .contextMenu {
                 Button("Open in Browser") { openInBrowser(item.url) }
                 Button("Copy Link") { copyToPasteboard(item.url) }
-                Button("Copy Short Link") { app.copyShortLink(item.ref) }
+                if app.forge == nil {
+                    Button("Copy Short Link") { app.copyShortLink(item.ref) }
+                }
             }
             .rowAppear(item.id, rows, bleed: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
         Spacer().frame(height: 6)
+    }
+
+    private func open(_ item: SearchItem) {
+        guard app.forge != nil else { return show(item.route) }
+        openWindow(id: "main")
+        app.forgeSelection = item
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func show(_ route: Route?) {

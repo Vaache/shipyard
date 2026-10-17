@@ -10,6 +10,9 @@ struct SettingsView: View {
     @State private var confirmClaudeLogout = false
     @State private var loggingOut = false
     @State private var showAddProfile = false
+    @State private var showAddAccount = false
+    @State private var pendingSwitch: GitAccount?
+    @State private var confirmSignOut = false
     @AppStorage(Updater.autoCheckKey) private var autoCheckUpdates = true
     @AppStorage(Diagnostics.enabledKey) private var diagnosticsEnabled = false
     @Environment(\.openWindow) private var openWindow
@@ -34,17 +37,29 @@ struct SettingsView: View {
                         Avatar(url: u.avatarUrl, size: 36)
                         VStack(alignment: .leading) {
                             Text(u.name ?? u.login).font(.headline).foregroundStyle(Color.syText)
-                            Text("@\(u.login)").foregroundStyle(Color.syMuted)
+                            Text(app.account?.subtitle ?? "@\(u.login)").foregroundStyle(Color.syMuted)
                         }
+                        Spacer()
+                        Text(app.provider.title).font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)
                     }
-                    LabeledContent("Token scopes", value: app.scopes.isEmpty ? "fine-grained / unknown" : app.scopes.joined(separator: ", "))
+                    if let account = app.account {
+                        AccountLockSettings(account: account).environment(app)
+                    }
+                    if app.provider.isGitHub {
+                        LabeledContent("Token scopes", value: app.scopes.isEmpty ? "fine-grained / unknown" : app.scopes.joined(separator: ", "))
+                    }
                     HStack {
-                        if GHCLI.binary != nil {
+                        Menu("Switch Account") {
+                            AccountMenuItems(pendingSwitch: $pendingSwitch, confirmSignOut: $confirmSignOut, showAdd: $showAddAccount)
+                        }
+                        .fixedSize()
+                        if app.provider.isGitHub, GHCLI.binary != nil {
                             Button("Refresh token from gh") {
-                                Task { if let t = try? await GHCLI.token() { try? await app.login(token: t) } }
+                                Task { await app.refreshTokenFromGH() }
                             }
                         }
-                        Button("Sign out", role: .destructive) { app.logout() }
+                        Spacer()
+                        Button("Sign out…", role: .destructive) { confirmSignOut = true }
                     }
                 } else {
                     Text("Not signed in").foregroundStyle(Color.syMuted)
@@ -74,48 +89,50 @@ struct SettingsView: View {
             } header: {
                 SettingsHeader(title: "Refresh", icon: "arrow.clockwise", color: .syGreen)
             }
-            Section {
-                HStack {
-                    Picker("Account", selection: Binding(get: { ClaudeProfiles.shared.activeID }, set: { app.switchClaudeProfile(to: $0) })) {
-                        ForEach(ClaudeProfiles.shared.profiles) { p in
-                            Text(p.label + (p.email.map { " — \($0)" } ?? "")).tag(p.id)
+            if app.phase == .loggedIn {
+                Section {
+                    HStack {
+                        Picker("Account", selection: Binding(get: { ClaudeProfiles.shared.activeID }, set: { app.switchClaudeProfile(to: $0) })) {
+                            ForEach(ClaudeProfiles.shared.visible) { p in
+                                Text(p.label + (p.email.map { " — \($0)" } ?? "")).tag(p.id)
+                            }
+                        }
+                        Button("Add…") { showAddProfile = true }
+                    }
+                    switch ClaudeAccountStore.shared.status {
+                    case .loggedIn(let info):
+                        ClaudeAccountCard(info: info, compact: true)
+                        HStack {
+                            Button("Sign out of Claude Code", role: .destructive) { confirmClaudeLogout = true }
+                            Spacer()
+                            if loggingOut { ProgressView().controlSize(.small) }
+                        }
+                        .disabled(loggingOut)
+                    case .notInstalled:
+                        Text("claude CLI isn't installed").foregroundStyle(Color.syMuted)
+                    default:
+                        HStack {
+                            Text("Not signed in to Claude").foregroundStyle(Color.syMuted)
+                            Spacer()
+                            Button("Sign in…") {
+                                app.section = .claude
+                                NSApp.activate(ignoringOtherApps: true)
+                            }
                         }
                     }
-                    Button("Add…") { showAddProfile = true }
-                }
-                switch ClaudeAccountStore.shared.status {
-                case .loggedIn(let info):
-                    ClaudeAccountCard(info: info, compact: true)
-                    HStack {
-                        Button("Sign out of Claude Code", role: .destructive) { confirmClaudeLogout = true }
-                        Spacer()
-                        if loggingOut { ProgressView().controlSize(.small) }
+                    Picker("Sleep idle sessions after", selection: Binding(get: { app.claude.idleMinutes }, set: { app.claude.idleMinutes = $0 })) {
+                        Text("Never").tag(0)
+                        Text("5 minutes").tag(5)
+                        Text("15 minutes").tag(15)
+                        Text("30 minutes").tag(30)
+                        Text("1 hour").tag(60)
                     }
-                    .disabled(loggingOut)
-                case .notInstalled:
-                    Text("claude CLI isn't installed").foregroundStyle(Color.syMuted)
-                default:
-                    HStack {
-                        Text("Not signed in to Claude").foregroundStyle(Color.syMuted)
-                        Spacer()
-                        Button("Sign in…") {
-                            app.section = .claude
-                            NSApp.activate(ignoringOtherApps: true)
-                        }
-                    }
+                    Text("A sleeping session uses no memory: the claude process stops, the conversation stays, and the next message resumes it.")
+                        .font(.caption)
+                        .foregroundStyle(Color.syMuted)
+                } header: {
+                    SettingsHeader(title: "Claude Code", icon: "sparkles", color: .syCoral)
                 }
-                Picker("Sleep idle sessions after", selection: Binding(get: { app.claude.idleMinutes }, set: { app.claude.idleMinutes = $0 })) {
-                    Text("Never").tag(0)
-                    Text("5 minutes").tag(5)
-                    Text("15 minutes").tag(15)
-                    Text("30 minutes").tag(30)
-                    Text("1 hour").tag(60)
-                }
-                Text("A sleeping session uses no memory: the claude process stops, the conversation stays, and the next message resumes it.")
-                    .font(.caption)
-                    .foregroundStyle(Color.syMuted)
-            } header: {
-                SettingsHeader(title: "Claude Code", icon: "sparkles", color: .syCoral)
             }
             Section {
                 Toggle("Check for updates automatically", isOn: $autoCheckUpdates)
@@ -169,6 +186,7 @@ struct SettingsView: View {
         .surface(.panel)
         .task { await ClaudeAccountStore.shared.refresh() }
         .sheet(isPresented: $showAddProfile) { AddClaudeProfileSheet().environment(app) }
+        .modifier(AccountDialogs(pendingSwitch: $pendingSwitch, confirmSignOut: $confirmSignOut, showAdd: $showAddAccount))
         .confirmationDialog("Sign out of Claude Code?", isPresented: $confirmClaudeLogout) {
             Button("Sign out", role: .destructive) {
                 loggingOut = true

@@ -100,7 +100,7 @@ struct ScopeHint: View {
                 Button("Refresh Token from gh") {
                     busy = true
                     Task {
-                        if let t = try? await GHCLI.token() { try? await app.login(token: t) }
+                        await app.refreshTokenFromGH()
                         busy = false
                         app.refresh()
                     }

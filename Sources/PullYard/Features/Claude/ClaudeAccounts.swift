@@ -7,6 +7,7 @@ struct ClaudeProfile: Codable, Identifiable, Hashable {
     var configDir: String?
     var email: String?
     var plan: String?
+    var owner: String?
 
     var isDefault: Bool { configDir == nil }
     var initial: String { String((label.isEmpty ? (email ?? "C") : label).prefix(1)).uppercased() }
@@ -19,10 +20,13 @@ final class ClaudeProfiles {
     static let defaultID = "default"
     private static let listKey = "claude.profiles"
     private static let activeKey = "claude.activeProfile"
+    private static let activeByOwnerKey = "claude.activeProfileByAccount"
     private static let shared_items = ["settings.json", "CLAUDE.md", "RTK.md", "skills", "commands", "plugins", "agents", "output-styles", "keybindings.json"]
 
     var profiles: [ClaudeProfile]
     var activeID: String
+    var scope: String?
+    private var activeByOwner: [String: String]
 
     private init() {
         var list: [ClaudeProfile] = []
@@ -35,9 +39,43 @@ final class ClaudeProfiles {
         profiles = list
         let saved = UserDefaults.standard.string(forKey: Self.activeKey) ?? Self.defaultID
         activeID = list.contains { $0.id == saved } ? saved : Self.defaultID
+        activeByOwner = UserDefaults.standard.dictionary(forKey: Self.activeByOwnerKey) as? [String: String] ?? [:]
     }
 
     var active: ClaudeProfile { profiles.first { $0.id == activeID } ?? profiles[0] }
+
+    var visible: [ClaudeProfile] {
+        guard let scope else { return profiles }
+        return profiles.filter { $0.owner == scope }
+    }
+
+    func owned(by owner: String) -> [ClaudeProfile] {
+        profiles.filter { $0.owner == owner }
+    }
+
+    func preferred(for owner: String) -> ClaudeProfile? {
+        let mine = owned(by: owner)
+        return mine.first { $0.id == activeByOwner[owner] } ?? mine.first { $0.id == activeID } ?? mine.first
+    }
+
+    func claimUnowned(for owner: String) -> Bool {
+        var claimed = false
+        for i in profiles.indices where profiles[i].owner == nil {
+            profiles[i].owner = owner
+            claimed = true
+        }
+        if claimed { save() }
+        return claimed
+    }
+
+    func release(_ id: String) {
+        guard let i = profiles.firstIndex(where: { $0.id == id }) else { return }
+        profiles[i].owner = nil
+        profiles[i].email = nil
+        profiles[i].plan = nil
+        activeByOwner = activeByOwner.filter { $0.value != id }
+        save()
+    }
 
     static var baseDir: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -64,6 +102,7 @@ final class ClaudeProfiles {
     private func save() {
         if let data = try? JSONEncoder().encode(profiles) { UserDefaults.standard.set(data, forKey: Self.listKey) }
         UserDefaults.standard.set(activeID, forKey: Self.activeKey)
+        UserDefaults.standard.set(activeByOwner, forKey: Self.activeByOwnerKey)
     }
 
     func updateCachedInfo(email: String?, plan: String?) {
@@ -76,7 +115,7 @@ final class ClaudeProfiles {
     }
 
     @discardableResult
-    func add(label: String, shareSettings: Bool) throws -> ClaudeProfile {
+    func add(label: String, shareSettings: Bool, owner: String? = nil) throws -> ClaudeProfile {
         let id = UUID().uuidString.lowercased()
         let dir = Self.baseDir.appendingPathComponent(id, isDirectory: true)
         let fm = FileManager.default
@@ -90,7 +129,7 @@ final class ClaudeProfiles {
             }
         }
         let name = label.trimmingCharacters(in: .whitespaces)
-        let profile = ClaudeProfile(id: id, label: name.isEmpty ? "Account \(profiles.count + 1)" : name, configDir: dir.path)
+        let profile = ClaudeProfile(id: id, label: name.isEmpty ? "Account \(profiles.count + 1)" : name, configDir: dir.path, owner: owner ?? scope)
         profiles.append(profile)
         save()
         return profile
@@ -107,20 +146,22 @@ final class ClaudeProfiles {
     func remove(_ id: String) {
         guard id != Self.defaultID else { return }
         profiles.removeAll { $0.id == id }
+        activeByOwner = activeByOwner.filter { $0.value != id }
         if activeID == id { activeID = Self.defaultID }
         save()
     }
 
     func setActive(_ id: String) {
-        guard profiles.contains(where: { $0.id == id }) else { return }
+        guard let profile = profiles.first(where: { $0.id == id }) else { return }
         activeID = id
+        if let owner = profile.owner { activeByOwner[owner] = id }
         save()
     }
 }
 
 extension AppModel {
     func switchClaudeProfile(to id: String) {
-        guard id != ClaudeProfiles.shared.activeID else { return }
+        guard id != ClaudeProfiles.shared.activeID, ClaudeProfiles.shared.visible.contains(where: { $0.id == id }) else { return }
         claude.closeAllForProfileSwitch()
         ClaudeProfiles.shared.setActive(id)
         ClaudeUsageStore.shared.windows = []
@@ -134,8 +175,14 @@ extension AppModel {
 
     func removeClaudeProfile(_ id: String) {
         let profiles = ClaudeProfiles.shared
-        guard let profile = profiles.profiles.first(where: { $0.id == id }), !profile.isDefault else { return }
-        if profiles.activeID == id { switchClaudeProfile(to: ClaudeProfiles.defaultID) }
+        guard let profile = profiles.visible.first(where: { $0.id == id }), !profile.isDefault else { return }
+        if profiles.activeID == id {
+            if let other = profiles.visible.first(where: { $0.id != id }) {
+                switchClaudeProfile(to: other.id)
+            } else if let fresh = try? profiles.add(label: "Claude", shareSettings: false) {
+                switchClaudeProfile(to: fresh.id)
+            }
+        }
         Task {
             await ClaudeAccountStore.shared.logout(configDir: profile.configDir)
             profiles.remove(id)
@@ -151,7 +198,7 @@ struct ClaudeProfileMenuItems: View {
     var body: some View {
         let profiles = ClaudeProfiles.shared
         Section("Claude accounts") {
-            ForEach(profiles.profiles) { p in
+            ForEach(profiles.visible) { p in
                 Button {
                     app.switchClaudeProfile(to: p.id)
                 } label: {
@@ -180,8 +227,8 @@ struct ClaudeProfileSwitcher: View {
             HStack(spacing: 6) {
                 ProfileBadge(profile: active, size: 18)
                 Text(active.label).lineLimit(1)
-                if ClaudeProfiles.shared.profiles.count > 1 {
-                    Text("\(ClaudeProfiles.shared.profiles.count)").font(.caption2).foregroundStyle(Color.syMuted)
+                if ClaudeProfiles.shared.visible.count > 1 {
+                    Text("\(ClaudeProfiles.shared.visible.count)").font(.caption2).foregroundStyle(Color.syMuted)
                 }
             }
         }
@@ -230,6 +277,7 @@ struct AddClaudeProfileSheet: View {
     @State private var label = ""
     @State private var share = true
     @State private var error: String?
+    private var ownsMain: Bool { ClaudeProfiles.shared.visible.contains { $0.isDefault } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -240,8 +288,10 @@ struct AddClaudeProfileSheet: View {
             TextField("Name, e.g. “Personal” or “Work”", text: $label)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(create)
-            Toggle("Use my settings, CLAUDE.md, skills and plugins from the main account", isOn: $share)
-                .toggleStyle(.checkbox)
+            if ownsMain {
+                Toggle("Use my settings, CLAUDE.md, skills and plugins from the main account", isOn: $share)
+                    .toggleStyle(.checkbox)
+            }
             if let error { Text(error).font(.caption).foregroundStyle(Color.syRed) }
             HStack {
                 Spacer()
@@ -258,7 +308,7 @@ struct AddClaudeProfileSheet: View {
 
     private func create() {
         do {
-            let p = try ClaudeProfiles.shared.add(label: label, shareSettings: share)
+            let p = try ClaudeProfiles.shared.add(label: label, shareSettings: share && ownsMain)
             app.switchClaudeProfile(to: p.id)
             app.section = .claude
             dismiss()

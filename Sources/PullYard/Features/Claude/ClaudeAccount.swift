@@ -165,17 +165,28 @@ final class ClaudeAccountStore {
     }
 
     func logout(configDir: String? = nil) async {
-        guard let bin = ClaudeLauncher.claudeBinary else { return }
         let env = configDir.map { Self.environment(configDir: .some($0)) } ?? Self.environment()
+        await runLogout([env])
+    }
+
+    func logout(profiles: [ClaudeProfile]) async {
+        guard !profiles.isEmpty else { return }
+        await runLogout(profiles.map { Self.environment(configDir: .some($0.configDir)) })
+    }
+
+    private func runLogout(_ envs: [[String: String]]) async {
+        guard let bin = ClaudeLauncher.claudeBinary else { return }
         await Task.detached {
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: bin)
-            p.arguments = ["auth", "logout"]
-            p.environment = env
-            p.standardOutput = FileHandle.nullDevice
-            p.standardError = FileHandle.nullDevice
-            try? p.run()
-            p.waitUntilExit()
+            for env in envs {
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: bin)
+                p.arguments = ["auth", "logout"]
+                p.environment = env
+                p.standardOutput = FileHandle.nullDevice
+                p.standardError = FileHandle.nullDevice
+                try? p.run()
+                p.waitUntilExit()
+            }
         }.value
         await refresh()
     }
@@ -308,7 +319,7 @@ struct ClaudeAccountCard: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
                     Text(info.email ?? "Signed in").font(compact ? .callout.weight(.medium) : .headline).foregroundStyle(Color.syText).lineLimit(1)
-                    if ClaudeProfiles.shared.profiles.count > 1 {
+                    if ClaudeProfiles.shared.visible.count > 1 {
                         Text(profile.label).font(.caption2.weight(.semibold)).foregroundStyle(Color.syMuted)
                             .padding(.horizontal, 5).background(Capsule().fill(Color.syMuted.opacity(0.14)))
                     }
