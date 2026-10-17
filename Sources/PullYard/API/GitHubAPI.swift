@@ -46,6 +46,7 @@ private struct PolledEntry {
 
 final class GitHubAPI {
     let token: String
+    let host: String
     var onRateLimit: ((Date) -> Void)?
     private let session: URLSession
     private let gqlDecoder: JSONDecoder
@@ -60,8 +61,9 @@ final class GitHubAPI {
     static let retryStatuses: Set<Int> = [502, 503, 504]
     static let retryErrors: Set<URLError.Code> = [.timedOut, .networkConnectionLost]
 
-    init(token: String) {
+    init(token: String, host: String = "github.com") {
         self.token = token
+        self.host = host
         let config = URLSessionConfiguration.default
         config.urlCache = nil
         config.timeoutIntervalForRequest = 40
@@ -164,7 +166,7 @@ final class GitHubAPI {
     }
 
     func graphQL<T: Decodable>(_ query: String, _ variables: [String: Any?] = [:], strict: Bool = false) async throws -> T {
-        var req = request(URL(string: "https://api.github.com/graphql")!, method: "POST")
+        var req = request(URL(string: host == "github.com" ? "https://api.github.com/graphql" : "https://\(host)/api/graphql")!, method: "POST")
         let vars = variables.compactMapValues { $0 }
         req.httpBody = try JSONSerialization.data(withJSONObject: ["query": query, "variables": vars])
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -203,7 +205,7 @@ final class GitHubAPI {
 
     private func url(_ path: String) -> URL {
         if path.hasPrefix("http") { return URL(string: path)! }
-        return URL(string: "https://api.github.com" + path)!
+        return URL(string: (host == "github.com" ? "https://api.github.com" : "https://\(host)/api/v3") + path)!
     }
 
     func rest<T: Decodable>(_ method: String = "GET", _ path: String, body: [String: Any]? = nil) async throws -> T {

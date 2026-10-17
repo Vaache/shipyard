@@ -5,20 +5,20 @@ enum Keychain {
     private static let service = "dev.vaache.shipyard"
     private static let legacyService = "dev.vaache.githublite"
     private static let legacyCheckedKey = "legacyKeychainChecked"
-    private static let account = "github-token"
+    static let defaultAccount = "github-token"
 
-    private static func base(_ service: String) -> [String: Any] {
+    private static func base(_ service: String, _ account: String = defaultAccount) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: account]
     }
 
-    static func save(_ token: String) throws {
+    static func save(_ token: String, account: String = defaultAccount) throws {
         let data = Data(token.utf8)
         let update = [kSecValueData as String: data, kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock] as [String: Any]
-        var status = SecItemUpdate(base(service) as CFDictionary, update as CFDictionary)
+        var status = SecItemUpdate(base(service, account) as CFDictionary, update as CFDictionary)
         if status == errSecItemNotFound {
-            var query = base(service)
+            var query = base(service, account)
             query[kSecValueData as String] = data
             query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
             status = SecItemAdd(query as CFDictionary, nil)
@@ -29,8 +29,9 @@ enum Keychain {
         }
     }
 
-    static func load() -> String? {
-        if let token = read(service) { return token }
+    static func load(account: String = defaultAccount) -> String? {
+        if let token = read(service, account) { return token }
+        guard account == defaultAccount else { return nil }
         guard !UserDefaults.standard.bool(forKey: legacyCheckedKey) else { return nil }
         UserDefaults.standard.set(true, forKey: legacyCheckedKey)
         guard let token = read(legacyService) else { return nil }
@@ -38,12 +39,12 @@ enum Keychain {
         return token
     }
 
-    static func delete() {
-        SecItemDelete(base(service) as CFDictionary)
+    static func delete(account: String = defaultAccount) {
+        SecItemDelete(base(service, account) as CFDictionary)
     }
 
-    private static func read(_ service: String) -> String? {
-        var query = base(service)
+    private static func read(_ service: String, _ account: String = defaultAccount) -> String? {
+        var query = base(service, account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?

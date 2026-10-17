@@ -87,10 +87,16 @@ enum SidebarSection: Hashable {
 @Observable
 @MainActor
 final class AppModel {
-    enum Phase { case checking, loggedOut, loggedIn }
+    enum Phase { case checking, loggedOut, locked, loggedIn }
 
     var phase: Phase = .checking
     var api: GitHubAPI?
+    var forge: ForgeClient?
+    var account: GitAccount?
+    var forgeSelection: SearchItem?
+    var showAddAccount = false
+    var lockedAccount: GitAccount?
+    var unlockRequest: GitAccount?
     var user: RESTUser?
     var scopes: [String] = []
     var section: SidebarSection? = .prs(.reviewRequested)
@@ -132,44 +138,222 @@ final class AppModel {
     }
 
     private func restore() async {
-        let token = ProcessInfo.processInfo.environment["PULLYARD_TOKEN"] ?? Keychain.load()
-        guard let token else {
+        if let token = ProcessInfo.processInfo.environment["PULLYARD_TOKEN"] {
+            await resumeGitHub(token: token, account: nil)
+            return
+        }
+        let accounts = GitAccounts.shared
+        guard let account = accounts.active, let credential = accounts.credential(for: account) else {
             phase = .loggedOut
             return
         }
-        if !Demo.isOn, let cached = ListCache.account(for: token) {
-            let api = makeAPI(token)
+        if AccountLock.shared.isProtected(account.id) {
+            lockedAccount = account
+            ClaudeProfiles.shared.scope = ""
+            phase = .locked
+            return
+        }
+        await resume(account, credential: credential)
+    }
+
+    func unlocked(_ account: GitAccount) {
+        if lockedAccount?.id == account.id {
+            lockedAccount = nil
+            phase = .checking
+            Task {
+                if let credential = GitAccounts.shared.credential(for: account) {
+                    await resume(account, credential: credential)
+                } else {
+                    phase = .loggedOut
+                }
+            }
+        } else {
+            unlockRequest = nil
+            switchAccountReportingErrors(to: account.id)
+        }
+    }
+
+    func requestSwitch(to id: String) {
+        guard let target = GitAccounts.shared.accounts.first(where: { $0.id == id }) else { return }
+        if target.id != account?.id, AccountLock.shared.isProtected(target.id) {
+            unlockRequest = target
+        } else {
+            switchAccountReportingErrors(to: id)
+        }
+    }
+
+    func resetLock(_ account: GitAccount) async -> Bool {
+        guard await SystemAuth.deviceOwner("reset the PIN for \(account.subtitle)") else { return false }
+        AccountLock.shared.removeLock(account.id)
+        if ClaudeProfiles.shared.scope == account.id { claude.closeAllForProfileSwitch() }
+        await ClaudeAccountStore.shared.logout(profiles: ClaudeProfiles.shared.owned(by: account.id))
+        return true
+    }
+
+    private func resume(_ account: GitAccount, credential: GitCredential) async {
+        if account.provider.isGitHub {
+            await resumeGitHub(token: credential.token, account: account)
+        } else if let client = makeForgeClient(account, credential: credential) {
+            enterForge(account, client: client)
+            await verifyForge(client)
+        }
+    }
+
+    private func resumeGitHub(token: String, account: GitAccount?) async {
+        let host = account?.host ?? GitProvider.github.defaultHost
+        let cached = account.flatMap { $0.login.isEmpty ? nil : $0.user } ?? ListCache.account(for: token)
+        if !Demo.isOn, let cached {
+            let api = makeAPI(token, host: host)
+            self.account = account
+            self.forge = nil
             self.api = api
             user = cached
-            ListCache.activate(cached.login)
+            ListCache.activate(account?.cacheKey ?? cached.login)
+            if let account { bindClaude(to: account) }
             phase = .loggedIn
             startPolling()
             await verify(api, token: token)
             return
         }
+        let api = makeAPI(token, host: host)
         do {
-            try await login(token: token, persist: false)
+            let (user, scopes) = try await api.currentUser()
+            enterGitHub(account.map { refreshed($0, user) }, api: api, user: user, scopes: scopes, token: token)
         } catch let e as APIError where e.status == 401 {
-            Keychain.delete()
-            phase = .loggedOut
+            revoked()
         } catch {
-            api = makeAPI(token)
+            self.account = account
+            self.api = api
+            if let account { bindClaude(to: account) }
             phase = .loggedIn
             startPolling()
         }
     }
 
-    func login(token: String, persist: Bool = true) async throws {
-        let api = makeAPI(token)
-        let (user, scopes) = try await api.currentUser()
-        if persist { try Keychain.save(token) }
-        if self.user?.login != user.login { SearchListModel.resetCache() }
+    func refreshTokenFromGH() async {
+        let provider = account?.provider ?? .github
+        guard provider.isGitHub else { return }
+        let host = account?.host ?? GitProvider.github.defaultHost
+        if let t = try? await GHCLI.token(host: host) {
+            try? await addAccount(provider, host: host, credential: GitCredential(token: t))
+        }
+    }
+
+    func addAccount(_ provider: GitProvider, host rawHost: String, credential: GitCredential, email: String? = nil) async throws {
+        let host = provider.hostEditable ? GitProvider.normalizeHost(rawHost) : provider.defaultHost
+        guard !host.isEmpty else { throw APIError(message: "Enter the server address") }
+        let key = "account-\(UUID().uuidString.lowercased())"
+        var draft = GitAccount(id: UUID().uuidString.lowercased(), provider: provider, host: host, login: "", email: email?.trimmingCharacters(in: .whitespacesAndNewlines), keychainKey: key)
+        if provider.isGitHub {
+            let api = makeAPI(credential.token, host: host)
+            let (user, scopes) = try await api.currentUser()
+            draft = refreshed(draft, user)
+            let saved = try GitAccounts.shared.upsert(draft, credential: credential)
+            await leaveCurrent(for: saved)
+            enterGitHub(saved, api: api, user: user, scopes: scopes, token: credential.token)
+        } else {
+            guard let probe = makeForgeClient(draft, credential: credential) else { return }
+            let user = try await probe.currentUser()
+            draft.login = user.login
+            draft.name = user.name
+            draft.avatarUrl = user.avatarUrl
+            draft.userID = user.id
+            let saved = try GitAccounts.shared.upsert(draft, credential: credential)
+            await leaveCurrent(for: saved)
+            if let client = makeForgeClient(saved, credential: credential) { enterForge(saved, client: client) }
+        }
+    }
+
+    func switchAccount(to id: String) async throws {
+        let accounts = GitAccounts.shared
+        guard id != account?.id || phase != .loggedIn, let target = accounts.accounts.first(where: { $0.id == id }) else { return }
+        guard let credential = accounts.credential(for: target) else {
+            throw APIError(message: "Sign-in for \(target.subtitle) has expired. Sign in again to use this account.")
+        }
+        await leaveCurrent(for: target)
+        await resume(target, credential: credential)
+    }
+
+    func switchAccountReportingErrors(to id: String) {
+        Task {
+            do { try await switchAccount(to: id) } catch { showToast(error.localizedDescription) }
+        }
+    }
+
+    private func leaveCurrent(for next: GitAccount) async {
+        if phase == .loggedIn, account?.id != next.id { resetSession(forgetCache: false) }
+        GitAccounts.shared.setActive(next.id)
+    }
+
+    private func bindClaude(to account: GitAccount) {
+        let profiles = ClaudeProfiles.shared
+        if profiles.owned(by: account.id).isEmpty, !profiles.claimUnowned(for: account.id) {
+            _ = try? profiles.add(label: "\(account.provider.shortTitle) @\(account.login)", shareSettings: false, owner: account.id)
+        }
+        profiles.scope = account.id
+        guard let target = profiles.preferred(for: account.id), target.id != profiles.activeID else { return }
+        switchClaudeProfile(to: target.id)
+    }
+
+    private func unbindClaude(from account: GitAccount) async {
+        let profiles = ClaudeProfiles.shared
+        let owned = profiles.owned(by: account.id)
+        claude.closeAllForProfileSwitch()
+        await ClaudeAccountStore.shared.logout(profiles: owned)
+        for p in owned {
+            if p.isDefault { profiles.release(p.id) } else { profiles.remove(p.id) }
+        }
+        profiles.scope = nil
+    }
+
+    private func refreshed(_ account: GitAccount, _ user: RESTUser) -> GitAccount {
+        var a = account
+        a.login = user.login
+        a.name = user.name
+        a.avatarUrl = user.avatarUrl
+        return a
+    }
+
+    private func enterGitHub(_ account: GitAccount?, api: GitHubAPI, user: RESTUser, scopes: [String], token: String) {
+        if self.account?.id != account?.id || self.user?.login != user.login { SearchListModel.resetCache() }
+        if let account {
+            GitAccounts.shared.update(account)
+            bindClaude(to: account)
+        }
+        self.account = account
+        self.forge = nil
         self.api = api
         self.user = Demo.isOn ? Demo.user : user
         self.scopes = scopes
-        if !Demo.isOn { ListCache.remember(user, token: token) }
+        if !Demo.isOn {
+            if account?.provider ?? .github == .github {
+                ListCache.remember(user, token: token)
+            } else if let account {
+                ListCache.activate(account.cacheKey)
+            }
+        }
         prModels = [:]
         prOrder = []
+        phase = .loggedIn
+        startPolling()
+    }
+
+    private func enterForge(_ account: GitAccount, client: ForgeClient) {
+        if self.account?.id != account.id { ForgeListModel.resetCache() }
+        bindClaude(to: account)
+        self.account = account
+        forge = client
+        api = nil
+        user = account.user
+        scopes = []
+        ListCache.activate(account.cacheKey)
+        let supported = account.provider.supportedFilters
+        let keep: Bool
+        if case .prs(let f) = section { keep = supported.contains(f) } else { keep = section == .claude }
+        if !keep { section = .prs(supported.first ?? .mine) }
+        detailRoot = nil
+        detailPath = []
+        forgeSelection = nil
         phase = .loggedIn
         startPolling()
     }
@@ -180,19 +364,45 @@ final class AppModel {
             guard self.api === api else { return }
             self.user = user
             self.scopes = scopes
-            ListCache.remember(user, token: token)
+            if let account {
+                let updated = refreshed(account, user)
+                self.account = updated
+                GitAccounts.shared.update(updated)
+                if updated.provider == .github { ListCache.remember(user, token: token) }
+            } else {
+                ListCache.remember(user, token: token)
+            }
         } catch let e as APIError where e.status == 401 {
             guard self.api === api else { return }
-            logout()
+            revoked()
         } catch {}
     }
 
-    var cacheAccount: String? {
-        Demo.isOn ? nil : user?.login
+    private func verifyForge(_ client: ForgeClient) async {
+        do {
+            let u = try await client.currentUser()
+            guard forge === client, var account else { return }
+            account.login = u.login
+            account.name = u.name
+            account.avatarUrl = u.avatarUrl
+            account.userID = u.id ?? account.userID
+            self.account = account
+            user = account.user
+            GitAccounts.shared.update(account)
+        } catch let e as APIError where e.status == 401 {
+            guard forge === client else { return }
+            revoked()
+        } catch {}
     }
 
-    private func makeAPI(_ token: String) -> GitHubAPI {
-        let api = GitHubAPI(token: token)
+    var provider: GitProvider { account?.provider ?? .github }
+
+    var cacheAccount: String? {
+        Demo.isOn ? nil : (account?.cacheKey ?? user?.login)
+    }
+
+    private func makeAPI(_ token: String, host: String = GitProvider.github.defaultHost) -> GitHubAPI {
+        let api = GitHubAPI(token: token, host: host)
         api.onRateLimit = { [weak self] until in
             Task { @MainActor in self?.pauseLive(until: until) }
         }
@@ -232,23 +442,45 @@ final class AppModel {
         liveTick += 1
     }
 
-    func logout() {
+    func signOut() async {
+        let current = account
+        if let current { await unbindClaude(from: current) }
+        resetSession(forgetCache: true)
+        if let current {
+            AccountLock.shared.removeLock(current.id)
+            GitAccounts.shared.remove(current.id)
+        } else {
+            Keychain.delete()
+        }
+    }
+
+    private func revoked() {
+        if let account { GitAccounts.shared.forgetCredential(account.id) } else { Keychain.delete() }
+        ClaudeProfiles.shared.scope = nil
+        resetSession(forgetCache: false)
+    }
+
+    private func resetSession(forgetCache: Bool) {
         pollTask?.cancel()
         resumeTask?.cancel()
         rateLimitedUntil = nil
-        Keychain.delete()
-        ListCache.forget(user?.login ?? ListCache.rememberedLogin)
+        if forgetCache { ListCache.forget(account?.cacheKey ?? user?.login ?? ListCache.rememberedLogin) }
         SearchListModel.resetCache()
+        ForgeListModel.resetCache()
         api = nil
+        forge = nil
+        account = nil
         user = nil
         scopes = []
         detailRoot = nil
         detailPath = []
+        forgeSelection = nil
         prModels = [:]
         prOrder = []
         reviewRequests = []
         myPRs = []
         reviewRequestCount = 0
+        myPRCount = 0
         unreadCount = 0
         RowAppearTracker.resetAll()
         phase = .loggedOut
@@ -283,6 +515,7 @@ final class AppModel {
 
     func handle(url: URL) {
         guard let scheme = url.scheme, scheme.hasPrefix("pullyard") || scheme.hasPrefix("shipyard") || scheme.hasPrefix("ghlite") else { return }
+        guard phase == .loggedIn else { return }
         if url.host == "section" {
             let parts = url.pathComponents.filter { $0 != "/" }
             switch (parts.first, parts.dropFirst().first) {
@@ -330,7 +563,7 @@ final class AppModel {
         } else {
             target = "https://" + url.absoluteString.components(separatedBy: "://").dropFirst().joined(separator: "://")
         }
-        if let route = GitHubURL.parse(target) {
+        if api != nil, let route = GitHubURL.parse(target) {
             open(route)
             if case .pr(let ref) = route, URL(string: target)?.lastPathComponent == "files" { prModel(ref)?.tab = .files }
         }
@@ -387,7 +620,7 @@ final class AppModel {
     func checkClipboard() {
         guard let s = NSPasteboard.general.string(forType: .string), s != lastClipboard else { return }
         lastClipboard = s
-        guard s.count < 300, s.contains("github.com"), let route = GitHubURL.parse(s, allowShort: false) else { return }
+        guard api != nil, account?.provider ?? .github == .github, s.count < 300, s.contains("github.com"), let route = GitHubURL.parse(s, allowShort: false) else { return }
         switch route {
         case .pr, .issue:
             if route != detailRoot { clipboardRoute = route }
@@ -434,6 +667,10 @@ final class AppModel {
     }
 
     func refreshBadges(live: Bool = false) async {
+        if let forge {
+            await refreshForgeBadges(forge)
+            return
+        }
         guard let api else { return }
         if Demo.isOn {
             reviewRequestCount = 3
@@ -450,6 +687,20 @@ final class AppModel {
         if let n = try? await api.unreadNotificationCount(live: live) {
             unreadCount = n
         }
+        lastBadgeRefresh = Date()
+    }
+
+    private func refreshForgeBadges(_ forge: ForgeClient) async {
+        let supported = forge.provider.supportedFilters
+        if supported.contains(.reviewRequested), let rr = try? await forge.pullRequests(.reviewRequested, state: .open), self.forge === forge {
+            reviewRequests = Array(rr.prefix(10))
+            reviewRequestCount = rr.count
+        }
+        if supported.contains(.mine), let mine = try? await forge.pullRequests(.mine, state: .open), self.forge === forge {
+            myPRs = Array(mine.prefix(10))
+            myPRCount = mine.count
+        }
+        unreadCount = 0
         lastBadgeRefresh = Date()
     }
 }

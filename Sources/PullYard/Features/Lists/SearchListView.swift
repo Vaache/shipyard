@@ -349,6 +349,7 @@ struct ItemContextMenu: View {
 struct ItemRow: View {
     let item: SearchItem
     var showRepo = true
+    var numberPrefix = "#"
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -356,7 +357,7 @@ struct ItemRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title).lineLimit(2).fontWeight(.semibold)
                 HStack(spacing: 5) {
-                    Text(showRepo ? "\(item.repository.nameWithOwner)#\(item.number)" : "#\(item.number)").lineLimit(1)
+                    Text(showRepo ? "\(item.repository.nameWithOwner)\(numberPrefix)\(item.number)" : "\(numberPrefix)\(item.number)").lineLimit(1)
                     Text("·")
                     Text(Fmt.rel(item.updatedAt)).lineLimit(1)
                 }

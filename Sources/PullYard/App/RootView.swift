@@ -11,11 +11,17 @@ struct RootView: View {
                 SplashView().transition(.opacity)
             } else if app.phase == .loggedOut {
                 LoginView().transition(.rise)
+            } else if app.phase == .locked, let account = app.lockedAccount {
+                UnlockView(account: account) { app.unlocked(account) }.transition(.rise)
             } else {
                 MainView().transition(.opacity)
             }
         }
         .animation(Motion.smooth, value: app.phase)
+        .sheet(item: Binding(get: { app.unlockRequest }, set: { app.unlockRequest = $0 })) { account in
+            UnlockView(account: account, sheet: true) { app.unlocked(account) }
+                .environment(app)
+        }
         .animation(Motion.smooth, value: splashHold)
         .task {
             try? await Task.sleep(nanoseconds: 750_000_000)
@@ -65,6 +71,11 @@ struct MainView: View {
             Group {
                 if app.section == .claude {
                     ClaudeWorkspaceView()
+                        .surface(.panel)
+                        .transition(.opacity)
+                } else if app.forge != nil {
+                    ForgeDetailColumn()
+                        .animation(Motion.smooth, value: app.forgeSelection?.id)
                         .surface(.panel)
                         .transition(.opacity)
                 } else {
@@ -135,23 +146,10 @@ struct SidebarView: View {
 
     var body: some View {
         List {
-            Section("Inbox") {
-                SidebarRow(section: .notifications, title: "Notifications", icon: "bell.fill", color: .syAmber, count: app.unreadCount)
-            }
-            Section("Pull requests") {
-                ForEach(PRFilter.allCases) { f in
-                    SidebarRow(section: .prs(f), title: f.title, icon: f.tileIcon, color: f.tint, count: f == .reviewRequested ? app.reviewRequestCount : (f == .mine ? app.myPRCount : 0))
-                }
-                SidebarRow(section: .myPRsByRepo, title: "My PRs by project", icon: "folder.fill", color: .syCoral)
-            }
-            Section("Issues") {
-                ForEach(IssueFilter.allCases) { f in
-                    SidebarRow(section: .issues(f), title: f.title, icon: f.tileIcon, color: f.tint)
-                }
-            }
-            Section("Code") {
-                SidebarRow(section: .repos, title: "Repositories", icon: "book.closed.fill", color: .syTeal)
-                SidebarRow(section: .projects, title: "Projects", icon: "rectangle.split.3x1.fill", color: .syIndigo)
+            if app.forge != nil {
+                forgeSections
+            } else {
+                gitHubSections
             }
             Section("AI") {
                 SidebarRow(section: .claude, title: "Claude Code", icon: "sparkles", color: .syCoral, count: app.claude.attentionCount > 0 ? app.claude.attentionCount : app.claude.tabs.filter(\.running).count)
@@ -169,20 +167,43 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
-    private var userFooter: some View {
-        if let user = app.user {
-            HStack(spacing: 8) {
-                Avatar(url: user.avatarUrl, size: 24)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(user.name ?? user.login).font(.callout.weight(.medium)).lineLimit(1)
-                    Text("@\(user.login)").font(.caption).foregroundStyle(Color.syMuted)
-                }
-                Spacer()
-                SettingsLink { Image(systemName: "gearshape") }.buttonStyle(.borderless)
+    private var forgeSections: some View {
+        Section(app.provider.requestsTitle) {
+            ForEach(app.provider.supportedFilters) { f in
+                SidebarRow(section: .prs(f), title: f.title, icon: f.tileIcon, color: f.tint, count: f == .reviewRequested ? app.reviewRequestCount : (f == .mine ? app.myPRCount : 0))
             }
-            .padding(10)
-            .background(Theme.isBrand ? AnyShapeStyle(Color.sySidebar) : AnyShapeStyle(.clear))
-            .overlay(alignment: .top) { if Theme.isBrand { Rectangle().fill(Color.syLine).frame(height: 1) } }
+        }
+    }
+
+    @ViewBuilder
+    private var gitHubSections: some View {
+        Section("Inbox") {
+            SidebarRow(section: .notifications, title: "Notifications", icon: "bell.fill", color: .syAmber, count: app.unreadCount)
+        }
+        Section("Pull requests") {
+            ForEach(PRFilter.allCases) { f in
+                SidebarRow(section: .prs(f), title: f.title, icon: f.tileIcon, color: f.tint, count: f == .reviewRequested ? app.reviewRequestCount : (f == .mine ? app.myPRCount : 0))
+            }
+            SidebarRow(section: .myPRsByRepo, title: "My PRs by project", icon: "folder.fill", color: .syCoral)
+        }
+        Section("Issues") {
+            ForEach(IssueFilter.allCases) { f in
+                SidebarRow(section: .issues(f), title: f.title, icon: f.tileIcon, color: f.tint)
+            }
+        }
+        Section("Code") {
+            SidebarRow(section: .repos, title: "Repositories", icon: "book.closed.fill", color: .syTeal)
+            SidebarRow(section: .projects, title: "Projects", icon: "rectangle.split.3x1.fill", color: .syIndigo)
+        }
+    }
+
+    @ViewBuilder
+    private var userFooter: some View {
+        if app.user != nil {
+            AccountSwitcherFooter()
+                .padding(10)
+                .background(Theme.isBrand ? AnyShapeStyle(Color.sySidebar) : AnyShapeStyle(.clear))
+                .overlay(alignment: .top) { if Theme.isBrand { Rectangle().fill(Color.syLine).frame(height: 1) } }
         }
     }
 }
@@ -323,6 +344,27 @@ struct ContentColumn: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
+        if app.forge != nil {
+            forgeContent
+        } else {
+            gitHubContent
+        }
+    }
+
+    @ViewBuilder
+    private var forgeContent: some View {
+        switch app.section {
+        case .prs(let f) where app.provider.supportedFilters.contains(f):
+            ForgeListView(filter: f).id("forge-\(f.rawValue)-\(app.account?.id ?? "")")
+        case .claude:
+            ClaudeProjectsColumn()
+        default:
+            ForgeUnavailableView()
+        }
+    }
+
+    @ViewBuilder
+    private var gitHubContent: some View {
         switch app.section {
         case .notifications:
             NotificationsView()
