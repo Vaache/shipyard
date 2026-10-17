@@ -4,6 +4,7 @@ use super::claude::auth_view;
 use super::dialogs;
 use super::widgets::*;
 use crate::claude::accounts::{self, Status};
+use crate::git_accounts::{self, GitProvider};
 use crate::{app, auth, settings, theme, updater, util};
 
 fn combo(title: &str, options: &[&str], selected: usize, on_change: impl Fn(usize) + 'static) -> adw::ComboRow {
@@ -36,49 +37,73 @@ fn group(title: &str, icon_name: &str, color: &str) -> adw::PreferencesGroup {
 fn account_group(dialog: &adw::PreferencesDialog) -> adw::PreferencesGroup {
     let g = group("Account", "sy-person-symbolic", "teal");
     let a = app::get();
-    let (user, scopes) = {
+    let (user, scopes, account) = {
         let s = a.state.borrow();
-        (s.user.clone(), s.scopes.clone())
+        (s.user.clone(), s.scopes.clone(), s.account.clone())
     };
+    let provider = account.as_ref().map(|x| x.provider).unwrap_or(GitProvider::Github);
     match user {
         Some(u) => {
             let row = adw::ActionRow::new();
             let name = u.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| u.login.clone());
             row.set_title(&name);
-            row.set_subtitle(&format!("@{}", u.login));
+            row.set_subtitle(&format!("{} · {}", provider.title(), account.as_ref().map(|x| x.subtitle()).unwrap_or_else(|| format!("@{}", u.login))));
             row.add_prefix(&avatar(u.avatar_url.as_deref(), 36, Some(&name)));
             g.add(&row);
-            let sc = adw::ActionRow::new();
-            sc.set_title("Token scopes");
-            sc.set_subtitle(&if scopes.is_empty() { "fine-grained / unknown".to_string() } else { scopes.join(", ") });
-            sc.set_subtitle_selectable(true);
-            g.add(&sc);
+            if provider.is_github() {
+                let sc = adw::ActionRow::new();
+                sc.set_title("Token scopes");
+                sc.set_subtitle(&if scopes.is_empty() { "fine-grained / unknown".to_string() } else { scopes.join(", ") });
+                sc.set_subtitle_selectable(true);
+                g.add(&sc);
+            }
             let actions = adw::ActionRow::new();
             actions.set_title("Session");
-            if auth::gh_available() {
+            if provider.is_github() && auth::gh_available() {
                 let refresh = button("Refresh token from gh");
                 refresh.set_valign(gtk::Align::Center);
                 refresh.connect_clicked(|b| {
                     b.set_sensitive(false);
                     let b = b.clone();
                     crate::rt::spawn_local(async move {
-                        if let Ok(t) = auth::gh_token().await {
-                            let _ = app::get().login(t, true).await;
-                        }
+                        app::get().refresh_token_from_gh().await;
                         b.set_sensitive(true);
                     });
                 });
                 actions.add_suffix(&refresh);
             }
-            let out = destructive("Sign out");
+            let add = button("Add account…");
+            add.set_valign(gtk::Align::Center);
+            let d = dialog.clone();
+            add.connect_clicked(move |_| {
+                d.close();
+                super::login::add_account_sheet();
+            });
+            actions.add_suffix(&add);
+            let out = destructive("Sign out…");
             out.set_valign(gtk::Align::Center);
             let d = dialog.clone();
             out.connect_clicked(move |_| {
                 d.close();
-                app::get().logout();
+                super::accounts::confirm_sign_out();
             });
             actions.add_suffix(&out);
             g.add(&actions);
+            for other in git_accounts::accounts().into_iter().filter(|x| account.as_ref().is_none_or(|c| c.id != x.id)) {
+                let r = adw::ActionRow::new();
+                r.set_title(&other.display_name());
+                r.set_subtitle(&format!("{} · {}", other.provider.title(), other.subtitle()));
+                r.add_prefix(&avatar(other.avatar_url.as_deref(), 28, Some(&other.display_name())));
+                let switch = button("Switch…");
+                switch.set_valign(gtk::Align::Center);
+                let d = dialog.clone();
+                switch.connect_clicked(move |_| {
+                    d.close();
+                    super::accounts::confirm_switch(other.clone());
+                });
+                r.add_suffix(&switch);
+                g.add(&r);
+            }
         }
         None => {
             let row = adw::ActionRow::new();

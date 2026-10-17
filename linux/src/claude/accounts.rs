@@ -388,4 +388,16 @@ impl AccountStore {
         crate::rt::blocking(move || cmd.output()).await;
         self.refresh().await;
     }
+
+    pub async fn logout_all(self: Rc<Self>) {
+        let Some(bin) = crate::rt::blocking(host::claude_binary).await else { return };
+        let cmds: Vec<HostCmd> = profiles().iter().map(|p| command(&bin, p.config_dir.as_deref()).args(["auth", "logout"])).collect();
+        crate::rt::blocking(move || {
+            for cmd in cmds {
+                cmd.output();
+            }
+        })
+        .await;
+        self.refresh().await;
+    }
 }

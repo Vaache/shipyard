@@ -7,10 +7,12 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use crate::api::models::*;
-use crate::api::GitHubApi;
+use crate::api::{ApiError, GitHubApi};
 use crate::brand;
 use crate::claude::workspace::Workspace;
 use crate::demo;
+use crate::forge::ForgeClient;
+use crate::git_accounts::{self, GitAccount, GitCredential, GitProvider};
 use crate::secret;
 use crate::settings;
 use crate::signal::Signal;
@@ -187,6 +189,8 @@ pub enum Phase {
 pub struct State {
     pub phase: Phase,
     pub api: Option<GitHubApi>,
+    pub account: Option<GitAccount>,
+    pub forge: Option<ForgeClient>,
     pub user: Option<RestUser>,
     pub scopes: Vec<String>,
     pub section: Section,
@@ -211,6 +215,7 @@ pub struct App {
     pub section_changed: Signal<Section>,
     pub route_changed: Signal<Option<Route>>,
     pub phase_changed: Signal<Phase>,
+    pub account_changed: Signal<()>,
     window: RefCell<Option<adw::ApplicationWindow>>,
     root: RefCell<Option<gtk::Stack>>,
     toasts: RefCell<Option<adw::ToastOverlay>>,
@@ -242,6 +247,52 @@ pub fn main_window() -> Option<gtk::Window> {
 pub fn api() -> Option<GitHubApi> {
     try_get().and_then(|a| a.state.borrow().api.clone())
 }
+
+pub fn forge() -> Option<ForgeClient> {
+    try_get().and_then(|a| a.state.borrow().forge.clone())
+}
+
+pub fn account() -> Option<GitAccount> {
+    try_get().and_then(|a| a.state.borrow().account.clone())
+}
+
+pub fn provider() -> GitProvider {
+    account().map(|a| a.provider).unwrap_or(GitProvider::Github)
+}
+
+pub fn number_prefix() -> &'static str {
+    provider().number_prefix()
+}
+
+pub fn cache_account() -> String {
+    try_get()
+        .and_then(|a| {
+            let s = a.state.borrow();
+            s.account.as_ref().filter(|x| !x.login.is_empty()).map(|x| x.cache_key()).or_else(|| s.user.as_ref().map(|u| u.login.clone()))
+        })
+        .unwrap_or_default()
+}
+
+pub fn section_allowed(s: Section) -> bool {
+    let p = provider();
+    if p.is_github() {
+        return true;
+    }
+    match s {
+        Section::Prs(f) => p.supported_filters().contains(&f),
+        Section::Claude => true,
+        _ => false,
+    }
+}
+
+fn github_links() -> bool {
+    try_get().is_some_and(|a| {
+        let s = a.state.borrow();
+        s.api.is_some() && s.account.as_ref().is_none_or(|x| x.provider == GitProvider::Github)
+    })
+}
+
+pub const CLAUDE_SIGN_OUT_NOTE: &str = "Claude Code is signed out too, for every Claude account on this computer and in the terminal. Open Claude sessions close; their history stays.";
 
 pub fn is_active() -> bool {
     try_get().and_then(|a| a.window.borrow().clone()).map(|w| w.is_active() && w.is_visible()).unwrap_or(false)
@@ -298,7 +349,7 @@ pub fn section() -> Section {
 
 pub fn set_section(s: Section) {
     let a = get();
-    if a.state.borrow().section == s {
+    if a.state.borrow().section == s || !section_allowed(s) {
         return;
     }
     a.state.borrow_mut().section = s;
@@ -316,10 +367,14 @@ pub fn select(route: Option<Route>) {
 
 pub fn open(route: Route, push: bool) {
     let a = get();
+    if !matches!(route, Route::Forge(_)) && !github_links() {
+        return;
+    }
     let section = a.state.borrow().section;
     if section == Section::Claude {
-        a.state.borrow_mut().section = Section::Prs(PrFilter::Mine);
-        a.section_changed.emit(&Section::Prs(PrFilter::Mine));
+        let target = if section_allowed(Section::Prs(PrFilter::Mine)) { PrFilter::Mine } else { provider().supported_filters()[0] };
+        a.state.borrow_mut().section = Section::Prs(target);
+        a.section_changed.emit(&Section::Prs(target));
         select(Some(route));
         a.present();
         return;
@@ -389,10 +444,27 @@ pub fn on_live_visible(widget: &impl IsA<gtk::Widget>, f: impl Fn(&()) -> bool +
     });
 }
 
+fn report_saved(saved: secret::Saved) {
+    if saved == secret::Saved::File {
+        toast_with("Keyring unavailable. Token saved to a private file in the config folder.", "OK", || {});
+    }
+}
+
+fn forget_account(account: Option<&GitAccount>) {
+    match account {
+        Some(a) => {
+            git_accounts::remove(&a.id);
+        }
+        None if brand::env_var("TOKEN").is_none() => crate::rt::spawn_local(async { crate::rt::run(secret::delete(settings::config_dir(), secret::DEFAULT_KEY.to_string())).await }),
+        None => {}
+    }
+}
+
 fn reset_session_caches() {
     crate::api::reset_rate_limit();
     crate::api::endpoints::reset_caches();
     ui::lists::reset_cache();
+    ui::forge_list::reset_cache();
 }
 
 pub fn on_badges(f: impl Fn(&()) -> bool + 'static) {
@@ -477,32 +549,68 @@ impl App {
     }
 
     async fn restore(self: Rc<Self>) {
-        let token = match brand::env_var("TOKEN") {
-            Some(t) => Some(t),
-            None => crate::rt::run(secret::load(settings::config_dir())).await,
-        };
-        let Some(token) = token else {
+        if let Some(token) = brand::env_var("TOKEN") {
+            self.resume_github(token, None).await;
+            return;
+        }
+        git_accounts::migrate().await;
+        let Some(account) = git_accounts::active() else {
             self.set_phase(Phase::LoggedOut);
             return;
         };
-        let known = settings::read(|s| s.last_account.clone()).filter(|a| !demo::is_on() && a.fingerprint == crate::list_cache::fingerprint(&token));
-        if let Some(account) = &known {
+        let Some(credential) = git_accounts::credential(&account).await else {
+            self.set_phase(Phase::LoggedOut);
+            return;
+        };
+        self.resume(account, credential).await;
+    }
+
+    async fn resume(self: Rc<Self>, account: GitAccount, credential: GitCredential) {
+        if account.provider.is_github() {
+            self.resume_github(credential.token, Some(account)).await;
+            return;
+        }
+        let Some(client) = ForgeClient::new(&account, &credential, settings::config_dir()) else { return };
+        self.enter_forge(account, client.clone());
+        self.verify_forge(client).await;
+    }
+
+    async fn resume_github(self: Rc<Self>, token: String, account: Option<GitAccount>) {
+        let host = account.as_ref().map(|a| a.host.clone()).unwrap_or_else(|| crate::api::GITHUB_HOST.to_string());
+        let cached = match &account {
+            Some(a) if !a.login.is_empty() => Some(a.user()),
+            Some(_) => None,
+            None => settings::read(|s| s.last_account.clone()).filter(|a| a.fingerprint == crate::list_cache::fingerprint(&token)).map(|a| RestUser { login: a.login, name: a.name, avatar_url: a.avatar_url }),
+        }
+        .filter(|_| !demo::is_on());
+        if let Some(user) = &cached {
+            self.drop_main_if_switching(account.as_ref());
             {
                 let mut s = self.state.borrow_mut();
-                s.api = Some(GitHubApi::new(&token));
-                s.user = Some(RestUser { login: account.login.clone(), name: account.name.clone(), avatar_url: account.avatar_url.clone() });
+                s.api = Some(GitHubApi::with_host(&token, &host));
+                s.account = account.clone();
+                s.forge = None;
+                s.user = Some(user.clone());
+            }
+            if let Some(a) = &account {
+                git_accounts::mark_used(Some(a));
             }
             self.set_phase(Phase::LoggedIn);
             self.start_polling();
         }
-        match self.clone().login(token.clone(), false).await {
-            Ok(()) => {}
-            Err(e) if e.status == 401 => self.logout(),
-            Err(_) if known.is_some() => {}
+        let api = GitHubApi::with_host(&token, &host);
+        let a2 = api.clone();
+        match crate::rt::run(async move { a2.current_user().await }).await {
+            Ok((user, scopes)) => self.enter_github(account.map(|a| a.with_user(&user)), api, user, scopes, &token),
+            Err(e) if e.status == 401 => self.revoked(account),
+            Err(_) if cached.is_some() => {}
             Err(_) => {
+                self.drop_main_if_switching(account.as_ref());
                 {
                     let mut s = self.state.borrow_mut();
-                    s.api = Some(GitHubApi::new(&token));
+                    s.api = Some(api);
+                    s.account = account;
+                    s.forge = None;
                     if demo::is_on() {
                         s.user = Some(demo::user());
                     }
@@ -513,39 +621,57 @@ impl App {
         }
     }
 
-    pub async fn login(self: Rc<Self>, token: String, persist: bool) -> Result<(), crate::api::ApiError> {
-        let api = GitHubApi::new(&token);
-        let a2 = api.clone();
-        let (user, scopes) = crate::rt::run(async move { a2.current_user().await }).await?;
+    fn drop_main_if_switching(self: &Rc<Self>, next: Option<&GitAccount>) {
+        let switching = {
+            let s = self.state.borrow();
+            s.phase == Phase::LoggedIn && s.account.as_ref().map(|a| a.id.as_str()) != next.map(|a| a.id.as_str())
+        };
+        if !switching {
+            return;
+        }
+        reset_session_caches();
+        self.pr_models.borrow_mut().clear();
+        self.state.borrow_mut().route = None;
+        if let Some(root) = self.root.borrow().clone() {
+            if let Some(old) = root.child_by_name("main") {
+                root.remove(&old);
+            }
+        }
+        *self.main.borrow_mut() = None;
+    }
+
+    fn enter_github(self: &Rc<Self>, account: Option<GitAccount>, api: GitHubApi, user: RestUser, scopes: Vec<String>, token: &str) {
         let was_logged_in = self.state.borrow().phase == Phase::LoggedIn;
-        let same = was_logged_in && self.state.borrow().user.as_ref().is_some_and(|u| u.login == user.login);
+        let same = was_logged_in && {
+            let s = self.state.borrow();
+            s.account.as_ref().map(|a| a.id.as_str()) == account.as_ref().map(|a| a.id.as_str()) && s.user.as_ref().is_some_and(|u| u.login == user.login)
+        };
         if !same {
             reset_session_caches();
         }
-        if !demo::is_on() {
-            let account = settings::LastAccount { login: user.login.clone(), name: user.name.clone(), avatar_url: user.avatar_url.clone(), fingerprint: crate::list_cache::fingerprint(&token) };
-            if settings::read(|s| s.last_account.as_ref() != Some(&account)) {
-                settings::update(|s| s.last_account = Some(account));
-            }
-        }
-        if persist {
-            match crate::rt::run(secret::save(settings::config_dir(), token.clone())).await {
-                secret::Saved::Keyring => {}
-                secret::Saved::File => toast_with("Keyring unavailable. Token saved to a private file in the config folder.", "OK", || {}),
-                secret::Saved::Failed => toast_with("Could not save the token. You will need to sign in again next time.", "OK", || {}),
+        if let Some(a) = &account {
+            git_accounts::update(a);
+            git_accounts::mark_used(Some(a));
+        } else if !demo::is_on() {
+            let last = settings::LastAccount { login: user.login.clone(), name: user.name.clone(), avatar_url: user.avatar_url.clone(), fingerprint: crate::list_cache::fingerprint(token) };
+            if settings::read(|s| s.last_account.as_ref() != Some(&last)) {
+                settings::update(|s| s.last_account = Some(last));
             }
         }
         {
             let mut s = self.state.borrow_mut();
             s.api = Some(api);
+            s.account = account;
+            s.forge = None;
             s.user = Some(if demo::is_on() { demo::user() } else { user });
             s.scopes = scopes;
             s.known_review_requests = None;
         }
         if same {
-            return Ok(());
+            return;
         }
         self.pr_models.borrow_mut().clear();
+        self.state.borrow_mut().route = None;
         if was_logged_in {
             if let Some(root) = self.root.borrow().clone() {
                 if let Some(old) = root.child_by_name("main") {
@@ -556,24 +682,180 @@ impl App {
         }
         self.set_phase(Phase::LoggedIn);
         self.start_polling();
+    }
+
+    fn enter_forge(self: &Rc<Self>, account: GitAccount, client: ForgeClient) {
+        self.drop_main_if_switching(Some(&account));
+        git_accounts::mark_used(Some(&account));
+        let supported = account.provider.supported_filters();
+        {
+            let mut s = self.state.borrow_mut();
+            s.user = Some(account.user());
+            s.account = Some(account);
+            s.forge = Some(client);
+            s.api = None;
+            s.scopes.clear();
+            s.route = None;
+            s.known_review_requests = None;
+            let keep = match s.section {
+                Section::Prs(f) => supported.contains(&f),
+                Section::Claude => true,
+                _ => false,
+            };
+            if !keep {
+                s.section = Section::Prs(supported[0]);
+            }
+        }
+        self.pr_models.borrow_mut().clear();
+        self.set_phase(Phase::LoggedIn);
+        self.start_polling();
+    }
+
+    async fn verify_forge(self: &Rc<Self>, client: ForgeClient) {
+        let c = client.clone();
+        match crate::rt::run(async move { c.current_user().await }).await {
+            Ok(user) => {
+                let current = self.state.borrow().forge.as_ref().is_some_and(|f| f.same(&client));
+                let Some(mut account) = self.state.borrow().account.clone().filter(|_| current) else { return };
+                account.login = user.login;
+                account.name = user.name;
+                account.avatar_url = user.avatar_url;
+                if user.id.is_some() {
+                    account.user_id = user.id;
+                }
+                git_accounts::update(&account);
+                git_accounts::mark_used(Some(&account));
+                {
+                    let mut s = self.state.borrow_mut();
+                    s.user = Some(account.user());
+                    s.account = Some(account);
+                }
+                self.account_changed.emit(&());
+            }
+            Err(e) if e.status == 401 => {
+                let target = self.state.borrow().account.clone().filter(|_| self.state.borrow().forge.as_ref().is_some_and(|f| f.same(&client)));
+                if let Some(target) = target {
+                    self.revoked(Some(target));
+                }
+            }
+            Err(_) => {}
+        }
+    }
+
+    pub async fn add_account(self: Rc<Self>, provider: GitProvider, raw_host: String, credential: GitCredential, email: Option<String>) -> Result<(), ApiError> {
+        let host = provider.effective_host(&raw_host);
+        if host.is_empty() {
+            return Err(ApiError::new("Enter the server address"));
+        }
+        let draft = GitAccount::draft(provider, &host, email);
+        if provider.is_github() {
+            let api = GitHubApi::with_host(&credential.token, &host);
+            let a2 = api.clone();
+            let (user, scopes) = crate::rt::run(async move { a2.current_user().await }).await?;
+            let (saved, stored) = git_accounts::upsert(draft.with_user(&user), &credential).await?;
+            report_saved(stored);
+            self.leave_current(&saved).await;
+            self.enter_github(Some(saved), api, user, scopes, &credential.token);
+            return Ok(());
+        }
+        let probe = ForgeClient::new(&draft, &credential, settings::config_dir()).ok_or_else(|| ApiError::new("Unsupported service"))?;
+        let user = crate::rt::run(async move { probe.current_user().await }).await?;
+        let mut draft = draft;
+        draft.login = user.login;
+        draft.name = user.name;
+        draft.avatar_url = user.avatar_url;
+        draft.user_id = user.id;
+        let (saved, stored) = git_accounts::upsert(draft, &credential).await?;
+        report_saved(stored);
+        self.leave_current(&saved).await;
+        if let Some(client) = ForgeClient::new(&saved, &credential, settings::config_dir()) {
+            self.enter_forge(saved, client);
+        }
         Ok(())
     }
 
-    pub fn logout(self: &Rc<Self>) {
+    pub async fn switch_account(self: Rc<Self>, id: String) {
+        let (current, phase) = {
+            let s = self.state.borrow();
+            (s.account.as_ref().map(|a| a.id.clone()), s.phase)
+        };
+        if current.as_deref() == Some(id.as_str()) && phase == Phase::LoggedIn {
+            return;
+        }
+        let Some(target) = git_accounts::accounts().into_iter().find(|a| a.id == id) else { return };
+        let Some(credential) = git_accounts::credential(&target).await else {
+            git_accounts::remove(&id);
+            toast_with(&format!("Sign-in for {} is missing. Add the account again.", target.subtitle()), "OK", || {});
+            return;
+        };
+        self.leave_current(&target).await;
+        self.resume(target, credential).await;
+    }
+
+    async fn leave_current(self: &Rc<Self>, next: &GitAccount) {
+        if git_accounts::last_used().is_some_and(|last| last != next.identity()) {
+            self.sign_out_of_claude().await;
+        }
+        git_accounts::set_active(&next.id);
+    }
+
+    pub async fn sign_out_of_claude(self: &Rc<Self>) {
+        self.claude.close_all_for_profile_switch();
+        crate::claude::accounts::store().logout_all().await;
+        self.claude.reload_projects().await;
+        toast("Signed out of Claude Code");
+    }
+
+    pub async fn refresh_token_from_gh(self: Rc<Self>) {
+        let account = self.state.borrow().account.clone();
+        let provider = account.as_ref().map(|a| a.provider).unwrap_or(GitProvider::Github);
+        if !provider.is_github() {
+            return;
+        }
+        let host = account.map(|a| a.host).unwrap_or_else(|| crate::api::GITHUB_HOST.to_string());
+        if let Ok(t) = crate::auth::gh_token(host.clone()).await {
+            let _ = self.add_account(provider, host, GitCredential::token(t), None).await;
+        }
+    }
+
+    pub async fn sign_out(self: Rc<Self>) {
+        let current = self.state.borrow().account.clone();
+        self.sign_out_of_claude().await;
+        forget_account(current.as_ref());
+        git_accounts::mark_used(None);
+        self.reset_session(true);
+    }
+
+    fn revoked(self: &Rc<Self>, target: Option<GitAccount>) {
+        forget_account(target.as_ref());
+        if let Some(t) = target.as_ref().filter(|t| !t.login.is_empty()) {
+            crate::list_cache::clear(&t.cache_key());
+        }
+        self.reset_session(false);
+        let who = target.map(|t| t.subtitle()).unwrap_or_else(|| "this account".into());
+        toast_with(&format!("Sign-in for {who} is no longer valid. Sign in again."), "OK", || {});
+    }
+
+    fn reset_session(self: &Rc<Self>, forget_cache: bool) {
         if let Some(id) = self.poll.borrow_mut().take() {
             id.remove();
         }
-        let login = self.state.borrow().user.as_ref().map(|u| u.login.clone()).or_else(|| settings::read(|s| s.last_account.as_ref().map(|a| a.login.clone())));
-        if let Some(login) = login {
-            crate::list_cache::clear(&login);
-        }
-        if settings::read(|s| s.last_account.is_some()) {
-            settings::update(|s| s.last_account = None);
+        if forget_cache {
+            let key = cache_account();
+            let key = if key.is_empty() { settings::read(|s| s.last_account.as_ref().map(|a| a.login.clone())).unwrap_or_default() } else { key };
+            if !key.is_empty() {
+                crate::list_cache::clear(&key);
+            }
+            if settings::read(|s| s.last_account.is_some()) {
+                settings::update(|s| s.last_account = None);
+            }
         }
         reset_session_caches();
         {
             let mut s = self.state.borrow_mut();
             s.api = None;
+            s.account = None;
+            s.forge = None;
             s.user = None;
             s.scopes.clear();
             s.route = None;
@@ -585,7 +867,6 @@ impl App {
             s.known_review_requests = None;
         }
         self.pr_models.borrow_mut().clear();
-        crate::rt::spawn_local(async { crate::rt::run(secret::delete(settings::config_dir())).await });
         self.set_phase(Phase::LoggedOut);
         self.badges.emit(&());
     }
@@ -642,6 +923,11 @@ impl App {
     }
 
     pub async fn refresh_badges(self: Rc<Self>, force: bool) {
+        let forge = self.state.borrow().forge.clone();
+        if let Some(forge) = forge {
+            self.refresh_forge_badges(forge).await;
+            return;
+        }
         let Some(api) = self.state.borrow().api.clone() else { return };
         if demo::is_on() {
             {
@@ -655,34 +941,75 @@ impl App {
         }
         let a1 = api.clone();
         if let Ok(b) = crate::rt::run(async move { a1.badges().await }).await {
-            let new_items: Vec<SearchItem> = {
-                let mut s = self.state.borrow_mut();
-                let ids: HashSet<String> = b.rr.nodes.iter().map(|i| i.url.clone()).collect();
-                let fresh = match &s.known_review_requests {
-                    Some(known) => b.rr.nodes.iter().filter(|i| !known.contains(&i.url)).cloned().collect(),
-                    None => vec![],
-                };
-                s.known_review_requests = Some(ids);
-                s.review_requests = b.rr.nodes.clone();
-                s.review_request_count = b.rr.issue_count;
-                s.my_prs = b.mine.nodes.clone();
-                s.my_pr_count = b.mine.issue_count;
-                fresh
-            };
-            if !new_items.is_empty() && settings::read(|s| s.notify_review_requests) && !is_active() {
-                for item in new_items.iter().take(3) {
-                    let n = gio::Notification::new(&format!("Review requested: {}", item.title));
-                    n.set_body(Some(&format!("{}#{} by {}", item.repository.name_with_owner, item.number, item.author.as_ref().map(|a| a.login.as_str()).unwrap_or("ghost"))));
-                    n.set_default_action_and_target_value("app.open-url", Some(&item.url.to_variant()));
-                    self.gtk_app.send_notification(Some(&format!("rr-{}", item.url)), &n);
-                }
-            }
+            self.apply_review_requests(b.rr.nodes, b.rr.issue_count);
+            let mut s = self.state.borrow_mut();
+            s.my_prs = b.mine.nodes;
+            s.my_pr_count = b.mine.issue_count;
         }
         let a2 = api.clone();
         if let Ok(n) = crate::rt::run(async move { a2.unread_notification_count(force).await }).await {
             self.state.borrow_mut().unread_count = n;
         }
         self.state.borrow_mut().last_badge_refresh = Some(chrono::Utc::now());
+        self.badges.emit(&());
+    }
+
+    fn apply_review_requests(&self, items: Vec<SearchItem>, count: i64) {
+        let new_items: Vec<SearchItem> = {
+            let mut s = self.state.borrow_mut();
+            let ids: HashSet<String> = items.iter().map(|i| i.url.clone()).collect();
+            let fresh = match &s.known_review_requests {
+                Some(known) => items.iter().filter(|i| !known.contains(&i.url)).cloned().collect(),
+                None => vec![],
+            };
+            s.known_review_requests = Some(ids);
+            s.review_requests = items;
+            s.review_request_count = count;
+            fresh
+        };
+        if !new_items.is_empty() && settings::read(|s| s.notify_review_requests) && !is_active() {
+            let prefix = number_prefix();
+            for item in new_items.iter().take(3) {
+                let n = gio::Notification::new(&format!("Review requested: {}", item.title));
+                n.set_body(Some(&format!("{}{prefix}{} by {}", item.repository.name_with_owner, item.number, item.author.as_ref().map(|a| a.login.as_str()).unwrap_or("ghost"))));
+                n.set_default_action_and_target_value("app.open-url", Some(&item.url.to_variant()));
+                self.gtk_app.send_notification(Some(&format!("rr-{}", item.url)), &n);
+            }
+        }
+    }
+
+    async fn refresh_forge_badges(self: Rc<Self>, forge: ForgeClient) {
+        let supported = forge.provider().supported_filters();
+        let current = |me: &Rc<Self>| me.state.borrow().forge.as_ref().is_some_and(|f| f.same(&forge));
+        if supported.contains(&PrFilter::ReviewRequested) {
+            let f = forge.clone();
+            if let Ok(rr) = crate::rt::run(async move { f.pull_requests(PrFilter::ReviewRequested, ui::lists::StateFilter::Open).await }).await {
+                if current(&self) {
+                    ui::forge_view::remember(&rr);
+                    let count = rr.len() as i64;
+                    self.apply_review_requests(rr.into_iter().take(10).collect(), count);
+                }
+            }
+        }
+        if supported.contains(&PrFilter::Mine) {
+            let f = forge.clone();
+            if let Ok(mine) = crate::rt::run(async move { f.pull_requests(PrFilter::Mine, ui::lists::StateFilter::Open).await }).await {
+                if current(&self) {
+                    ui::forge_view::remember(&mine);
+                    let mut s = self.state.borrow_mut();
+                    s.my_pr_count = mine.len() as i64;
+                    s.my_prs = mine.into_iter().take(10).collect();
+                }
+            }
+        }
+        if !current(&self) {
+            return;
+        }
+        {
+            let mut s = self.state.borrow_mut();
+            s.unread_count = 0;
+            s.last_badge_refresh = Some(chrono::Utc::now());
+        }
         self.badges.emit(&());
     }
 
@@ -702,7 +1029,7 @@ impl App {
                 return;
             }
             me.state.borrow_mut().last_clipboard = Some(s.clone());
-            if s.chars().count() >= 300 || !s.contains("github.com") {
+            if !github_links() || s.chars().count() >= 300 || !s.contains("github.com") {
                 return;
             }
             let Some(route) = util::parse_github_url(&s, false) else { return };
@@ -727,7 +1054,7 @@ impl App {
         };
         let scheme = url.scheme().to_string();
         if scheme == "http" || scheme == "https" {
-            if let Some(route) = util::parse_github_url(uri, false) {
+            if let Some(route) = util::parse_github_url(uri, false).filter(|_| github_links()) {
                 let files = url.path().ends_with("/files");
                 open(route.clone(), false);
                 if files {
@@ -924,6 +1251,8 @@ pub fn run(smoke: bool) -> glib::ExitCode {
         state: RefCell::new(State {
             phase: Phase::Checking,
             api: None,
+            account: None,
+            forge: None,
             user: None,
             scopes: vec![],
             section: Section::Prs(PrFilter::ReviewRequested),
@@ -944,6 +1273,7 @@ pub fn run(smoke: bool) -> glib::ExitCode {
         section_changed: Signal::new(),
         route_changed: Signal::new(),
         phase_changed: Signal::new(),
+        account_changed: Signal::new(),
         window: RefCell::new(None),
         root: RefCell::new(None),
         toasts: RefCell::new(None),
@@ -1029,4 +1359,23 @@ pub fn set_smoke_logged_out() {
     let a = get();
     a.splash_done.set(true);
     a.set_phase(Phase::LoggedOut);
+}
+
+pub fn set_smoke_forge(provider: GitProvider) {
+    let a = get();
+    let mut account = GitAccount::draft(provider, "smoke.invalid", None);
+    account.login = "smoke".into();
+    account.name = Some("Smoke Test".into());
+    let Some(client) = ForgeClient::new(&account, &GitCredential::token("smoke"), settings::config_dir()) else { return };
+    a.drop_main_if_switching(Some(&account));
+    {
+        let mut s = a.state.borrow_mut();
+        s.section = Section::Prs(provider.supported_filters()[0]);
+        s.user = Some(account.user());
+        s.account = Some(account);
+        s.forge = Some(client);
+        s.api = None;
+        s.route = None;
+    }
+    a.set_phase(Phase::LoggedIn);
 }

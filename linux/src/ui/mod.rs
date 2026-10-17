@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod claude;
 pub mod code_view;
 pub mod commit;
@@ -5,6 +6,8 @@ pub mod composer;
 pub mod diagnostics;
 pub mod dialogs;
 pub mod fix_claude;
+pub mod forge_list;
+pub mod forge_view;
 pub mod html;
 pub mod inbox;
 pub mod issue;
@@ -35,5 +38,6 @@ pub fn route_page(route: &Route) -> adw::NavigationPage {
         Route::Repo(r) => repos::detail_page(r),
         Route::Project(p) => projects::board_page(p),
         Route::Commit(r, sha) => commit::page(r, sha),
+        Route::Forge(url) => forge_view::page(url),
     }
 }

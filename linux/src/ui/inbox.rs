@@ -37,7 +37,7 @@ fn section(container: &gtk::Box, popover: &gtk::Popover, title: &str, count: i64
         col.set_hexpand(true);
         col.append(&ellipsized(&item.title, &["sy-text", "sy-bold"]));
         col.append(&ellipsized(
-            &format!("{}#{} · {} · {}", item.repository.name_with_owner, item.number, item.author.as_ref().map(|a| a.login.as_str()).unwrap_or(""), util::rel(Some(item.updated_at))),
+            &format!("{}{}{} · {} · {}", item.repository.name_with_owner, if item.forge { app::number_prefix() } else { "#" }, item.number, item.author.as_ref().map(|a| a.login.as_str()).unwrap_or(""), util::rel(Some(item.updated_at))),
             &["sy-muted", "sy-small"],
         ));
         row.append(&col);
@@ -78,8 +78,17 @@ fn fill(container: &gtk::Box, popover: &gtk::Popover) {
         let s = a.state.borrow();
         (s.review_requests.clone(), s.review_request_count, s.my_prs.clone(), s.my_pr_count, s.unread_count)
     };
-    section(container, popover, "Review requests", rr_count, &rr, PrFilter::ReviewRequested);
-    section(container, popover, "My open PRs", mine_count, &mine, PrFilter::Mine);
+    let provider = app::provider();
+    let supported = provider.supported_filters();
+    if supported.contains(&PrFilter::ReviewRequested) {
+        section(container, popover, "Review requests", rr_count, &rr, PrFilter::ReviewRequested);
+    }
+    if supported.contains(&PrFilter::Mine) {
+        section(container, popover, &format!("My open {}s", provider.request_short()), mine_count, &mine, PrFilter::Mine);
+    }
+    if !provider.is_github() {
+        return;
+    }
     let n = gtk::Button::new();
     n.add_css_class("flat");
     let row = hbox(8);

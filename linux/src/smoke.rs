@@ -6,6 +6,7 @@ use gtk::glib;
 use crate::api::models::*;
 use crate::api::GitHubApi;
 use crate::app::{self, App, IssueFilter, PrFilter, Section};
+use crate::git_accounts::GitProvider;
 use crate::ui::pr::model::{Change, PrModel};
 
 fn step(delay_ms: u64, name: &'static str, f: impl FnOnce() + 'static) {
@@ -194,6 +195,43 @@ pub fn run(_app: Rc<App>) {
         }
     });
     step(next(400), "deep link", || app::get().handle_url(&format!("{}://section/repos", crate::brand::URL_SCHEME)));
+    step(next(300), "gitlab account", || app::set_smoke_forge(GitProvider::Gitlab));
+    step(next(400), "forge item", || {
+        let item: SearchItem = crate::forge::ForgeItem {
+            number: 12,
+            title: "Smoke merge request".into(),
+            url: "https://smoke.invalid/g/app/-/merge_requests/12".into(),
+            state: "OPEN",
+            draft: false,
+            created: chrono::Utc::now(),
+            updated: chrono::Utc::now(),
+            base: Some("main".into()),
+            author: Some("smoke".into()),
+            avatar: None,
+            repo: "g/app".into(),
+            comments: Some(2),
+            labels: vec![],
+            review: Some("APPROVED".into()),
+        }
+        .into();
+        crate::ui::forge_view::remember(std::slice::from_ref(&item));
+        app::select(Some(item.route()));
+    });
+    for f in GitProvider::Gitlab.supported_filters() {
+        step(next(250), "forge section", move || app::set_section(Section::Prs(f)));
+    }
+    step(next(250), "forge claude section", || app::set_section(Section::Claude));
+    step(next(300), "account menu", || {
+        crate::ui::accounts::menu();
+    });
+    step(next(300), "bitbucket account", || app::set_smoke_forge(GitProvider::Bitbucket));
+    step(next(400), "login providers", || {
+        app::set_smoke_logged_out();
+        for p in GitProvider::ALL {
+            crate::ui::login::select_provider(p);
+        }
+    });
+    step(next(400), "add account sheet", crate::ui::login::add_account_sheet);
     step(next(1200), "done", || {
         println!("smoke: ok");
         app::finish_smoke(0);

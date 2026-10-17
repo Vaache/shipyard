@@ -57,7 +57,7 @@ pub fn reset_cache() {
 }
 
 fn account() -> String {
-    app::try_get().and_then(|a| a.state.borrow().user.as_ref().map(|u| u.login.clone())).unwrap_or_default()
+    app::cache_account()
 }
 
 fn cache_key(account: &str, query: &str) -> String {

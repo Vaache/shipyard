@@ -31,23 +31,31 @@ fn sidebar_icon(icon_name: &str, color: &str) -> gtk::Box {
 
 impl Sidebar {
     pub fn new() -> Rc<Self> {
-        let groups: Vec<(&str, Vec<(Section, String, &str, &str)>)> = vec![
-            ("Inbox", vec![(Section::Notifications, "Notifications".into(), "sy-bell-symbolic", "amber")]),
-            (
-                "Pull requests",
-                PrFilter::ALL
-                    .iter()
-                    .map(|f| (Section::Prs(*f), f.title().to_string(), f.icon(), f.tint()))
-                    .chain(std::iter::once((Section::MyPrsByRepo, "My PRs by project".to_string(), "sy-folder-symbolic", "coral")))
-                    .collect(),
-            ),
-            ("Issues", IssueFilter::ALL.iter().map(|f| (Section::Issues(*f), f.title().to_string(), f.icon(), f.tint())).collect()),
-            (
-                "Code",
-                vec![(Section::Repos, "Repositories".into(), "sy-repo-symbolic", "teal"), (Section::Projects, "Projects".into(), "sy-project-symbolic", "indigo")],
-            ),
-            ("AI", vec![(Section::Claude, "Claude Code".into(), "sy-sparkles-symbolic", "coral")]),
-        ];
+        let provider = app::provider();
+        let groups: Vec<(&str, Vec<(Section, String, &str, &str)>)> = if provider.is_github() {
+            vec![
+                ("Inbox", vec![(Section::Notifications, "Notifications".into(), "sy-bell-symbolic", "amber")]),
+                (
+                    "Pull requests",
+                    PrFilter::ALL
+                        .iter()
+                        .map(|f| (Section::Prs(*f), f.title().to_string(), f.icon(), f.tint()))
+                        .chain(std::iter::once((Section::MyPrsByRepo, "My PRs by project".to_string(), "sy-folder-symbolic", "coral")))
+                        .collect(),
+                ),
+                ("Issues", IssueFilter::ALL.iter().map(|f| (Section::Issues(*f), f.title().to_string(), f.icon(), f.tint())).collect()),
+                (
+                    "Code",
+                    vec![(Section::Repos, "Repositories".into(), "sy-repo-symbolic", "teal"), (Section::Projects, "Projects".into(), "sy-project-symbolic", "indigo")],
+                ),
+                ("AI", vec![(Section::Claude, "Claude Code".into(), "sy-sparkles-symbolic", "coral")]),
+            ]
+        } else {
+            vec![
+                (provider.requests_title(), provider.supported_filters().iter().map(|f| (Section::Prs(*f), f.title().to_string(), f.icon(), f.tint())).collect()),
+                ("AI", vec![(Section::Claude, "Claude Code".into(), "sy-sparkles-symbolic", "coral")]),
+            ]
+        };
         let column = vbox(0);
         let mut rows = vec![];
         for (title, items) in groups {
@@ -167,6 +175,14 @@ impl Sidebar {
             }
             None => false,
         });
+        let weak = Rc::downgrade(&me);
+        app::get().account_changed.connect(move |_| match weak.upgrade() {
+            Some(me) => {
+                me.build_footer();
+                true
+            }
+            None => false,
+        });
         me.update_counts();
         me.update_update_row();
         me.build_footer();
@@ -229,8 +245,10 @@ impl Sidebar {
         let texts = vbox(0);
         texts.set_hexpand(true);
         texts.append(&ellipsized(&display, &["sy-text", "sy-bold"]));
-        texts.append(&label_with(&format!("@{}", user.login), &["sy-muted", "sy-small"]));
+        let subtitle = app::account().map(|a| a.subtitle()).unwrap_or_else(|| format!("@{}", user.login));
+        texts.append(&ellipsized(&subtitle, &["sy-muted", "sy-small"]));
         self.footer.append(&texts);
+        self.footer.append(&super::accounts::menu_button());
         let settings = icon_button("emblem-system-symbolic", "Preferences");
         settings.connect_clicked(|_| ui_activate("preferences"));
         self.footer.append(&settings);

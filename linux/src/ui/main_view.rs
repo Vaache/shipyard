@@ -28,7 +28,9 @@ fn empty_page() -> adw::NavigationPage {
     let tile = icon_tile("sy-pr-symbolic", "violet", 56);
     tile.set_opacity(0.9);
     b.append(&tile);
-    let t = label_with("Select a pull request, issue or project", &["sy-muted"]);
+    let provider = app::provider();
+    let prompt = if provider.is_github() { "Select a pull request, issue or project".to_string() } else { format!("Select a {}", provider.request_title()) };
+    let t = label_with(&prompt, &["sy-muted"]);
     t.set_xalign(0.5);
     b.append(&t);
     let s = label_with("Ctrl+L — open by link", &["sy-dim", "sy-small"]);
