@@ -339,21 +339,10 @@ pub fn active() -> Option<GitAccount> {
     id.and_then(|id| list.iter().find(|a| a.id == id).cloned()).or_else(|| list.first().cloned())
 }
 
-pub fn last_used() -> Option<String> {
-    settings::read(|s| s.git_last_used.clone())
-}
-
 pub fn set_active(id: &str) {
     let id = id.to_string();
     if settings::read(|s| s.git_active_account.as_deref() != Some(id.as_str())) {
         settings::update(|s| s.git_active_account = Some(id));
-    }
-}
-
-pub fn mark_used(account: Option<&GitAccount>) {
-    let identity = account.map(|a| a.identity());
-    if settings::read(|s| s.git_last_used != identity) {
-        settings::update(|s| s.git_last_used = identity);
     }
 }
 
@@ -371,6 +360,15 @@ pub fn update(account: &GitAccount) {
 pub async fn credential(account: &GitAccount) -> Option<GitCredential> {
     let key = account.secret_key.clone();
     crate::rt::run(secret::load(settings::config_dir(), key)).await.map(|raw| GitCredential::decode(&raw))
+}
+
+pub async fn has_credential(account: &GitAccount) -> bool {
+    credential(account).await.is_some()
+}
+
+pub fn forget_credential(account: &GitAccount) {
+    let key = account.secret_key.clone();
+    crate::rt::spawn_local(async move { crate::rt::run(secret::delete(settings::config_dir(), key)).await });
 }
 
 pub async fn store(account: &GitAccount, credential: &GitCredential) -> secret::Saved {
@@ -424,12 +422,10 @@ pub async fn migrate() {
         user_id: None,
         secret_key: secret::DEFAULT_KEY.into(),
     };
-    let identity = if account.login.is_empty() { None } else { Some(account.identity()) };
     settings::update(move |s| {
         if s.git_accounts.is_empty() {
             s.git_accounts.push(account);
             s.git_active_account = Some(id);
-            s.git_last_used = identity;
         }
     });
 }

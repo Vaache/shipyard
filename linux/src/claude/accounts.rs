@@ -14,9 +14,89 @@ const SHARED_ITEMS: &[&str] = &["settings.json", "CLAUDE.md", "RTK.md", "skills"
 pub fn profiles() -> Vec<ClaudeProfile> {
     let mut list = settings::read(|s| s.claude_profiles.clone());
     if !list.iter().any(|p| p.id == DEFAULT_ID) {
-        list.insert(0, ClaudeProfile { id: DEFAULT_ID.into(), label: "Main".into(), config_dir: None, email: None, plan: None });
+        list.insert(0, ClaudeProfile { id: DEFAULT_ID.into(), label: "Main".into(), config_dir: None, email: None, plan: None, owner: None });
     }
     list
+}
+
+thread_local! {
+    static SCOPE: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+pub fn scope() -> Option<String> {
+    SCOPE.with(|s| s.borrow().clone())
+}
+
+pub fn set_scope(owner: Option<String>) {
+    SCOPE.with(|s| *s.borrow_mut() = owner);
+}
+
+pub fn visible_in(list: Vec<ClaudeProfile>, scope: Option<&str>) -> Vec<ClaudeProfile> {
+    match scope {
+        Some(owner) => list.into_iter().filter(|p| p.owner.as_deref() == Some(owner)).collect(),
+        None => list,
+    }
+}
+
+pub fn visible() -> Vec<ClaudeProfile> {
+    visible_in(profiles(), scope().as_deref())
+}
+
+pub fn is_visible(id: &str) -> bool {
+    visible().iter().any(|p| p.id == id)
+}
+
+pub fn owns_main() -> bool {
+    visible().iter().any(|p| p.is_default())
+}
+
+pub fn owned(owner: &str) -> Vec<ClaudeProfile> {
+    visible_in(profiles(), Some(owner))
+}
+
+pub fn preferred_in(list: &[ClaudeProfile], owner: &str, remembered: Option<&str>, active: &str) -> Option<ClaudeProfile> {
+    let mine: Vec<&ClaudeProfile> = list.iter().filter(|p| p.owner.as_deref() == Some(owner)).collect();
+    mine.iter().find(|p| Some(p.id.as_str()) == remembered).or_else(|| mine.iter().find(|p| p.id == active)).or_else(|| mine.first()).map(|p| (*p).clone())
+}
+
+pub fn preferred(owner: &str) -> Option<ClaudeProfile> {
+    let remembered = settings::read(|s| s.claude_active_by_owner.get(owner).cloned());
+    preferred_in(&profiles(), owner, remembered.as_deref(), &active_id())
+}
+
+pub fn claim_in(list: &mut [ClaudeProfile], owner: &str) -> bool {
+    let mut claimed = false;
+    for p in list.iter_mut().filter(|p| p.owner.is_none()) {
+        p.owner = Some(owner.to_string());
+        claimed = true;
+    }
+    claimed
+}
+
+pub fn claim_unowned(owner: &str) -> bool {
+    let mut list = profiles();
+    if !claim_in(&mut list, owner) {
+        return false;
+    }
+    save(list, active_id());
+    true
+}
+
+pub fn release(id: &str) {
+    let mut list = profiles();
+    if let Some(p) = list.iter_mut().find(|p| p.id == id) {
+        p.owner = None;
+        p.email = None;
+        p.plan = None;
+    }
+    save(list, active_id());
+    forget_remembered(id);
+}
+
+fn forget_remembered(id: &str) {
+    if settings::read(|s| s.claude_active_by_owner.values().any(|v| v == id)) {
+        settings::update(|s| s.claude_active_by_owner.retain(|_, v| v != id));
+    }
 }
 
 pub fn active_id() -> String {
@@ -74,6 +154,10 @@ pub fn update_cached_info(email: Option<String>, plan: Option<String>) {
 }
 
 pub fn add(label: &str, share: bool) -> Result<ClaudeProfile, String> {
+    add_owned(label, share, scope())
+}
+
+pub fn add_owned(label: &str, share: bool, owner: Option<String>) -> Result<ClaudeProfile, String> {
     let id = uuid::Uuid::new_v4().to_string().to_lowercase();
     let dir = base_dir().join(&id);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -94,6 +178,7 @@ pub fn add(label: &str, share: bool) -> Result<ClaudeProfile, String> {
         config_dir: Some(dir.to_string_lossy().to_string()),
         email: None,
         plan: None,
+        owner,
     };
     list.push(p.clone());
     save(list, active_id());
@@ -107,11 +192,19 @@ pub fn remove(id: &str) {
     let list: Vec<ClaudeProfile> = profiles().into_iter().filter(|p| p.id != id).collect();
     let active = if active_id() == id { DEFAULT_ID.to_string() } else { active_id() };
     save(list, active);
+    forget_remembered(id);
 }
 
 pub fn set_active(id: &str) {
-    if profiles().iter().any(|p| p.id == id) {
-        save(profiles(), id.to_string());
+    let Some(p) = profiles().into_iter().find(|p| p.id == id) else { return };
+    save(profiles(), id.to_string());
+    if let Some(owner) = p.owner {
+        if settings::read(|s| s.claude_active_by_owner.get(&owner).map(|v| v.as_str()) != Some(id)) {
+            let id = id.to_string();
+            settings::update(|s| {
+                s.claude_active_by_owner.insert(owner, id);
+            });
+        }
     }
 }
 
@@ -389,9 +482,12 @@ impl AccountStore {
         self.refresh().await;
     }
 
-    pub async fn logout_all(self: Rc<Self>) {
+    pub async fn logout_profiles(self: Rc<Self>, list: Vec<ClaudeProfile>) {
+        if list.is_empty() {
+            return;
+        }
         let Some(bin) = crate::rt::blocking(host::claude_binary).await else { return };
-        let cmds: Vec<HostCmd> = profiles().iter().map(|p| command(&bin, p.config_dir.as_deref()).args(["auth", "logout"])).collect();
+        let cmds: Vec<HostCmd> = list.iter().map(|p| command(&bin, p.config_dir.as_deref()).args(["auth", "logout"])).collect();
         crate::rt::blocking(move || {
             for cmd in cmds {
                 cmd.output();
@@ -399,5 +495,33 @@ impl AccountStore {
         })
         .await;
         self.refresh().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn profile(id: &str, owner: Option<&str>) -> ClaudeProfile {
+        ClaudeProfile { id: id.into(), label: id.into(), config_dir: if id == DEFAULT_ID { None } else { Some(format!("/p/{id}")) }, email: None, plan: None, owner: owner.map(|o| o.into()) }
+    }
+
+    #[test]
+    fn first_account_claims_unowned_profiles() {
+        let mut list = vec![profile(DEFAULT_ID, None), profile("work", None), profile("other", Some("b"))];
+        assert!(claim_in(&mut list, "a"));
+        assert_eq!(visible_in(list.clone(), Some("a")).len(), 2);
+        assert!(!claim_in(&mut list, "c"));
+        assert_eq!(visible_in(list.clone(), Some("b"))[0].id, "other");
+        assert_eq!(visible_in(list, None).len(), 3);
+    }
+
+    #[test]
+    fn preferred_profile_per_account() {
+        let list = vec![profile(DEFAULT_ID, Some("a")), profile("work", Some("a")), profile("b1", Some("b"))];
+        assert_eq!(preferred_in(&list, "a", Some("work"), DEFAULT_ID).unwrap().id, "work");
+        assert_eq!(preferred_in(&list, "a", Some("b1"), DEFAULT_ID).unwrap().id, DEFAULT_ID);
+        assert_eq!(preferred_in(&list, "b", None, DEFAULT_ID).unwrap().id, "b1");
+        assert!(preferred_in(&list, "z", None, DEFAULT_ID).is_none());
     }
 }

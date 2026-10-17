@@ -17,6 +17,8 @@ pub struct ClaudeProfile {
     pub email: Option<String>,
     #[serde(default)]
     pub plan: Option<String>,
+    #[serde(default)]
+    pub owner: Option<String>,
 }
 
 impl ClaudeProfile {
@@ -63,6 +65,7 @@ pub struct Settings {
     pub claude_launch_mode: String,
     pub claude_profiles: Vec<ClaudeProfile>,
     pub claude_active_profile: String,
+    pub claude_active_by_owner: HashMap<String, String>,
     pub local_repo_paths: HashMap<String, String>,
     pub run_in_background: bool,
     pub notify_review_requests: bool,
@@ -70,7 +73,6 @@ pub struct Settings {
     pub last_account: Option<LastAccount>,
     pub git_accounts: Vec<GitAccount>,
     pub git_active_account: Option<String>,
-    pub git_last_used: Option<String>,
     pub window_width: i32,
     pub window_height: i32,
     pub window_maximized: bool,
@@ -99,6 +101,7 @@ impl Default for Settings {
             claude_launch_mode: "default".into(),
             claude_profiles: Vec::new(),
             claude_active_profile: "default".into(),
+            claude_active_by_owner: HashMap::new(),
             local_repo_paths: HashMap::new(),
             run_in_background: false,
             notify_review_requests: true,
@@ -106,7 +109,6 @@ impl Default for Settings {
             last_account: None,
             git_accounts: Vec::new(),
             git_active_account: None,
-            git_last_used: None,
             window_width: 1380,
             window_height: 860,
             window_maximized: false,

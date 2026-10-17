@@ -7,10 +7,16 @@ pub fn confirm_switch(account: GitAccount) {
     if app::account().is_some_and(|a| a.id == account.id) {
         return;
     }
-    dialogs::confirm(&format!("Switch to {}?", account.subtitle()), Some(app::CLAUDE_SIGN_OUT_NOTE), "Switch and Sign Out of Claude Code", true, move || {
-        let id = account.id.clone();
+    let id = account.id.clone();
+    let run = move || {
+        let id = id.clone();
         crate::rt::spawn_local(async move { app::get().switch_account(id).await });
-    });
+    };
+    if app::claude_running() {
+        dialogs::confirm(&format!("Switch to {}?", account.subtitle()), Some(app::CLAUDE_SWITCH_NOTE), "Switch", false, run);
+    } else {
+        run();
+    }
 }
 
 pub fn confirm_sign_out() {

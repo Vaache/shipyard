@@ -266,6 +266,21 @@ fn card() -> gtk::Box {
 
 type Refill = Rc<RefCell<Option<Rc<dyn Fn()>>>>;
 
+const SIGN_IN_AGAIN: &str = "Sign in again";
+
+fn prefill(a: &git_accounts::GitAccount) {
+    let Some(l) = CURRENT.with(|c| c.borrow().upgrade()) else { return };
+    l.select(a.provider);
+    if a.provider.host_editable() {
+        l.host.set_text(&a.host);
+    }
+    if let Some(email) = &a.email {
+        l.email.set_text(email);
+    }
+    l.show_error(Some(&format!("Sign in again to {} as @{}.", a.host, a.login)));
+    l.token.grab_focus();
+}
+
 fn continue_with(a: &git_accounts::GitAccount, refill: std::rc::Weak<RefCell<Option<Rc<dyn Fn()>>>>, on_done: Option<Rc<dyn Fn()>>) {
     let id = a.id.clone();
     let run = move || {
@@ -283,8 +298,9 @@ fn continue_with(a: &git_accounts::GitAccount, refill: std::rc::Weak<RefCell<Opt
             }
         });
     };
-    if git_accounts::last_used().is_some_and(|last| last != a.identity()) {
-        super::dialogs::confirm(&format!("Switch to {}?", a.subtitle()), Some(app::CLAUDE_SIGN_OUT_NOTE), "Switch and Sign Out of Claude Code", true, run);
+    let other = app::account().is_some_and(|current| current.id != a.id);
+    if other && app::claude_running() {
+        super::dialogs::confirm(&format!("Switch to {}?", a.subtitle()), Some(app::CLAUDE_SWITCH_NOTE), "Switch", false, run);
     } else {
         run();
     }
@@ -315,9 +331,24 @@ fn saved_accounts(on_done: Option<Rc<dyn Fn()>>) -> gtk::Box {
             row.append(&texts);
             let go = button("Continue");
             go.set_valign(gtk::Align::Center);
+            let weak_go = go.downgrade();
+            let probe = a.clone();
+            rt::spawn_local(async move {
+                if !git_accounts::has_credential(&probe).await {
+                    if let Some(g) = weak_go.upgrade() {
+                        g.set_label(SIGN_IN_AGAIN);
+                    }
+                }
+            });
             let filler = filler.clone();
             let done = on_done.clone();
-            go.connect_clicked(move |_| continue_with(&a, filler.clone(), done.clone()));
+            go.connect_clicked(move |b| {
+                if b.label().as_deref() == Some(SIGN_IN_AGAIN) {
+                    prefill(&a);
+                } else {
+                    continue_with(&a, filler.clone(), done.clone());
+                }
+            });
             row.append(&go);
             target.append(&row);
         }
@@ -429,13 +460,6 @@ pub fn form(embedded: bool, on_done: Option<Rc<dyn Fn()>>) -> gtk::Box {
     expander.set_child(Some(&inner));
     device_card.append(&expander);
     column.append(&device_card);
-
-    if git_accounts::last_used().is_some() {
-        let note = hbox(8);
-        note.append(&colored_icon("sy-attention-symbolic", 14, "muted"));
-        note.append(&wrap_label(&format!("Signing in with another account switches to it. {}", app::CLAUDE_SIGN_OUT_NOTE), &["sy-muted", "sy-small"]));
-        column.append(&note);
-    }
 
     let busy = spinner(16);
     busy.set_visible(false);

@@ -292,7 +292,13 @@ fn github_links() -> bool {
     })
 }
 
-pub const CLAUDE_SIGN_OUT_NOTE: &str = "Claude Code is signed out too, for every Claude account on this computer and in the terminal. Open Claude sessions close; their history stays.";
+pub const CLAUDE_SWITCH_NOTE: &str = "Running Claude sessions stop. Their history stays, and this account's Claude Code sign-in is kept for when you switch back.";
+
+pub const CLAUDE_SIGN_OUT_NOTE: &str = "The Claude Code accounts linked to it are signed out. Other accounts and their Claude Code sign-ins are not affected.";
+
+pub fn claude_running() -> bool {
+    try_get().is_some_and(|a| a.claude.running_count() > 0)
+}
 
 pub fn is_active() -> bool {
     try_get().and_then(|a| a.window.borrow().clone()).map(|w| w.is_active() && w.is_visible()).unwrap_or(false)
@@ -450,6 +456,18 @@ fn report_saved(saved: secret::Saved) {
     }
 }
 
+fn bind_claude(account: &GitAccount) {
+    use crate::claude::accounts as profiles;
+    if profiles::owned(&account.id).is_empty() && !profiles::claim_unowned(&account.id) {
+        let _ = profiles::add_owned(&format!("{} @{}", account.provider.short_title(), account.login), false, Some(account.id.clone()));
+    }
+    profiles::set_scope(Some(account.id.clone()));
+    if let Some(target) = profiles::preferred(&account.id).filter(|p| p.id != profiles::active_id()) {
+        ui::claude::auth_view::switch_profile(&target.id);
+    }
+    profiles::store().changed.emit(&());
+}
+
 fn forget_account(account: Option<&GitAccount>) {
     match account {
         Some(a) => {
@@ -593,7 +611,7 @@ impl App {
                 s.user = Some(user.clone());
             }
             if let Some(a) = &account {
-                git_accounts::mark_used(Some(a));
+                bind_claude(a);
             }
             self.set_phase(Phase::LoggedIn);
             self.start_polling();
@@ -606,6 +624,9 @@ impl App {
             Err(_) if cached.is_some() => {}
             Err(_) => {
                 self.drop_main_if_switching(account.as_ref());
+                if let Some(a) = &account {
+                    bind_claude(a);
+                }
                 {
                     let mut s = self.state.borrow_mut();
                     s.api = Some(api);
@@ -651,7 +672,7 @@ impl App {
         }
         if let Some(a) = &account {
             git_accounts::update(a);
-            git_accounts::mark_used(Some(a));
+            bind_claude(a);
         } else if !demo::is_on() {
             let last = settings::LastAccount { login: user.login.clone(), name: user.name.clone(), avatar_url: user.avatar_url.clone(), fingerprint: crate::list_cache::fingerprint(token) };
             if settings::read(|s| s.last_account.as_ref() != Some(&last)) {
@@ -686,7 +707,7 @@ impl App {
 
     fn enter_forge(self: &Rc<Self>, account: GitAccount, client: ForgeClient) {
         self.drop_main_if_switching(Some(&account));
-        git_accounts::mark_used(Some(&account));
+        bind_claude(&account);
         let supported = account.provider.supported_filters();
         {
             let mut s = self.state.borrow_mut();
@@ -724,7 +745,6 @@ impl App {
                     account.user_id = user.id;
                 }
                 git_accounts::update(&account);
-                git_accounts::mark_used(Some(&account));
                 {
                     let mut s = self.state.borrow_mut();
                     s.user = Some(account.user());
@@ -784,8 +804,7 @@ impl App {
         }
         let Some(target) = git_accounts::accounts().into_iter().find(|a| a.id == id) else { return };
         let Some(credential) = git_accounts::credential(&target).await else {
-            git_accounts::remove(&id);
-            toast_with(&format!("Sign-in for {} is missing. Add the account again.", target.subtitle()), "OK", || {});
+            toast_with(&format!("Sign-in for {} has expired. Sign in again to use this account.", target.subtitle()), "OK", || {});
             return;
         };
         self.leave_current(&target).await;
@@ -793,17 +812,28 @@ impl App {
     }
 
     async fn leave_current(self: &Rc<Self>, next: &GitAccount) {
-        if git_accounts::last_used().is_some_and(|last| last != next.identity()) {
-            self.sign_out_of_claude().await;
+        let current = self.state.borrow().account.as_ref().map(|a| a.id.clone());
+        if current.is_some_and(|id| id != next.id) {
+            self.claude.close_all_for_profile_switch();
         }
         git_accounts::set_active(&next.id);
     }
 
-    pub async fn sign_out_of_claude(self: &Rc<Self>) {
+    async fn unbind_claude(self: &Rc<Self>, account: &GitAccount) {
+        use crate::claude::accounts as profiles;
+        let owned = profiles::owned(&account.id);
         self.claude.close_all_for_profile_switch();
-        crate::claude::accounts::store().logout_all().await;
+        profiles::store().logout_profiles(owned.clone()).await;
+        for p in &owned {
+            if p.is_default() {
+                profiles::release(&p.id);
+            } else {
+                profiles::remove(&p.id);
+            }
+        }
+        profiles::set_scope(None);
+        profiles::store().changed.emit(&());
         self.claude.reload_projects().await;
-        toast("Signed out of Claude Code");
     }
 
     pub async fn refresh_token_from_gh(self: Rc<Self>) {
@@ -820,17 +850,19 @@ impl App {
 
     pub async fn sign_out(self: Rc<Self>) {
         let current = self.state.borrow().account.clone();
-        self.sign_out_of_claude().await;
+        if let Some(a) = &current {
+            self.unbind_claude(a).await;
+        }
         forget_account(current.as_ref());
-        git_accounts::mark_used(None);
         self.reset_session(true);
     }
 
     fn revoked(self: &Rc<Self>, target: Option<GitAccount>) {
-        forget_account(target.as_ref());
-        if let Some(t) = target.as_ref().filter(|t| !t.login.is_empty()) {
-            crate::list_cache::clear(&t.cache_key());
+        match &target {
+            Some(t) => git_accounts::forget_credential(t),
+            None => forget_account(None),
         }
+        crate::claude::accounts::set_scope(None);
         self.reset_session(false);
         let who = target.map(|t| t.subtitle()).unwrap_or_else(|| "this account".into());
         toast_with(&format!("Sign-in for {who} is no longer valid. Sign in again."), "OK", || {});

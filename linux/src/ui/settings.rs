@@ -116,7 +116,7 @@ fn account_group(dialog: &adw::PreferencesDialog) -> adw::PreferencesGroup {
 
 fn claude_group(dialog: &adw::PreferencesDialog) -> adw::PreferencesGroup {
     let g = group("Claude Code", "sy-sparkles-symbolic", "coral");
-    let profiles = accounts::profiles();
+    let profiles = accounts::visible();
     let active = accounts::active_id();
     let names: Vec<String> = profiles.iter().map(|p| format!("{}{}", p.label, p.email.as_ref().map(|e| format!(" — {e}")).unwrap_or_default())).collect();
     let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
