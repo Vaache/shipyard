@@ -10,6 +10,6 @@
     <BrandGitHubOwner>pullyard</BrandGitHubOwner>
     <BrandGitHubRepo>pullyard</BrandGitHubRepo>
     <BrandDonateUrl>https://checkout.dodopayments.com/buy/pdt_0NpmyolvMAwxrA4eQBgpO?quantity=1</BrandDonateUrl>
-    <BrandVersion>2.9.0</BrandVersion>
+    <BrandVersion>2.10.0</BrandVersion>
   </PropertyGroup>
 </Project>

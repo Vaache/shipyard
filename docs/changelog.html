@@ -138,11 +138,49 @@ footer a:hover{color:var(--text)}
 
 <main class="wrap">
 
+<article class="release" id="v2.10.0">
+  <div class="side">
+    <a class="ver" href="#v2.10.0">2.10.0 <span class="hash">#</span></a>
+    <time class="date" datetime="2026-10-17">October 17, 2026</time>
+    <span class="badge latest">Latest</span>
+    <div class="plats"><span class="plat">macOS</span><span class="plat">Windows</span><span class="plat">Linux</span></div>
+  </div>
+  <div class="body">
+    <h2>GitLab, Bitbucket and more accounts</h2>
+    <p class="lede">PullYard now signs in to GitLab, Bitbucket, Gitea and GitHub Enterprise next to GitHub. Keep several accounts, give each one its own Claude Code sign-in, and lock an account with a PIN if you share your computer.</p>
+    <div class="group g-new">
+      <h3><i></i>New</h3>
+      <ul>
+        <li data-os="all">Sign in to <b>GitHub Enterprise Server</b>, <b>GitLab</b> (gitlab.com or self-managed), <b>Bitbucket Cloud</b> and <b>Gitea / Forgejo</b>, including Codeberg. Use <code>gh</code> or <code>glab</code>, a personal access token, OAuth Device Flow (GitHub, GitHub Enterprise and GitLab), or your Atlassian email and an API token for Bitbucket.</li>
+        <li data-os="all">GitHub Enterprise works like github.com: every list, the diff viewer, reviews, checks and Projects.</li>
+        <li data-os="all">For GitLab, Bitbucket and Gitea: review requests, your merge or pull requests (also grouped by project), mentions, issues, repositories and the service's inbox (the GitLab To-Do List, Gitea notifications), wherever the service offers them. GitLab uses its own words: merge requests and <code>!12</code>. Reviews for these services still open in the browser.</li>
+        <li data-os="all">Keep several accounts and switch between them from the sidebar or Settings. Your GitHub account carries over without signing in again.</li>
+        <li data-os="all">Each account has its own Claude Code sign-in. The first account keeps the Claude Code you already use; an account you add starts with a separate profile you sign in to once. Switching keeps every sign-in, and PullYard only shows the active account's Claude Code profiles.</li>
+      </ul>
+    </div>
+    <div class="group g-security">
+      <h3><i></i>Safety</h3>
+      <ul>
+        <li data-os="all">An optional PIN (4 to 6 digits) per account, asked when PullYard starts with that account and when someone switches to it. Only a salted hash is stored, in the system keychain. After 5 wrong PINs PullYard pauses, and after 10 it blocks unlocking until the PIN is reset.</li>
+        <li data-os="mac"><span class="os">macOS</span>Unlock with Touch ID. It turns off for the account when the fingerprints on the Mac change, so a newly added finger can't open it. A forgotten PIN is reset with your Mac password.</li>
+        <li data-os="windows"><span class="os">Windows</span>Unlock with Windows Hello.</li>
+        <li data-os="all">Resetting a PIN, or signing out of an account, signs out only that account's Claude Code profiles.</li>
+      </ul>
+    </div>
+    <div class="group g-improved">
+      <h3><i></i>Improved</h3>
+      <ul>
+        <li data-os="all">PullYard checks for updates every time it starts, so <b>Update to …</b> no longer disappears after a restart. The update window still appears only once per version.</li>
+      </ul>
+    </div>
+    <p class="empty">No changes for this platform in this release.</p>
+  </div>
+</article>
+
 <article class="release" id="v2.9.0">
   <div class="side">
     <a class="ver" href="#v2.9.0">2.9.0 <span class="hash">#</span></a>
     <time class="date" datetime="2026-10-16">October 16, 2026</time>
-    <span class="badge latest">Latest</span>
     <div class="plats"><span class="plat">macOS</span><span class="plat">Windows</span><span class="plat">Linux</span></div>
   </div>
   <div class="body">
