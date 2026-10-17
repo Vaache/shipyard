@@ -27,7 +27,7 @@ struct FilesTab: View {
     }
 
     private var blameAction: ((DiffFile) -> Void)? {
-        guard let head = model.filesOid ?? model.pr?.headRefOid else { return nil }
+        guard model.features.blame, let head = model.filesOid ?? model.pr?.headRefOid else { return nil }
         let app = app
         let repo = model.ref.repo
         return { file in app.openCode(repo, ref: head, path: file.id, blame: true) }
@@ -41,8 +41,12 @@ struct FilesTab: View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 TextField("Filter files", text: $filter).textFieldStyle(.roundedBorder).controlSize(.small)
-                Text("\(model.viewedPaths.intersection(model.files.map(\.id)).count)/\(model.files.count)")
-                    .font(.caption.monospacedDigit()).foregroundStyle(Color.syMuted).help("Viewed")
+                if model.features.viewedFiles {
+                    Text("\(model.viewedPaths.intersection(model.files.map(\.id)).count)/\(model.files.count)")
+                        .font(.caption.monospacedDigit()).foregroundStyle(Color.syMuted).help("Viewed")
+                } else {
+                    Text("\(model.files.count)").font(.caption.monospacedDigit()).foregroundStyle(Color.syMuted).help("Files")
+                }
             }
             .padding(8)
             List(visibleFiles, selection: Binding(get: { model.scrollTarget }, set: { p in if let p { model.revealFile(p) } })) { f in
@@ -150,9 +154,11 @@ struct FileHeader: View {
             .textSelection(.enabled)
             DiffStat(additions: file.additions, deletions: file.deletions)
             Spacer()
-            Toggle("Viewed", isOn: Binding(get: { model.viewedPaths.contains(file.id) }, set: { _ in Task { await model.toggleViewed(file.id) } }))
-                .toggleStyle(.checkbox)
-                .controlSize(.small)
+            if model.features.viewedFiles {
+                Toggle("Viewed", isOn: Binding(get: { model.viewedPaths.contains(file.id) }, set: { _ in Task { await model.toggleViewed(file.id) } }))
+                    .toggleStyle(.checkbox)
+                    .controlSize(.small)
+            }
             Menu {
                 Button("Copy path") { copyToPasteboard(file.id) }
                 if file.status != "removed", let onBlame {

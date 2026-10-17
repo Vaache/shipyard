@@ -93,7 +93,10 @@ final class AppModel {
     var api: GitHubAPI?
     var forge: ForgeClient?
     var account: GitAccount?
-    var forgeSelection: SearchItem?
+    var forgeSelection: SearchItem? {
+        didSet { if oldValue?.id != forgeSelection?.id { detailPath = [] } }
+    }
+    private var forgeReview: PRBackend?
     var forgeCaps = ForgeCapabilities(pullFilters: [.reviewRequested, .mine])
     var showAddAccount = false
     var lockedAccount: GitAccount?
@@ -323,6 +326,7 @@ final class AppModel {
         }
         self.account = account
         self.forge = nil
+        forgeReview = nil
         self.api = api
         self.user = Demo.isOn ? Demo.user : user
         self.scopes = scopes
@@ -344,7 +348,10 @@ final class AppModel {
         bindClaude(to: account)
         self.account = account
         forge = client
+        forgeReview = client.reviewBackend()
         api = nil
+        prModels = [:]
+        prOrder = []
         user = account.user
         scopes = []
         ListCache.activate(account.cacheKey)
@@ -480,6 +487,7 @@ final class AppModel {
         ForgeListModel.resetCache()
         api = nil
         forge = nil
+        forgeReview = nil
         account = nil
         user = nil
         scopes = []
@@ -580,14 +588,23 @@ final class AppModel {
         }
     }
 
+    var forgeReviews: Bool { api == nil && forgeReview != nil }
+
     func prModel(_ ref: ItemRef) -> PRDetailModel? {
-        guard let api else { return nil }
+        let backend: PRBackend
+        if let api {
+            backend = GitHubPRBackend(api: api, provider: account?.provider ?? .github)
+        } else if let forgeReview {
+            backend = forgeReview
+        } else {
+            return nil
+        }
         if let m = prModels[ref] {
             prOrder.removeAll { $0 == ref }
             prOrder.append(ref)
             return m
         }
-        let m = PRDetailModel(ref: ref, api: api)
+        let m = PRDetailModel(ref: ref, backend: backend)
         prModels[ref] = m
         prOrder.append(ref)
         if prOrder.count > 15 {
@@ -595,6 +612,12 @@ final class AppModel {
             prModels[old] = nil
         }
         return m
+    }
+
+    func commitDetail(_ repo: RepoRef, sha: String) async throws -> CommitDetailREST? {
+        if let api { return try await api.commit(repo, sha: sha) }
+        if let lab = forge as? GitLabClient { return try await lab.commit(repo.full, sha: sha) }
+        return nil
     }
 
     var frontItem: ItemRef? {

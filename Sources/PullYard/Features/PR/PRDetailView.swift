@@ -34,7 +34,7 @@ struct PRDetailView: View {
 }
 
 enum PRConfirm: Identifiable {
-    case approve, close, deleteBranch, disableAutoMerge, rerunFailed
+    case approve, revokeApproval, close, deleteBranch, disableAutoMerge, rerunFailed
     var id: Int { hashValue }
 }
 
@@ -53,13 +53,17 @@ struct PRDetailContent: View {
     var body: some View {
         VStack(spacing: 0) {
             PRHeaderView(model: model, pr: pr, onMerge: { showMerge = true })
-            ReReviewBanner(model: model, pr: pr) { showReviewers = true }
-            ClaudeFixBanner(pr: pr) { showFix = true }
-            CIFailureBanner(model: model, pr: pr, onFix: { ciFix = CIFixRequest() }, onRerun: { confirm = .rerunFailed })
+            if model.features.requestReviewers {
+                ReReviewBanner(model: model, pr: pr) { showReviewers = true }
+            }
+            if model.features.claude {
+                ClaudeFixBanner(pr: pr) { showFix = true }
+                CIFailureBanner(model: model, pr: pr, onFix: { ciFix = CIFixRequest() }, onRerun: { confirm = .rerunFailed })
+            }
             TabStrip(items: [
                 TabItem(id: PRTab.conversation, title: "Conversation", icon: "bubble.left.and.bubble.right", badge: commentsBadge),
                 TabItem(id: PRTab.commits, title: "Commits", icon: "point.3.connected.trianglepath.dotted", badge: "\(pr.allCommits.totalCount ?? pr.allCommits.nodes.count)"),
-                TabItem(id: PRTab.checks, title: "Checks", icon: "checklist", badge: checksSummary, badgeColor: checksColor),
+                TabItem(id: PRTab.checks, title: model.features.checksTitle, icon: "checklist", badge: checksSummary, badgeColor: checksColor),
                 TabItem(id: PRTab.files, title: "Files changed", icon: "doc.text", badge: "\(pr.changedFiles)")
             ], selection: $model.tab, shortcuts: true)
             .padding(.top, 6)
@@ -80,7 +84,7 @@ struct PRDetailContent: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationTitle(pr.title)
-        .navigationSubtitle("\(model.ref.repo.full) #\(pr.number)")
+        .navigationSubtitle("\(model.ref.repo.full) \(model.provider.numberPrefix)\(pr.number)")
         .task(id: pr.url) { app.noteCanonical(model.ref, url: pr.url) }
         .toolbar { toolbar }
         .sheet(isPresented: $showReview) { ReviewSheet(model: model, pr: pr) }
@@ -97,7 +101,7 @@ struct PRDetailContent: View {
             Text(model.actionError ?? "")
         }
         .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), presenting: confirm) { c in
-            Button(confirmButton(c), role: c == .approve || c == .rerunFailed ? nil : .destructive) { perform(c) }
+            Button(confirmButton(c), role: c == .approve || c == .rerunFailed || c == .revokeApproval ? nil : .destructive) { perform(c) }
             Button("Cancel", role: .cancel) {}
         }
     }
@@ -136,8 +140,9 @@ struct PRDetailContent: View {
 
     private var confirmTitle: String {
         switch confirm {
-        case .approve: return "Approve this pull request?"
-        case .close: return "Close pull request without merging?"
+        case .approve: return "Approve this \(model.provider.requestTitle)?"
+        case .revokeApproval: return "Revoke your approval?"
+        case .close: return "Close \(model.provider.requestTitle) without merging?"
         case .deleteBranch: return "Delete branch \(pr.headRefName)?"
         case .disableAutoMerge: return "Disable auto-merge?"
         case .rerunFailed:
@@ -150,7 +155,8 @@ struct PRDetailContent: View {
     private func confirmButton(_ c: PRConfirm) -> String {
         switch c {
         case .approve: return "Approve"
-        case .close: return "Close pull request"
+        case .revokeApproval: return "Revoke approval"
+        case .close: return "Close \(model.provider.requestTitle)"
         case .deleteBranch: return "Delete branch"
         case .disableAutoMerge: return "Disable"
         case .rerunFailed: return "Re-run failed jobs"
@@ -161,9 +167,10 @@ struct PRDetailContent: View {
         Task {
             switch c {
             case .approve: _ = await model.submitReview(event: "APPROVE", body: "")
-            case .close: await model.simple(Q.closePR)
+            case .revokeApproval: await model.revokeApproval()
+            case .close: await model.simple(.close)
             case .deleteBranch: await model.deleteBranch()
-            case .disableAutoMerge: await model.simple(Q.disableAutoMerge)
+            case .disableAutoMerge: await model.simple(.disableAutoMerge)
             case .rerunFailed: await model.rerunFailed()
             }
         }
@@ -185,8 +192,11 @@ struct PRDetailContent: View {
             if pr.isOpen {
                 Menu {
                     Button("Write review…") { showReview = true }
-                    if !pr.viewerDidAuthor {
+                    if pr.viewerCanApprove ?? !pr.viewerDidAuthor, pr.viewerApproved != true {
                         Button("Approve") { confirm = .approve }
+                    }
+                    if model.features.revokeApproval, pr.viewerApproved == true {
+                        Button("Revoke approval") { confirm = .revokeApproval }
                     }
                 } label: {
                     Label(model.pending.isEmpty ? "Review" : "Review (\(model.pending.count))", systemImage: "checkmark.bubble")
@@ -195,15 +205,17 @@ struct PRDetailContent: View {
                 }
                 .help("Submit review")
             }
-            if pr.isOpen {
+            if pr.isOpen, model.features.requestReviewers {
                 Button { showReviewers = true } label: { Label("Request review", systemImage: "person.crop.circle.badge.plus") }
                     .help("Request or re-request review")
             }
-            Button { showFix = true } label: { Label("Fix with Claude", systemImage: "sparkles") }
-                .help("Send review comments to a new Claude Code session")
+            if model.features.claude {
+                Button { showFix = true } label: { Label("Fix with Claude", systemImage: "sparkles") }
+                    .help("Send review comments to a new Claude Code session")
+            }
             if canMerge {
                 Button { showMerge = true } label: { Label("Merge", systemImage: "arrow.triangle.merge") }
-                    .help("Merge pull request")
+                    .help("Merge \(model.provider.requestTitle)")
             }
             Menu {
                 moreMenu
@@ -211,46 +223,52 @@ struct PRDetailContent: View {
                 Label("More", systemImage: "ellipsis.circle")
             }
             Button { openInBrowser(pr.url) } label: { Label("Open in browser", systemImage: "safari") }
-                .help("Open on github.com")
+                .help(model.provider == .github ? "Open on github.com" : "Open on \(model.features.serviceTitle)")
         }
     }
 
     @ViewBuilder
     private var moreMenu: some View {
         Button("Copy link") { copyToPasteboard(pr.url) }
-        Button("Copy short link") { app.copyShortLink(ShortLink.ref(url: pr.url) ?? model.ref) }
-        Button("Copy “gh pr checkout \(pr.number)”") { copyToPasteboard("gh pr checkout \(pr.number) -R \(model.ref.repo.full)") }
+        if model.provider.isGitHub {
+            Button("Copy short link") { app.copyShortLink(ShortLink.ref(url: pr.url) ?? model.ref) }
+            Button("Copy “gh pr checkout \(pr.number)”") { copyToPasteboard("gh pr checkout \(pr.number) -R \(model.ref.repo.full)") }
+        } else if model.provider == .gitlab {
+            Button("Copy “glab mr checkout \(pr.number)”") { copyToPasteboard("glab mr checkout \(pr.number) -R \(model.ref.repo.full)") }
+        }
         Button("Copy branch name") { copyToPasteboard(pr.headRefName) }
         Divider()
-        if pr.viewerCanUpdate {
+        if pr.viewerCanUpdate, model.features.editing {
             Button("Edit title and description…") { showEdit = true }
         }
         if pr.isOpen {
-            Button("Request review…") { showReviewers = true }
-            if pr.viewerCanUpdate {
+            if model.features.requestReviewers {
+                Button("Request review…") { showReviewers = true }
+            }
+            if pr.viewerCanUpdate, model.features.draftToggle {
                 if pr.isDraft {
-                    Button("Ready for review") { Task { await model.simple(Q.readyForReview) } }
+                    Button(model.provider == .gitlab ? "Mark as ready" : "Ready for review") { Task { await model.simple(.readyForReview) } }
                 } else {
-                    Button("Convert to draft") { Task { await model.simple(Q.convertToDraft) } }
+                    Button(model.provider == .gitlab ? "Mark as draft" : "Convert to draft") { Task { await model.simple(.convertToDraft) } }
                 }
             }
-            if MergeConflicts.applies(pr) {
+            if model.features.claude, model.features.localConflicts, MergeConflicts.applies(pr) {
                 Button("Resolve conflicts with Claude Code…") { model.showResolveConflicts = true }
             }
-            if pr.mergeStateStatus == "BEHIND" || pr.mergeStateStatus == "BLOCKED" || pr.mergeStateStatus == "UNSTABLE" {
-                Button("Update branch from \(pr.baseRefName)") { Task { await model.simple(Q.updateBranch) } }
+            if model.features.updateBranch, model.provider == .gitlab ? pr.mergeStateStatus == "BEHIND" : pr.mergeStateStatus == "BEHIND" || pr.mergeStateStatus == "BLOCKED" || pr.mergeStateStatus == "UNSTABLE" {
+                Button(model.provider == .gitlab ? "Rebase onto \(pr.baseRefName)" : "Update branch from \(pr.baseRefName)") { Task { await model.simple(.updateBranch) } }
             }
             if pr.autoMergeRequest != nil {
                 Button("Disable auto-merge") { confirm = .disableAutoMerge }
             }
             Divider()
             if pr.viewerCanUpdate {
-                Button("Close pull request…") { confirm = .close }
+                Button("Close \(model.provider.requestTitle)…") { confirm = .close }
             }
         } else if !pr.merged, pr.viewerCanUpdate {
-            Button("Reopen pull request") { Task { await model.simple(Q.reopenPR) } }
+            Button("Reopen \(model.provider.requestTitle)") { Task { await model.simple(.reopen) } }
         }
-        if !pr.isOpen, pr.headRef != nil, model.canWrite {
+        if model.features.deleteBranch, !pr.isOpen, pr.headRef != nil, model.canWrite {
             Button("Delete branch \(pr.headRefName)…") { confirm = .deleteBranch }
         }
     }
@@ -265,8 +283,10 @@ struct PRHeaderView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(pr.title).font(.title2.weight(.bold)).textSelection(.enabled)
-                Text("#\(pr.number)").font(.title2).foregroundStyle(Color.syDim)
-                ShortLinkButton(ref: ShortLink.ref(url: pr.url) ?? model.ref)
+                Text("\(model.provider.numberPrefix)\(pr.number)").font(.title2).foregroundStyle(Color.syDim)
+                if model.provider.isGitHub {
+                    ShortLinkButton(ref: ShortLink.ref(url: pr.url) ?? model.ref)
+                }
             }
             HStack(spacing: 8) {
                 StateBadge(state: pr.visualState)
@@ -275,7 +295,9 @@ struct PRHeaderView: View {
                 BranchChip(name: pr.baseRefName)
                 Image(systemName: "arrow.left").font(.caption).foregroundStyle(Color.syDim)
                 BranchChip(name: pr.headRefName, color: .syViolet)
-                DiffStat(additions: pr.additions, deletions: pr.deletions)
+                if let stat = model.diffStat {
+                    DiffStat(additions: stat.additions, deletions: stat.deletions)
+                }
                 Spacer(minLength: 0)
                 Text(Fmt.rel(pr.createdAt)).foregroundStyle(Color.syMuted).help(Fmt.full.string(from: pr.createdAt))
             }
@@ -457,7 +479,7 @@ struct MergeStatusBar: View {
                 }
                 checksBadge
                 Spacer()
-                if MergeConflicts.applies(pr) {
+                if model.features.localConflicts, MergeConflicts.applies(pr) {
                     Button(conflictsTitle) {
                         model.tab = .conversation
                         model.scrollToBottomToken += 1
@@ -465,8 +487,8 @@ struct MergeStatusBar: View {
                     .controlSize(.small)
                     .help("Show the conflicting files at the end of the conversation")
                 }
-                if pr.mergeStateStatus == "BEHIND", model.canWrite || pr.viewerCanUpdate {
-                    Button("Update branch") { Task { await model.simple(Q.updateBranch) } }.controlSize(.small)
+                if model.features.updateBranch, pr.mergeStateStatus == "BEHIND", model.canWrite || pr.viewerCanUpdate {
+                    Button(model.features.updateBranchTitle) { Task { await model.simple(.updateBranch) } }.controlSize(.small)
                 }
                 if model.canWrite, !pr.isDraft {
                     Button("Merge…", action: onMerge)
@@ -499,7 +521,7 @@ struct MergeStatusBar: View {
                 .font(.caption)
             }
             .buttonStyle(.plain)
-            .help("Checks")
+            .help(model.features.checksTitle)
         }
     }
 
@@ -521,6 +543,10 @@ struct MergeStatusBar: View {
         switch pr.mergeStateStatus {
         case "BEHIND": return ("arrow.down.circle", .ghYellow, "Branch is behind \(pr.baseRefName)", false)
         case "BLOCKED":
+            if let blocker = pr.mergeBlocker {
+                let pipeline = blocker.hasPrefix("Pipeline")
+                return (pipeline && failedChecks == 0 ? "clock" : "lock.circle", .ghYellow, pipeline && failedChecks > 0 ? failedChecksText : blocker, false)
+            }
             switch pr.reviewDecision {
             case "CHANGES_REQUESTED": return ("plusminus.circle.fill", .ghRed, "Changes requested", false)
             case "REVIEW_REQUIRED": return ("eye.circle", .ghYellow, "Review required", false)
@@ -651,9 +677,9 @@ struct ChecksTab: View {
         let failedRuns = Set(checks.filter { $0.outcome == .failure }.compactMap(\.runId))
         List {
             if checks.isEmpty {
-                Text("No checks for the latest commit").foregroundStyle(Color.syMuted)
+                Text(model.provider == .gitlab ? "No pipeline for the latest commit" : "No checks for the latest commit").foregroundStyle(Color.syMuted)
             }
-            if !failedRuns.isEmpty, model.canWrite {
+            if model.features.rerunChecks, !failedRuns.isEmpty, model.canWrite {
                 Button(action: onRerun) {
                     Label("Re-run failed jobs (\(plural(failedRuns.count, "workflow", "workflows")))", systemImage: "arrow.clockwise")
                 }
@@ -667,12 +693,12 @@ struct ChecksTab: View {
                         Text(subtitle(c)).font(.caption).foregroundStyle(Color.syMuted).lineLimit(1)
                     }
                     Spacer()
-                    if CIFailureCollector.isFixable(c), pr.isOpen {
+                    if model.features.claude, CIFailureCollector.isFixable(c), pr.isOpen {
                         Button("Fix with Claude Code") { onFix(CIFixRequest(focus: c.id)) }
                             .controlSize(.small)
                             .tint(Color.syCoral)
                     }
-                    if c.isActionsJob, c.outcome != .pending, c.outcome != .skipped {
+                    if model.features.jobLogs, c.isActionsJob, c.outcome != .pending, c.outcome != .skipped {
                         Button("Log") { logTarget = c }.controlSize(.small)
                     }
                     if let link = c.link {
@@ -691,7 +717,9 @@ struct ChecksTab: View {
             fixAfterLog = nil
             onFix(request)
         }) { c in
-            JobLogSheet(api: model.api, repo: model.ref.repo, check: c, onFix: CIFailureCollector.isFixable(c) && pr.isOpen ? { log in fixAfterLog = CIFixRequest(focus: c.id, log: log); logTarget = nil } : nil)
+            if let api = model.api {
+                JobLogSheet(api: api, repo: model.ref.repo, check: c, onFix: CIFailureCollector.isFixable(c) && pr.isOpen ? { log in fixAfterLog = CIFixRequest(focus: c.id, log: log); logTarget = nil } : nil)
+            }
         }
     }
 
