@@ -1,3 +1,5 @@
+use adw::prelude::*;
+
 use super::dialogs;
 use super::menu::Menu;
 use crate::app;
