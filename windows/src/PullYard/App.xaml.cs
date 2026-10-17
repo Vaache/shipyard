@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using PullYard.Core;
 using PullYard.Core.Api;
+using PullYard.Core.Auth;
 using PullYard.Core.Util;
 using PullYard.Services;
 using PullYard.ViewModels;
@@ -131,8 +132,11 @@ public partial class App : Application
         }
         else
         {
+            var forge = m.Forge is not null;
+            var prefix = m.Provider.NumberPrefix();
             void AddSection(string title, int count, List<SearchItem> list, PRFilter filter)
             {
+                if (forge && !m.Provider.Supports(filter)) return;
                 items.Add(new() { Text = $"{title.ToUpperInvariant()}  ({count})", Action = () => { m.Section = Section.Prs(filter); ShowMainWindow(); } });
                 if (list.Count == 0) items.Add(new() { Text = "    " + L.T("Common_NothingHere", "Nothing here"), Disabled = true });
                 foreach (var item in list.Take(10))
@@ -146,9 +150,22 @@ public partial class App : Application
                     };
                     var title2 = item.Title.Length > 60 ? item.Title[..60] + "…" : item.Title;
                     var route = item.Route;
-                    items.Add(new() { Text = $"    {title2}   {item.Repository.NameWithOwner}#{item.Number}{ci}", Action = () => { ShowMainWindow(); m.Select(route); } });
+                    var picked = item;
+                    items.Add(new() { Text = $"    {title2}   {item.Repository.NameWithOwner}{prefix}{item.Number}{ci}", Action = () =>
+                    {
+                        ShowMainWindow();
+                        if (forge)
+                        {
+                            m.Section = Section.Prs(filter);
+                            m.ForgeSelection = picked;
+                        }
+                        else
+                        {
+                            m.Select(route);
+                        }
+                    } });
                 }
-                if (list.Count > 0)
+                if (list.Count > 0 && !forge)
                 {
                     var links = list.Take(10).Select(i => ShortLink.Of(i.Repository.NameWithOwner, i.Number)).Select(link => new TrayMenuItem { Text = link, Action = () => Views.ShellView.CopyShortLink(link) }).ToList();
                     items.Add(new() { Text = "    " + L.T("Menu_CopyShortLink", "Copy Short Link"), Children = links });
@@ -156,9 +173,12 @@ public partial class App : Application
                 items.Add(new() { Separator = true });
             }
             AddSection(L.T("Tray_ReviewRequests", "Review requests"), m.ReviewRequestCount, m.ReviewRequests, PRFilter.ReviewRequested);
-            AddSection(L.T("Tray_MyOpenPRs", "My open PRs"), m.MyPRCount, m.MyPRs, PRFilter.Mine);
-            var unread = m.UnreadCount >= 50 ? "50+" : m.UnreadCount.ToString();
-            items.Add(new() { Text = L.T("Section_Notifications", "Notifications") + (m.UnreadCount > 0 ? $"  ({unread})" : ""), Action = () => { m.Section = Section.Notifications; ShowMainWindow(); } });
+            AddSection(m.Provider.UsesMergeRequests() ? L.T("Tray_MyOpenMRs", "My open MRs") : L.T("Tray_MyOpenPRs", "My open PRs"), m.MyPRCount, m.MyPRs, PRFilter.Mine);
+            if (!forge)
+            {
+                var unread = m.UnreadCount >= 50 ? "50+" : m.UnreadCount.ToString();
+                items.Add(new() { Text = L.T("Section_Notifications", "Notifications") + (m.UnreadCount > 0 ? $"  ({unread})" : ""), Action = () => { m.Section = Section.Notifications; ShowMainWindow(); } });
+            }
             items.Add(new() { Text = L.T("Common_Refresh", "Refresh"), Action = () => m.RefreshBadges().Forget() });
         }
         items.Add(new() { Separator = true });

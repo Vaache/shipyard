@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using PullYard.Core.Api;
+using PullYard.Core.Forges;
 using PullYard.Core.Util;
 using PullYard.Controls;
 
@@ -189,6 +190,75 @@ public sealed partial class SearchListViewModel : ObservableObject
                 l.Add(item);
             }
             return order.Select(k => new RepoGroup(k, byRepo[k])).ToList();
+        }
+    }
+}
+
+public sealed partial class ForgeListViewModel : ObservableObject
+{
+    private static readonly Dictionary<string, (List<SearchItem> Items, DateTimeOffset Updated)> Cache = new();
+
+    [ObservableProperty] private List<SearchItem> items = new();
+    [ObservableProperty] private bool loading;
+    [ObservableProperty] private bool refreshing;
+    [ObservableProperty] private DateTimeOffset? lastUpdated;
+    [ObservableProperty] private string? error;
+
+    private string currentKey = "";
+    private int generation;
+
+    public RowAppearMode AppearMode { get; private set; }
+
+    public static void ClearCache() => Cache.Clear();
+
+    public async Task Load(IForgeClient? forge, string account, PRFilter filter, StateFilter state, bool silent = false)
+    {
+        if (forge is null) return;
+        var key = $"{account}|{filter}|{state}";
+        var switched = false;
+        if (key != currentKey)
+        {
+            switched = true;
+            currentKey = key;
+            Error = null;
+            AppearMode = RowAppearMode.Silent;
+            if (Cache.TryGetValue(key, out var hit))
+            {
+                Items = hit.Items;
+                LastUpdated = hit.Updated;
+            }
+            else
+            {
+                Items = new();
+                LastUpdated = null;
+            }
+        }
+        var gen = ++generation;
+        if (!silent || switched) Loading = true;
+        Refreshing = true;
+        try
+        {
+            var fresh = await forge.PullRequests(filter.Forge(), state.Forge());
+            if (gen != generation) return;
+            var updated = DateTimeOffset.Now;
+            Cache[key] = (fresh, updated);
+            AppearMode = Items.Count == 0 ? RowAppearMode.Cascade : RowAppearMode.Refresh;
+            Items = fresh;
+            LastUpdated = updated;
+            Error = null;
+        }
+        catch (Exception e)
+        {
+            if (gen != generation) return;
+            if (e is not OperationCanceledException) Error = e.Message;
+        }
+        finally
+        {
+            if (gen == generation)
+            {
+                Loading = false;
+                Refreshing = false;
+            }
         }
     }
 }

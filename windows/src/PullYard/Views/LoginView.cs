@@ -13,64 +13,166 @@ namespace PullYard.Views;
 
 public sealed class LoginView : Grid
 {
+    private const string ProviderKey = "loginProvider";
+
     private readonly AppViewModel app = AppViewModel.Shared;
+    private readonly bool embedded;
+    private readonly Action? onDone;
     private readonly ProgressRing busyRing = Ui.Spinner(18);
     private readonly InfoBar errorBar = new() { Severity = InfoBarSeverity.Error, IsClosable = true, IsOpen = false };
-    private readonly PasswordBox tokenBox = new() { PlaceholderText = "ghp_… or github_pat_…" };
-    private readonly TextBox clientIdBox = new() { PlaceholderText = L.T("Login_ClientId", "Client ID") };
+    private readonly StackPanel providerArea = Ui.V(18);
+    private readonly TextBox hostBox = new();
+    private readonly TextBox emailBox = new() { PlaceholderText = L.T("Login_BitbucketEmail", "Atlassian account email") };
+    private readonly PasswordBox tokenBox = new();
+    private readonly TextBox clientIdBox = new();
     private readonly StackPanel devicePanel = Ui.V(8);
+    private GitProvider provider;
     private CancellationTokenSource? deviceCts;
 
-    public LoginView()
+    public LoginView(bool embedded = false, Action? onDone = null)
     {
+        this.embedded = embedded;
+        this.onDone = onDone;
         busyRing.Visibility = Visibility.Collapsed;
         busyRing.HorizontalAlignment = HorizontalAlignment.Center;
-        var icon = new Image { Source = new BitmapImage(new Uri("ms-appx:///Assets/AppIcon-256.png")), Width = 104, Height = 104, HorizontalAlignment = HorizontalAlignment.Center };
-        var title = Ui.Text(AppInfo.DisplayName, 30, "text", FontWeights.Bold);
-        title.HorizontalAlignment = HorizontalAlignment.Center;
-        var subtitle = Ui.Text(L.T("Login_Subtitle", "Fast PR browsing without a browser"), 14, "muted");
-        subtitle.HorizontalAlignment = HorizontalAlignment.Center;
+        provider = Enum.TryParse<GitProvider>(Settings.Shared.GetString(ProviderKey), out var saved) ? saved : GitProvider.GitHub;
 
-        var stack = Ui.V(18, Ui.V(6, icon, title, subtitle));
+        var stack = Ui.V(18);
         stack.MaxWidth = 520;
-        stack.Padding = new Thickness(40);
-        stack.HorizontalAlignment = HorizontalAlignment.Center;
+        stack.Padding = new Thickness(embedded ? 4 : 40);
+        stack.HorizontalAlignment = embedded ? HorizontalAlignment.Stretch : HorizontalAlignment.Center;
 
-        if (GhCli.Binary is not null)
+        if (!embedded)
         {
-            var gh = Ui.Button(L.T("Login_SignInWithGh", "Sign in with gh"), () => RunLogin(async () => await app.Login(await GhCli.Token())), accent: true, glyph: "");
-            gh.HorizontalAlignment = HorizontalAlignment.Stretch;
-            stack.Children.Add(Card(L.T("Login_GhTitle", "GitHub CLI"), "", "sky",
-                Ui.Text(L.T("Login_GhBody", "Use the token you're signed in with in gh."), 13, "muted", wrap: true), gh));
+            var icon = new Image { Source = new BitmapImage(new Uri("ms-appx:///Assets/AppIcon-256.png")), Width = 104, Height = 104, HorizontalAlignment = HorizontalAlignment.Center };
+            var title = Ui.Text(AppInfo.DisplayName, 30, "text", FontWeights.Bold);
+            title.HorizontalAlignment = HorizontalAlignment.Center;
+            var subtitle = Ui.Text(L.T("Login_Subtitle", "Fast PR browsing without a browser"), 14, "muted");
+            subtitle.HorizontalAlignment = HorizontalAlignment.Center;
+            stack.Children.Add(Ui.V(6, icon, title, subtitle));
+            if (SavedAccounts() is { } accounts) stack.Children.Add(accounts);
         }
+
+        var picker = new SelectorBar { HorizontalAlignment = HorizontalAlignment.Center };
+        foreach (var p in GitProviders.All)
+        {
+            var item = new SelectorBarItem { Text = p.ShortTitle(), Tag = p };
+            Ui.Tip(item, p.Title());
+            picker.Items.Add(item);
+            if (p == provider) picker.SelectedItem = item;
+        }
+        picker.SelectionChanged += (s, _) =>
+        {
+            if (s.SelectedItem?.Tag is not GitProvider p || p == provider) return;
+            provider = p;
+            Settings.Shared.Set(ProviderKey, p.ToString());
+            RenderProvider();
+        };
+        stack.Children.Add(picker);
+        stack.Children.Add(providerArea);
+
+        if (app.Accounts.LastUsedIdentity is not null)
+        {
+            var text = embedded
+                ? L.T("Login_AddSwitches", "Adding an account switches to it.") + " " + AccountDialogs.ClaudeNote
+                : L.T("Login_DifferentAccountNote", "Signing in with a different account also signs out of Claude Code.");
+            var note = Ui.Columns((Ui.Glyph("", 13), Ui.Auto), (Ui.Text(text, 12, "muted", wrap: true), Ui.Star));
+            note.ColumnSpacing = 8;
+            stack.Children.Add(note);
+        }
+        stack.Children.Add(busyRing);
+        stack.Children.Add(errorBar);
 
         tokenBox.KeyDown += (_, e) =>
         {
             if (e.Key == Windows.System.VirtualKey.Enter) LoginWithToken();
         };
-        var signIn = Ui.Button(L.T("Login_SignIn", "Sign in"), LoginWithToken, accent: true);
-        var tokenRow = Ui.Columns((tokenBox, Ui.Star), (signIn, Ui.Auto));
-        var create = Ui.Link(L.T("Login_CreateToken", "Create a token on github.com"), () =>
-            LinkBrowser.Open($"https://github.com/settings/tokens/new?scopes=repo,read:org,read:project,project,notifications,workflow&description={Uri.EscapeDataString(AppInfo.DisplayName)}"));
-        stack.Children.Add(Card(L.T("Login_PatTitle", "Personal Access Token"), "", "amber",
-            Ui.Text(L.T("Login_PatBody", "Required scopes: repo, read:org, read:project, project, notifications, workflow."), 13, "muted", wrap: true), tokenRow, create));
-
-        clientIdBox.Text = Settings.Shared.GetString(Keys.OAuthClientId) ?? "";
-        clientIdBox.TextChanged += (_, _) => Settings.Shared.Set(Keys.OAuthClientId, clientIdBox.Text);
-        RenderDevice(null);
-        var expander = new Expander
-        {
-            Header = Ui.H(8, Ui.IconTile("", "indigo", 22), Ui.Text(L.T("Login_DeviceTitle", "Sign in via browser (OAuth Device Flow)"), 14, "text", FontWeights.SemiBold)),
-            Content = Ui.V(8, Ui.Text(L.T("Login_DeviceBody", "Requires the Client ID of your own OAuth App (Settings → Developer settings → OAuth Apps, enable “Enable Device Flow”)."), 13, "muted", wrap: true), clientIdBox, devicePanel),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Stretch
-        };
-        stack.Children.Add(expander);
-        stack.Children.Add(busyRing);
-        stack.Children.Add(errorBar);
+        clientIdBox.TextChanged += (_, _) => Settings.Shared.Set(ClientIdKey, clientIdBox.Text);
+        RenderProvider();
 
         Children.Add(new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         Unloaded += (_, _) => deviceCts?.Cancel();
+    }
+
+    private string ClientIdKey => provider == GitProvider.GitHub ? Keys.OAuthClientId : $"{Keys.OAuthClientId}.{provider}";
+
+    private string Host => provider.EffectiveHost(hostBox.Text);
+
+    private FrameworkElement? SavedAccounts()
+    {
+        var accounts = app.Accounts.All;
+        if (accounts.Count == 0) return null;
+        var rows = new List<UIElement>();
+        foreach (var a in accounts)
+        {
+            var id = a.Id;
+            var info = Ui.V(0, Ui.Text(a.Name ?? (a.Login.Length > 0 ? a.Login : a.Provider.Title()), 13, "text", FontWeights.Medium), Ui.Caption($"{a.Provider.Title()} · {a.Subtitle}"));
+            var go = Ui.Button(L.T("Login_Continue", "Continue"), () => RunLogin(() => app.SwitchAccount(id)));
+            var row = Ui.Columns((Ui.Avatar(a.AvatarUrl, 24), Ui.Auto), (info, Ui.Star), (go, Ui.Auto));
+            row.ColumnSpacing = 10;
+            rows.Add(row);
+        }
+        return Card(L.T("Login_YourAccounts", "Your accounts"), "", "green", rows.ToArray());
+    }
+
+    private void RenderProvider()
+    {
+        deviceCts?.Cancel();
+        ShowError(null);
+        providerArea.Children.Clear();
+        hostBox.Text = provider.DefaultHost();
+        hostBox.PlaceholderText = provider switch
+        {
+            GitProvider.GitHubEnterprise => "github.example.com",
+            GitProvider.GitLab => L.T("Login_GitLabHostPlaceholder", "gitlab.com or gitlab.example.com"),
+            GitProvider.Gitea => L.T("Login_GiteaHostPlaceholder", "codeberg.org or git.example.com"),
+            _ => provider.DefaultHost()
+        };
+        tokenBox.Password = "";
+        tokenBox.PlaceholderText = provider.TokenPlaceholder();
+        clientIdBox.PlaceholderText = provider == GitProvider.GitLab ? L.T("Login_ApplicationId", "Application ID") : L.T("Login_ClientId", "Client ID");
+        clientIdBox.Text = Settings.Shared.GetString(ClientIdKey) ?? "";
+
+        if (provider.HostEditable())
+            providerArea.Children.Add(Card(L.F("Login_ServerTitle", "{0} server", provider.Title()), "", "teal", hostBox));
+
+        var cli = provider switch
+        {
+            GitProvider.GitHub or GitProvider.GitHubEnterprise when GhCli.Binary is not null => (Title: L.T("Login_GhTitle", "GitHub CLI"), Body: L.T("Login_GhBody", "Use the token you're signed in with in gh."), Button: L.T("Login_SignInWithGh", "Sign in with gh")),
+            GitProvider.GitLab when GLabCli.Binary is not null => (Title: L.T("Login_GlabTitle", "GitLab CLI"), Body: L.T("Login_GlabBody", "Use the token you're signed in with in glab."), Button: L.T("Login_SignInWithGlab", "Sign in with glab")),
+            _ => default
+        };
+        if (cli.Title is not null)
+        {
+            var button = Ui.Button(cli.Button, SignInWithCli, accent: true, glyph: "");
+            button.HorizontalAlignment = HorizontalAlignment.Stretch;
+            providerArea.Children.Add(Card(cli.Title, "", "sky", Ui.Text(cli.Body, 13, "muted", wrap: true), button));
+        }
+
+        var signIn = Ui.Button(L.T("Login_SignIn", "Sign in"), LoginWithToken, accent: true);
+        var tokenRow = Ui.Columns((tokenBox, Ui.Star), (signIn, Ui.Auto));
+        tokenRow.ColumnSpacing = 8;
+        var tokenContent = new List<UIElement> { Ui.Text(provider.TokenHint(), 13, "muted", wrap: true) };
+        if (provider == GitProvider.Bitbucket) tokenContent.Add(emailBox);
+        tokenContent.Add(tokenRow);
+        tokenContent.Add(Ui.Link(provider == GitProvider.Bitbucket ? L.T("Login_CreateAtlassianToken", "Create an API token at id.atlassian.com") : L.F("Login_CreateTokenOn", "Create a token on {0}", provider == GitProvider.GitHub ? GitProviders.GitHubHost : L.T("Login_YourServer", "your server")), () =>
+        {
+            if (provider.TokenCreateUrl(Host) is { } url) LinkBrowser.Open(url);
+            else ShowError(L.T("Login_EnterServer", "Enter the server address"));
+        }));
+        providerArea.Children.Add(Card(provider.TokenTitle(), "", "amber", tokenContent.ToArray()));
+
+        if (provider.SupportsDeviceFlow())
+        {
+            RenderDevice(null);
+            providerArea.Children.Add(new Expander
+            {
+                Header = Ui.H(8, Ui.IconTile("", "indigo", 22), Ui.Text(L.T("Login_DeviceTitle", "Sign in via browser (OAuth Device Flow)"), 14, "text", FontWeights.SemiBold)),
+                Content = Ui.V(8, Ui.Text(provider.DeviceHelp(), 13, "muted", wrap: true), clientIdBox, devicePanel),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch
+            });
+        }
     }
 
     private static Border Card(string title, string glyph, string color, params UIElement[] content)
@@ -85,8 +187,7 @@ public sealed class LoginView : Grid
         devicePanel.Children.Clear();
         if (code is null)
         {
-            var get = Ui.Button(L.T("Login_GetCode", "Get code"), StartDevice);
-            devicePanel.Children.Add(get);
+            devicePanel.Children.Add(Ui.Button(L.T("Login_GetCode", "Get code"), StartDevice));
             return;
         }
         var codeText = Ui.Text(code.UserCode, 24, "text", FontWeights.Bold, mono: true, select: true);
@@ -96,7 +197,7 @@ public sealed class LoginView : Grid
             LinkBrowser.Open(code.VerificationUri);
         }, accent: true);
         devicePanel.Children.Add(Ui.H(12, Ui.Card(codeText, 8, "sunken", 6), copy, Ui.Spinner(16)));
-        devicePanel.Children.Add(Ui.Text(L.T("Login_DeviceHint", "Enter the code at github.com/login/device — you'll be signed in automatically."), 12, "muted", wrap: true));
+        devicePanel.Children.Add(Ui.Text(L.F("Login_DeviceHintAt", "Enter the code at {0} — you'll be signed in automatically.", code.VerificationUri), 12, "muted", wrap: true));
     }
 
     private void ShowError(string? message)
@@ -123,29 +224,73 @@ public sealed class LoginView : Grid
         }
     }
 
+    private async Task Finish(GitProvider p, string host, GitCredential credential, string? email)
+    {
+        await app.AddAccount(p, host, credential, email);
+        onDone?.Invoke();
+    }
+
+    private void SignInWithCli()
+    {
+        var p = provider;
+        var host = Host;
+        if (host.Length == 0)
+        {
+            ShowError(L.T("Login_EnterServer", "Enter the server address"));
+            return;
+        }
+        RunLogin(async () =>
+        {
+            var token = p == GitProvider.GitLab ? await GLabCli.Token(host) : await GhCli.Token(host);
+            await Finish(p, host, GitCredential.Of(token), null);
+        });
+    }
+
     private void LoginWithToken()
     {
-        var t = tokenBox.Password.Trim();
-        if (t.Length == 0) return;
-        RunLogin(() => app.Login(t));
+        var p = provider;
+        var host = Host;
+        var token = tokenBox.Password.Trim();
+        var email = emailBox.Text.Trim();
+        if (token.Length == 0) return;
+        if (host.Length == 0)
+        {
+            ShowError(L.T("Login_EnterServer", "Enter the server address"));
+            return;
+        }
+        if (p == GitProvider.Bitbucket && email.Length == 0)
+        {
+            ShowError(L.T("Login_EnterEmail", "Enter your Atlassian account email"));
+            return;
+        }
+        RunLogin(() => Finish(p, host, GitCredential.Of(token), p == GitProvider.Bitbucket ? email : null));
     }
 
     private async void StartDevice()
     {
         var id = clientIdBox.Text.Trim();
+        var p = provider;
+        var host = Host;
         if (id.Length == 0) return;
+        if (host.Length == 0)
+        {
+            ShowError(L.T("Login_EnterServer", "Enter the server address"));
+            return;
+        }
+        var endpoint = p == GitProvider.GitLab ? DeviceFlow.GitLab(host) : DeviceFlow.GitHub(host);
         ShowError(null);
         deviceCts?.Cancel();
         var cts = new CancellationTokenSource();
         deviceCts = cts;
         try
         {
-            var code = await DeviceFlow.Start(id, cts.Token);
+            var code = await DeviceFlow.Start(id, endpoint, cts.Token);
             RenderDevice(code);
             WindowInterop.Copy(code.UserCode);
             LinkBrowser.Open(code.VerificationUri);
-            var token = await DeviceFlow.Poll(id, code, cts.Token);
-            await app.Login(token);
+            var token = await DeviceFlow.Poll(id, code, endpoint, cts.Token);
+            var credential = p == GitProvider.GitLab ? token.Credential(id) : GitCredential.Of(token.AccessToken);
+            await Finish(p, host, credential, null);
         }
         catch (OperationCanceledException)
         {
@@ -154,6 +299,6 @@ public sealed class LoginView : Grid
         {
             ShowError(e.Message);
         }
-        RenderDevice(null);
+        if (ReferenceEquals(deviceCts, cts)) RenderDevice(null);
     }
 }

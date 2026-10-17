@@ -4,6 +4,20 @@
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Accounts_Add" xml:space="preserve"><value>Add Account…</value></data>
+  <data name="Accounts_AddTitle" xml:space="preserve"><value>Add account</value></data>
+  <data name="Accounts_ClaudeNote" xml:space="preserve"><value>Claude Code is signed out too, for every Claude account on this PC and in the terminal. Open Claude sessions close; their history stays.</value></data>
+  <data name="Accounts_ClaudeSignedOut" xml:space="preserve"><value>Signed out of Claude Code</value></data>
+  <data name="Accounts_Missing" xml:space="preserve"><value>Sign-in for {0} is missing. Add the account again</value></data>
+  <data name="Accounts_SignOut" xml:space="preserve"><value>Sign Out…</value></data>
+  <data name="Accounts_SignOutBody" xml:space="preserve"><value>The account is removed from {0}.</value></data>
+  <data name="Accounts_SignOutButton" xml:space="preserve"><value>Sign Out</value></data>
+  <data name="Accounts_SignOutTitle" xml:space="preserve"><value>Sign out of {0}?</value></data>
+  <data name="Accounts_Switch" xml:space="preserve"><value>Switch account</value></data>
+  <data name="Accounts_SwitchButton" xml:space="preserve"><value>Switch and Sign Out of Claude Code</value></data>
+  <data name="Accounts_SwitchTitle" xml:space="preserve"><value>Switch to {0}?</value></data>
+  <data name="Accounts_ThisAccount" xml:space="preserve"><value>this account</value></data>
+  <data name="Accounts_Title" xml:space="preserve"><value>Accounts</value></data>
   <data name="App_Tagline" xml:space="preserve"><value>Pull requests, without the browser</value></data>
   <data name="Board_All" xml:space="preserve"><value>All</value></data>
   <data name="Board_Draft" xml:space="preserve"><value>Draft</value></data>
@@ -244,6 +258,12 @@
   <data name="Fix_ReplyResolve" xml:space="preserve"><value>Reply &amp; resolve threads</value></data>
   <data name="Fix_Reset" xml:space="preserve"><value>Reset</value></data>
   <data name="Fix_Unresolved" xml:space="preserve"><value>Unresolved comments</value></data>
+  <data name="Forge_Into" xml:space="preserve"><value>into {0}</value></data>
+  <data name="Forge_LaterNote" xml:space="preserve"><value>Changed files, comments and review for {0} are coming in a later version. Open the {1} in the browser to review it.</value></data>
+  <data name="Forge_OpenedUpdated" xml:space="preserve"><value>opened {0} · updated {1}</value></data>
+  <data name="Forge_SearchPlaceholder" xml:space="preserve"><value>Filter: title, repository, author</value></data>
+  <data name="Forge_Select" xml:space="preserve"><value>Select a {0}</value></data>
+  <data name="Forge_Unavailable" xml:space="preserve"><value>Not available for {0} yet</value></data>
   <data name="Html_WebViewMissing" xml:space="preserve"><value>Couldn't start the HTML view: {0}. Install the Microsoft Edge WebView2 Runtime.</value></data>
   <data name="Inline_AddToReview" xml:space="preserve"><value>Add to review</value></data>
   <data name="Inline_Help" xml:space="preserve"><value>“Add to review” saves the comment as pending and submits it with the review</value></data>
@@ -270,25 +290,49 @@
   <data name="Item_StackedOn" xml:space="preserve"><value>stacked on {0}</value></data>
   <data name="Log_Copy" xml:space="preserve"><value>Copy</value></data>
   <data name="Log_ErrorsOnly" xml:space="preserve"><value>Errors only</value></data>
+  <data name="Login_AddSwitches" xml:space="preserve"><value>Adding an account switches to it.</value></data>
+  <data name="Login_ApiTokenTitle" xml:space="preserve"><value>API token</value></data>
+  <data name="Login_ApplicationId" xml:space="preserve"><value>Application ID</value></data>
+  <data name="Login_BitbucketEmail" xml:space="preserve"><value>Atlassian account email</value></data>
+  <data name="Login_BitbucketTokenBody" xml:space="preserve"><value>Use your Atlassian account email and an API token with Bitbucket read scopes for account, repositories and pull requests.</value></data>
   <data name="Login_ClientId" xml:space="preserve"><value>Client ID</value></data>
+  <data name="Login_Continue" xml:space="preserve"><value>Continue</value></data>
   <data name="Login_CopyAndOpen" xml:space="preserve"><value>Copy and open</value></data>
+  <data name="Login_CreateAtlassianToken" xml:space="preserve"><value>Create an API token at id.atlassian.com</value></data>
   <data name="Login_CreateToken" xml:space="preserve"><value>Create a token on github.com</value></data>
+  <data name="Login_CreateTokenOn" xml:space="preserve"><value>Create a token on {0}</value></data>
   <data name="Login_DeviceBody" xml:space="preserve"><value>Requires the Client ID of your own OAuth App (Settings → Developer settings → OAuth Apps, enable “Enable Device Flow”).</value></data>
   <data name="Login_DeviceHint" xml:space="preserve"><value>Enter the code at github.com/login/device — you'll be signed in automatically.</value></data>
+  <data name="Login_DeviceHintAt" xml:space="preserve"><value>Enter the code at {0} — you'll be signed in automatically.</value></data>
   <data name="Login_DeviceTitle" xml:space="preserve"><value>Sign in via browser (OAuth Device Flow)</value></data>
+  <data name="Login_DifferentAccountNote" xml:space="preserve"><value>Signing in with a different account also signs out of Claude Code.</value></data>
+  <data name="Login_EnterEmail" xml:space="preserve"><value>Enter your Atlassian account email</value></data>
+  <data name="Login_EnterServer" xml:space="preserve"><value>Enter the server address</value></data>
   <data name="Login_GetCode" xml:space="preserve"><value>Get code</value></data>
   <data name="Login_GhBody" xml:space="preserve"><value>Use the token you're signed in with in gh.</value></data>
   <data name="Login_GhTitle" xml:space="preserve"><value>GitHub CLI</value></data>
+  <data name="Login_GitLabDeviceBody" xml:space="preserve"><value>Requires GitLab 17.1 or later and the Application ID of your own OAuth application (User settings → Applications): not confidential, scope api, “Device authorization grant” enabled.</value></data>
+  <data name="Login_GitLabHostPlaceholder" xml:space="preserve"><value>gitlab.com or gitlab.example.com</value></data>
+  <data name="Login_GitLabTokenBody" xml:space="preserve"><value>Required scope: api (or read_api for read-only).</value></data>
+  <data name="Login_GiteaHostPlaceholder" xml:space="preserve"><value>codeberg.org or git.example.com</value></data>
+  <data name="Login_GiteaTokenBody" xml:space="preserve"><value>Required permissions: read for user, repository and issue.</value></data>
+  <data name="Login_GlabBody" xml:space="preserve"><value>Use the token you're signed in with in glab.</value></data>
+  <data name="Login_GlabTitle" xml:space="preserve"><value>GitLab CLI</value></data>
   <data name="Login_PatBody" xml:space="preserve"><value>Required scopes: repo, read:org, read:project, project, notifications, workflow.</value></data>
   <data name="Login_PatTitle" xml:space="preserve"><value>Personal Access Token</value></data>
+  <data name="Login_ServerTitle" xml:space="preserve"><value>{0} server</value></data>
   <data name="Login_SignIn" xml:space="preserve"><value>Sign in</value></data>
   <data name="Login_SignInWithGh" xml:space="preserve"><value>Sign in with gh</value></data>
+  <data name="Login_SignInWithGlab" xml:space="preserve"><value>Sign in with glab</value></data>
   <data name="Login_Subtitle" xml:space="preserve"><value>Fast PR browsing without a browser</value></data>
+  <data name="Login_YourAccounts" xml:space="preserve"><value>Your accounts</value></data>
+  <data name="Login_YourServer" xml:space="preserve"><value>your server</value></data>
   <data name="Menu_CheckForUpdates" xml:space="preserve"><value>Check for Updates…</value></data>
   <data name="Menu_CopyCheckout" xml:space="preserve"><value>Copy “gh pr checkout”</value></data>
   <data name="Menu_CopyLink" xml:space="preserve"><value>Copy Link</value></data>
   <data name="Menu_CopyShortLink" xml:space="preserve"><value>Copy Short Link</value></data>
   <data name="Menu_CopyShortLinkHint" xml:space="preserve"><value>Copy short link (Ctrl+Shift+C)</value></data>
+  <data name="Menu_CopyTargetBranch" xml:space="preserve"><value>Copy Target Branch</value></data>
   <data name="Menu_OpenInBrowser" xml:space="preserve"><value>Open in Browser</value></data>
   <data name="Merge_AutoEnabled" xml:space="preserve"><value>auto-merge enabled</value></data>
   <data name="Merge_Behind" xml:space="preserve"><value>Branch is behind {0}</value></data>
@@ -377,6 +421,11 @@
   <data name="Projects_RefreshToken" xml:space="preserve"><value>Refresh Token from gh</value></data>
   <data name="Projects_ScopeHelp" xml:space="preserve"><value>Run this in a terminal, then click “Refresh Token”:</value></data>
   <data name="Projects_ShowClosed" xml:space="preserve"><value>Show closed</value></data>
+  <data name="Provider_MR" xml:space="preserve"><value>MR</value></data>
+  <data name="Provider_MergeRequest" xml:space="preserve"><value>merge request</value></data>
+  <data name="Provider_MergeRequests" xml:space="preserve"><value>Merge requests</value></data>
+  <data name="Provider_PR" xml:space="preserve"><value>PR</value></data>
+  <data name="Provider_PullRequest" xml:space="preserve"><value>pull request</value></data>
   <data name="RateLimit_Hint" xml:space="preserve"><value>GitHub rate limit reached. Live polling is paused; manual refresh still works.</value></data>
   <data name="RateLimit_Paused" xml:space="preserve"><value>Rate limited — live updates resume at {0}</value></data>
   <data name="ReReview_Other" xml:space="preserve"><value>Other…</value></data>
@@ -453,6 +502,7 @@
   <data name="Settings_Refresh" xml:space="preserve"><value>Refresh</value></data>
   <data name="Settings_RefreshFromGh" xml:space="preserve"><value>Refresh token from gh</value></data>
   <data name="Settings_Scopes" xml:space="preserve"><value>Token scopes</value></data>
+  <data name="Settings_Service" xml:space="preserve"><value>Service</value></data>
   <data name="Settings_SignOut" xml:space="preserve"><value>Sign out</value></data>
   <data name="Settings_System" xml:space="preserve"><value>System</value></data>
   <data name="Settings_SystemDefault" xml:space="preserve"><value>System default</value></data>
@@ -469,7 +519,9 @@
   <data name="Terminal_Ended" xml:space="preserve"><value>Session ended</value></data>
   <data name="Terminal_Resume" xml:space="preserve"><value>Resume session</value></data>
   <data name="Terminal_Sleeping" xml:space="preserve"><value>Session is sleeping — memory freed</value></data>
+  <data name="Toast_CopiedLink" xml:space="preserve"><value>Copied link</value></data>
   <data name="Toast_CopiedShortLink" xml:space="preserve"><value>Copied {0}</value></data>
+  <data name="Tray_MyOpenMRs" xml:space="preserve"><value>My open MRs</value></data>
   <data name="Tray_MyOpenPRs" xml:space="preserve"><value>My open PRs</value></data>
   <data name="Tray_Open" xml:space="preserve"><value>Open {0}</value></data>
   <data name="Tray_Pizza" xml:space="preserve"><value>Buy Me a Pizza…</value></data>

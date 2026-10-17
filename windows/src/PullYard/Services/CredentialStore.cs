@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using PullYard.Core;
+using PullYard.Core.Auth;
 using PullYard.Core.Util;
 
 namespace PullYard.Services;
@@ -39,9 +40,9 @@ public static class CredentialStore
     [DllImport("advapi32.dll")]
     private static extern void CredFree(IntPtr buffer);
 
-    private static string Target => $"{AppInfo.DisplayName}:github-token";
+    private static string Target(string key) => $"{AppInfo.DisplayName}:{key}";
 
-    public static void Save(string token)
+    public static void Save(string token, string key = GitAccounts.DefaultCredentialKey)
     {
         var bytes = Encoding.Unicode.GetBytes(token);
         var blob = Marshal.AllocHGlobal(bytes.Length);
@@ -51,12 +52,12 @@ public static class CredentialStore
             var cred = new Credential
             {
                 Type = CredTypeGeneric,
-                TargetName = Target,
+                TargetName = Target(key),
                 CredentialBlobSize = (uint)bytes.Length,
                 CredentialBlob = blob,
                 Persist = CredPersistLocalMachine,
-                UserName = "github-token",
-                Comment = $"{AppInfo.DisplayName} GitHub token"
+                UserName = key,
+                Comment = $"{AppInfo.DisplayName} sign-in token"
             };
             if (!CredWrite(ref cred, 0))
                 throw new IOException($"Couldn't save the token to Windows Credential Manager (error {Marshal.GetLastWin32Error()}). You would be signed out on next launch.");
@@ -67,9 +68,9 @@ public static class CredentialStore
         }
     }
 
-    public static string? Load()
+    public static string? Load(string key = GitAccounts.DefaultCredentialKey)
     {
-        if (!CredRead(Target, CredTypeGeneric, 0, out var ptr)) return null;
+        if (!CredRead(Target(key), CredTypeGeneric, 0, out var ptr)) return null;
         try
         {
             var cred = Marshal.PtrToStructure<Credential>(ptr);
@@ -87,12 +88,21 @@ public static class CredentialStore
 
     private const int ErrorNotFound = 1168;
 
-    public static bool Delete()
+    public static bool Delete(string key = GitAccounts.DefaultCredentialKey)
     {
-        if (CredDelete(Target, CredTypeGeneric, 0)) return true;
+        if (CredDelete(Target(key), CredTypeGeneric, 0)) return true;
         var error = Marshal.GetLastWin32Error();
         if (error == ErrorNotFound) return true;
         ErrorLog.Write($"CredDelete failed with error {error}");
         return false;
     }
+}
+
+public sealed class CredentialVault : ICredentialVault
+{
+    public string? Load(string key) => CredentialStore.Load(key);
+
+    public void Save(string key, string value) => CredentialStore.Save(value, key);
+
+    public bool Delete(string key) => CredentialStore.Delete(key);
 }

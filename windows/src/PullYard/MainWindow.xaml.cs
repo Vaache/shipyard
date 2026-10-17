@@ -71,6 +71,7 @@ public sealed partial class MainWindow : Window
     {
         if (splashHold || model.Phase == Phase.Checking)
         {
+            if (!splashHold) shownPhase = null;
             if (Host.Content is not SplashView) Host.Content = new SplashView();
             return;
         }

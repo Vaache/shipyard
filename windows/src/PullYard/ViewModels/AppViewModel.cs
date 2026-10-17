@@ -4,6 +4,7 @@ using PullYard.Core;
 using PullYard.Core.Api;
 using PullYard.Core.Auth;
 using PullYard.Core.Claude;
+using PullYard.Core.Forges;
 using PullYard.Core.Util;
 using PullYard.Services;
 
@@ -30,9 +31,13 @@ public sealed partial class AppViewModel : ObservableObject
     [ObservableProperty] private DateTimeOffset? lastBadgeRefresh;
     [ObservableProperty] private Route? clipboardRoute;
     [ObservableProperty] private DateTimeOffset? rateLimitedUntil;
+    [ObservableProperty] private GitAccount? gitAccount;
+    [ObservableProperty] private IForgeClient? forge;
+    [ObservableProperty] private SearchItem? forgeSelection;
 
     public ClaudeWorkspace Claude { get; private set; } = null!;
     public UpdaterViewModel Updater { get; } = new();
+    public GitAccounts Accounts { get; } = new(Settings.Shared, new CredentialVault());
 
     public event Action? RefreshRequested;
     public event Action? LiveTick;
@@ -40,6 +45,8 @@ public sealed partial class AppViewModel : ObservableObject
     public event Action? OpenLinkRequested;
     public event Action? SettingsRequested;
     public event Action? ActivateRequested;
+    public event Action<string>? ToastRequested;
+    public event Action? AddAccountRequested;
 
     private DateTimeOffset lastLiveRefresh = DateTimeOffset.Now;
     private CancellationTokenSource? pollCts;
@@ -49,7 +56,6 @@ public sealed partial class AppViewModel : ObservableObject
     private bool viewsStale;
     private SynchronizationContext? context;
     private CancellationTokenSource? rateLimitCts;
-    private GitHubApi? loginAttempt;
     public bool IsActive { get; set; } = true;
     public Func<bool> IsShown { get; set; } = () => true;
 
@@ -69,6 +75,12 @@ public sealed partial class AppViewModel : ObservableObject
     partial void OnUserChanged(RestUser? value) => OnPropertyChanged(nameof(UserDisplayName));
 
     partial void OnScopesChanged(List<string> value) => OnPropertyChanged(nameof(HasProjectScope));
+
+    partial void OnGitAccountChanged(GitAccount? value) => OnPropertyChanged(nameof(Provider));
+
+    public GitProvider Provider => GitAccount?.Provider ?? GitProvider.GitHub;
+
+    public void RequestAddAccount() => AddAccountRequested?.Invoke();
 
     partial void OnApiChanged(GitHubApi? oldValue, GitHubApi? newValue)
     {
@@ -122,65 +134,112 @@ public sealed partial class AppViewModel : ObservableObject
     private async Task Restore()
     {
         var env = AppInfo.Env("TOKEN");
-        var token = env.Length > 0 ? env : CredentialStore.Load();
-        if (token is null)
+        if (env.Length > 0)
+        {
+            await ResumeGitHub(env, null);
+            return;
+        }
+        if (Accounts.Active is not { } account || Accounts.Credential(account) is not { } credential)
         {
             Phase = Phase.LoggedOut;
             return;
         }
-        GitHubApi? early = null;
-        if (!Demo.IsOn && await Task.Run(() => ListSnapshotStore.Shared.RememberedAccount(token)) is { } remembered)
+        await Resume(account, credential);
+    }
+
+    private async Task Resume(GitAccount account, GitCredential credential)
+    {
+        if (account.Provider.IsGitHub())
         {
-            early = new GitHubApi(token);
-            Account = remembered;
+            await ResumeGitHub(credential.Token, account);
+            return;
+        }
+        if (MakeForge(account, credential) is not { } client)
+        {
+            Phase = Phase.LoggedOut;
+            return;
+        }
+        EnterForge(account, client);
+        await VerifyForge(client);
+    }
+
+    private async Task ResumeGitHub(string token, GitAccount? account)
+    {
+        var host = account?.Host ?? GitProviders.GitHubHost;
+        var known = account is { Login.Length: > 0 } ? account : null;
+        var cached = known?.CacheKey;
+        if (cached is null && (account is null || account.Provider == GitProvider.GitHub)) cached = await Task.Run(() => ListSnapshotStore.Shared.RememberedAccount(token));
+        GitHubApi? early = null;
+        if (!Demo.IsOn && cached is not null)
+        {
+            early = new GitHubApi(token, host);
+            GitAccount = account;
+            Forge = null;
+            Account = cached;
+            if (known is not null) User = known.User;
             Api = early;
             Phase = Phase.LoggedIn;
             StartPolling();
+            if (account is not null) Accounts.MarkUsed(account);
         }
+        var api = early ?? new GitHubApi(token, host);
         try
         {
-            await Login(token, persist: false, early);
+            var (user, scopes) = await api.CurrentUser();
+            if (early is null) EnterGitHub(account?.With(user), api, user, scopes, token);
+            else if (ReferenceEquals(Api, early)) ApplyVerified(account, user, scopes, token);
         }
         catch (ApiException e) when (e.Status == 401)
         {
-            if (early is not null) Logout();
-            else
-            {
-                CredentialStore.Delete();
-                Phase = Phase.LoggedOut;
-            }
+            if (early is null || ReferenceEquals(Api, early)) Revoked();
         }
         catch
         {
-            if (early is not null && ReferenceEquals(Api, early)) return;
-            Api = loginAttempt is { } attempt && attempt.Token == token ? attempt : new GitHubApi(token);
+            if (early is not null) return;
+            GitAccount = account;
+            Forge = null;
+            Account = known?.CacheKey;
+            if (known is not null) User = known.User;
+            Api = api;
             Phase = Phase.LoggedIn;
             StartPolling();
         }
     }
 
-    public async Task Login(string token, bool persist = true, GitHubApi? current = null)
+    private void ApplyVerified(GitAccount? account, RestUser user, List<string> scopes, string token)
     {
-        var api = current ?? new GitHubApi(token);
-        loginAttempt = api;
-        var (user, scopes) = await api.CurrentUser();
-        if (persist) CredentialStore.Save(token);
-        if (current is not null && ReferenceEquals(Api, current))
+        User = Demo.IsOn ? Demo.User : user;
+        Scopes = scopes;
+        var updated = account?.With(user);
+        if (updated is not null)
         {
-            User = Demo.IsOn ? Demo.User : user;
-            Scopes = scopes;
-            if (!string.Equals(Account, user.Login, StringComparison.OrdinalIgnoreCase))
-            {
-                var stale = Account;
-                Task.Run(() => ListSnapshotStore.Shared.Clear(stale)).Forget();
-                Account = user.Login;
-                Refresh();
-            }
-            Remember(token, user.Login);
-            return;
+            GitAccount = updated;
+            Accounts.Update(updated);
+            Accounts.MarkUsed(updated);
         }
-        if (Account is { } previous && !string.Equals(previous, user.Login, StringComparison.OrdinalIgnoreCase)) SearchListViewModel.ClearCache();
-        Account = user.Login;
+        var key = updated?.CacheKey ?? user.Login;
+        if (!string.Equals(Account, key, StringComparison.OrdinalIgnoreCase))
+        {
+            var stale = Account;
+            Task.Run(() => ListSnapshotStore.Shared.Clear(stale)).Forget();
+            Account = key;
+            Refresh();
+        }
+        if (updated is null || updated.Provider == GitProvider.GitHub) Remember(token, user.Login);
+    }
+
+    private void EnterGitHub(GitAccount? account, GitHubApi api, RestUser user, List<string> scopes, string token)
+    {
+        var key = account?.CacheKey ?? user.Login;
+        if (Account is { } previous && !string.Equals(previous, key, StringComparison.OrdinalIgnoreCase)) SearchListViewModel.ClearCache();
+        if (account is not null)
+        {
+            Accounts.Update(account);
+            Accounts.MarkUsed(account);
+        }
+        GitAccount = account;
+        Forge = null;
+        Account = key;
         Api = api;
         User = Demo.IsOn ? Demo.User : user;
         Scopes = scopes;
@@ -188,8 +247,136 @@ public sealed partial class AppViewModel : ObservableObject
         prOrder.Clear();
         Phase = Phase.LoggedIn;
         StartPolling();
-        Remember(token, user.Login);
+        if (account is null || account.Provider == GitProvider.GitHub) Remember(token, user.Login);
     }
+
+    private void EnterForge(GitAccount account, IForgeClient client)
+    {
+        if (GitAccount?.Id != account.Id) ForgeListViewModel.ClearCache();
+        Accounts.MarkUsed(account);
+        GitAccount = account;
+        Forge = client;
+        Api = null;
+        Account = account.CacheKey;
+        User = account.User;
+        Scopes = new();
+        DetailRoot = null;
+        ForgeSelection = null;
+        if (Section.Kind == SectionKind.Prs ? !account.Provider.Supports(Section.Pr) : Section.Kind != SectionKind.Claude)
+            Section = Section.Prs(account.Provider.SupportedFilters().FirstOrDefault(ForgeFilter.Mine).Filter());
+        Phase = Phase.LoggedIn;
+        StartPolling();
+    }
+
+    private async Task VerifyForge(IForgeClient client)
+    {
+        try
+        {
+            var u = await client.CurrentUser();
+            if (!ReferenceEquals(Forge, client) || GitAccount is not { } account) return;
+            var updated = account.With(u.User, u.Id ?? account.UserId);
+            GitAccount = updated;
+            User = updated.User;
+            Accounts.Update(updated);
+            Accounts.MarkUsed(updated);
+        }
+        catch (ApiException e) when (e.Status == 401)
+        {
+            if (ReferenceEquals(Forge, client)) Revoked();
+        }
+        catch
+        {
+        }
+    }
+
+    private IForgeClient? MakeForge(GitAccount account, GitCredential credential) =>
+        ForgeClients.Create(account, credential, fresh =>
+        {
+            try
+            {
+                Accounts.Store(fresh, account);
+            }
+            catch (Exception e)
+            {
+                ErrorLog.Write(e, "storing refreshed credential failed");
+            }
+        });
+
+    public async Task AddAccount(GitProvider provider, string rawHost, GitCredential credential, string? email = null)
+    {
+        var host = provider.EffectiveHost(rawHost);
+        if (host.Length == 0) throw new ApiException(L.T("Login_EnterServer", "Enter the server address"));
+        var draft = new GitAccount
+        {
+            Id = GitAccounts.NewId(),
+            Provider = provider,
+            Host = host,
+            Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(),
+            CredentialKey = "account-" + GitAccounts.NewId()
+        };
+        if (provider.IsGitHub())
+        {
+            var api = new GitHubApi(credential.Token, host);
+            var (user, scopes) = await api.CurrentUser();
+            var saved = Accounts.Upsert(draft.With(user), credential);
+            await LeaveCurrent(saved);
+            EnterGitHub(saved, api, user, scopes, credential.Token);
+            return;
+        }
+        if (MakeForge(draft, credential) is not { } probe) return;
+        var u = await probe.CurrentUser();
+        var stored = Accounts.Upsert(draft.With(u.User, u.Id), credential);
+        await LeaveCurrent(stored);
+        if (MakeForge(stored, credential) is { } client) EnterForge(stored, client);
+    }
+
+    public async Task SwitchAccount(string id)
+    {
+        if (id == GitAccount?.Id && Phase == Phase.LoggedIn) return;
+        if (Accounts.Find(id) is not { } target) return;
+        if (Accounts.Credential(target) is not { } credential)
+        {
+            Accounts.Remove(id);
+            ShowToast(L.F("Accounts_Missing", "Sign-in for {0} is missing. Add the account again", target.Subtitle));
+            return;
+        }
+        await LeaveCurrent(target);
+        await Resume(target, credential);
+    }
+
+    private async Task LeaveCurrent(GitAccount next)
+    {
+        if (Accounts.LastUsedIdentity is { } last && last != next.Identity) await SignOutOfClaude();
+        if (Phase == Phase.LoggedIn && GitAccount?.Id != next.Id) ResetSession(forgetCache: false, Phase.Checking);
+        Accounts.SetActive(next.Id);
+    }
+
+    public async Task SignOutOfClaude()
+    {
+        Claude.CloseAllForProfileSwitch();
+        await ClaudeAccountStore.Shared.LogoutAll();
+        await Claude.ReloadProjects();
+        ShowToast(L.T("Accounts_ClaudeSignedOut", "Signed out of Claude Code"));
+    }
+
+    public async Task SignOut()
+    {
+        var current = GitAccount;
+        await SignOutOfClaude();
+        ResetSession(forgetCache: true);
+        if (current is not null) Accounts.Remove(current.Id);
+        else CredentialStore.Delete();
+        Accounts.MarkUsed(null);
+    }
+
+    private void Revoked()
+    {
+        if (GitAccount is { } account) Accounts.Remove(account.Id);
+        else CredentialStore.Delete();
+        ResetSession(forgetCache: true);
+    }
+
+    public void ShowToast(string text) => ToastRequested?.Invoke(text);
 
     private static void Remember(string token, string login)
     {
@@ -198,19 +385,25 @@ public sealed partial class AppViewModel : ObservableObject
         Task.Run(() => ListSnapshotStore.Shared.RememberAccount(token, login, generation)).Forget();
     }
 
-    public void Logout()
+    private void ResetSession(bool forgetCache, Phase next = Phase.LoggedOut)
     {
         pollCts?.Cancel();
-        CredentialStore.Delete();
-        ListSnapshotStore.Shared.ForgetAccount();
-        ListSnapshotStore.Shared.Clear(Account);
+        if (forgetCache)
+        {
+            if (Provider == GitProvider.GitHub) ListSnapshotStore.Shared.ForgetAccount();
+            ListSnapshotStore.Shared.Clear(Account);
+        }
         SearchListViewModel.ClearCache();
+        ForgeListViewModel.ClearCache();
         BlameCache.Shared.Clear();
         Account = null;
         Api = null;
+        Forge = null;
+        GitAccount = null;
         User = null;
         Scopes = new();
         DetailRoot = null;
+        ForgeSelection = null;
         prModels.Clear();
         prOrder.Clear();
         ReviewRequests = new();
@@ -218,7 +411,7 @@ public sealed partial class AppViewModel : ObservableObject
         ReviewRequestCount = 0;
         MyPRCount = 0;
         UnreadCount = 0;
-        Phase = Phase.LoggedOut;
+        Phase = next;
     }
 
     public void Refresh()
@@ -315,7 +508,7 @@ public sealed partial class AppViewModel : ObservableObject
         }
         var q = System.Web.HttpUtility.ParseQueryString(uri.Query);
         var target = q["url"] ?? "https://" + url[(url.IndexOf("://", StringComparison.Ordinal) + 3)..];
-        if (GitHubUrl.Parse(target) is { } route)
+        if (Api is not null && GitHubUrl.Parse(target) is { } route)
         {
             Open(route);
             if (route.Kind == RouteKind.PullRequest && GitHubUrl.IsFilesLink(target) && PrModel(route.Item!) is { } model) model.Tab = PRTab.Files;
@@ -351,7 +544,7 @@ public sealed partial class AppViewModel : ObservableObject
 
     public void CheckClipboard(string? text)
     {
-        if (text is null || text == lastClipboard) return;
+        if (text is null || text == lastClipboard || Api is null || Provider != GitProvider.GitHub) return;
         lastClipboard = text;
         if (text.Length >= 300 || !text.Contains("github.com") || GitHubUrl.Parse(text, allowShort: false) is not { } route) return;
         if (route.Kind is RouteKind.PullRequest or RouteKind.Issue && route != DetailRoot) ClipboardRoute = route;
@@ -421,6 +614,11 @@ public sealed partial class AppViewModel : ObservableObject
 
     public async Task RefreshBadges(bool live = false)
     {
+        if (Forge is { } forge)
+        {
+            await RefreshForgeBadges(forge);
+            return;
+        }
         if (Api is not { } api) return;
         if (Demo.IsOn)
         {
@@ -481,11 +679,45 @@ public sealed partial class AppViewModel : ObservableObject
         ClaudeProfiles.Shared.Remove(profile.Id);
     }
 
+    private async Task RefreshForgeBadges(IForgeClient forge)
+    {
+        var supported = forge.Provider.SupportedFilters();
+        if (supported.Contains(ForgeFilter.ReviewRequested))
+        {
+            try
+            {
+                var rr = await forge.PullRequests(ForgeFilter.ReviewRequested, ForgeState.Open);
+                if (!ReferenceEquals(Forge, forge)) return;
+                ReviewRequests = rr.Take(10).ToList();
+                ReviewRequestCount = rr.Count;
+            }
+            catch
+            {
+            }
+        }
+        if (supported.Contains(ForgeFilter.Mine))
+        {
+            try
+            {
+                var mine = await forge.PullRequests(ForgeFilter.Mine, ForgeState.Open);
+                if (!ReferenceEquals(Forge, forge)) return;
+                MyPRs = mine.Take(10).ToList();
+                MyPRCount = mine.Count;
+            }
+            catch
+            {
+            }
+        }
+        UnreadCount = 0;
+        LastBadgeRefresh = DateTimeOffset.Now;
+    }
+
     public async Task RefreshTokenFromGh()
     {
+        if (GitAccount is not { } account || !account.Provider.IsGitHub()) return;
         try
         {
-            await Login(await GhCli.Token());
+            await AddAccount(account.Provider, account.Host, GitCredential.Of(await GhCli.Token(account.Host)));
         }
         catch
         {

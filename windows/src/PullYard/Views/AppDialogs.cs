@@ -127,14 +127,20 @@ public static class SettingsDialog
         var account = Ui.V(8);
         if (app.User is { } u)
         {
-            account.Children.Add(Ui.H(10, Ui.Avatar(u.AvatarUrl, 36), Ui.V(0, Ui.Text(u.Name ?? u.Login, 14, "text", FontWeights.SemiBold), Ui.Caption("@" + u.Login))));
-            account.Children.Add(Row(L.T("Settings_Scopes", "Token scopes"), Ui.Text(app.Scopes.Count == 0 ? "fine-grained / unknown" : string.Join(", ", app.Scopes), 12, "muted", wrap: true)));
+            account.Children.Add(Ui.H(10, Ui.Avatar(u.AvatarUrl, 36), Ui.V(0, Ui.Text(u.Name ?? u.Login, 14, "text", FontWeights.SemiBold), Ui.Caption(app.GitAccount?.Subtitle ?? "@" + u.Login))));
+            account.Children.Add(Row(L.T("Settings_Service", "Service"), Ui.Text(app.Provider.Title(), 12, "muted")));
+            if (app.Provider.IsGitHub()) account.Children.Add(Row(L.T("Settings_Scopes", "Token scopes"), Ui.Text(app.Scopes.Count == 0 ? "fine-grained / unknown" : string.Join(", ", app.Scopes), 12, "muted", wrap: true)));
             var buttons = Ui.H(8);
-            if (GhCli.Binary is not null) buttons.Children.Add(Ui.Button(L.T("Settings_RefreshFromGh", "Refresh token from gh"), () => app.RefreshTokenFromGh().Forget()));
+            if (app.Provider.IsGitHub() && app.GitAccount is not null && GhCli.Binary is not null) buttons.Children.Add(Ui.Button(L.T("Settings_RefreshFromGh", "Refresh token from gh"), () => app.RefreshTokenFromGh().Forget()));
+            buttons.Children.Add(Ui.Button(L.T("Accounts_Add", "Add Account…"), () =>
+            {
+                CloseOpenDialog();
+                AccountDialogs.Add(App.MainWindow?.Content?.XamlRoot).Forget();
+            }));
             buttons.Children.Add(Ui.Button(L.T("Settings_SignOut", "Sign out"), () =>
             {
-                app.Logout();
                 CloseOpenDialog();
+                AccountDialogs.ConfirmSignOut(App.MainWindow?.Content?.XamlRoot).Forget();
             }));
             account.Children.Add(buttons);
         }

@@ -337,6 +337,17 @@ public sealed partial class ClaudeAccountStore : ObservableObject
         await Proc.Run(cmd.File, cmd.PrefixArgs.Concat(new[] { "auth", "logout" }), env: env, timeout: TimeSpan.FromSeconds(30));
         await Refresh();
     }
+
+    public async Task LogoutAll()
+    {
+        if (ClaudeLauncher.Command is not { } cmd) return;
+        foreach (var profile in ClaudeProfiles.Shared.Profiles.ToList())
+        {
+            var env = ClaudeLauncher.ProcessEnvironment(profile.ConfigDir);
+            await Proc.Run(cmd.File, cmd.PrefixArgs.Concat(new[] { "auth", "logout" }), env: env, timeout: TimeSpan.FromSeconds(30));
+        }
+        await Refresh();
+    }
 }
 
 public sealed record RateWindow(string Key, double Utilization, DateTimeOffset? ResetsAt);

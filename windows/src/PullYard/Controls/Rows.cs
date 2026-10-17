@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using PullYard.Core.Api;
+using PullYard.Core.Auth;
 using PullYard.Core.Claude;
 using PullYard.Core.Util;
 using PullYard.Services;
@@ -82,8 +83,9 @@ public sealed class FeedRow : CodeRow
 
     public static UIElement SearchRow(SearchItem item, bool showRepo)
     {
+        var prefix = AppViewModel.Shared.Forge is null ? "#" : AppViewModel.Shared.Provider.NumberPrefix();
         var meta = Ui.H(5,
-            Ui.Caption(showRepo ? $"{item.Repository.NameWithOwner}#{item.Number}" : $"#{item.Number}"),
+            Ui.Caption(showRepo ? $"{item.Repository.NameWithOwner}{prefix}{item.Number}" : $"{prefix}{item.Number}"),
             Ui.Caption("·"),
             Ui.Caption(Fmt.Rel(item.UpdatedAt)));
         var who = Ui.H(6, Ui.Avatar(item.Author?.AvatarUrl, 14), Ui.Caption(item.Author?.Login ?? ""));

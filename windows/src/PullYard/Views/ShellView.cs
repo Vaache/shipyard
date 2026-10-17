@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using PullYard.Controls;
 using PullYard.Core.Api;
+using PullYard.Core.Auth;
 using PullYard.Core.Claude;
 using PullYard.Core.Util;
 using PullYard.Services;
@@ -45,6 +46,8 @@ public sealed class ShellView : Grid
         Children.Add(nav);
         app.PropertyChanged += OnAppChanged;
         app.RouteRequested += OnRoute;
+        app.ToastRequested += Toast;
+        app.AddAccountRequested += OnAddAccount;
         app.Claude.PropertyChanged += OnClaudeChanged;
         app.Updater.PropertyChanged += OnUpdaterChanged;
         ThemeService.Changed += OnTheme;
@@ -52,6 +55,8 @@ public sealed class ShellView : Grid
         {
             app.PropertyChanged -= OnAppChanged;
             app.RouteRequested -= OnRoute;
+            app.ToastRequested -= Toast;
+            app.AddAccountRequested -= OnAddAccount;
             app.Claude.PropertyChanged -= OnClaudeChanged;
             app.Updater.PropertyChanged -= OnUpdaterChanged;
             ThemeService.Changed -= OnTheme;
@@ -63,6 +68,8 @@ public sealed class ShellView : Grid
         if (app.DetailRoot is { } root) OnRoute(root, false);
         else ShowEmptyDetail();
     }
+
+    private void OnAddAccount() => AccountDialogs.Add(XamlRoot).Forget();
 
     private void OnTheme()
     {
@@ -123,6 +130,16 @@ public sealed class ShellView : Grid
             };
             navItems[s.Key] = item;
             nav.MenuItems.Add(item);
+        }
+        if (app.Forge is not null)
+        {
+            Header(app.Provider.RequestsTitle());
+            foreach (var f in app.Provider.SupportedFilters()) Item(Section.Prs(f.Filter()), f.Filter().Title(), f.Filter().Glyph(), f.Filter().ColorKey());
+            Header(L.T("Nav_AI", "AI"));
+            Item(Section.Claude, L.T("Section_Claude", "Claude Code"), "\uE945", "coral");
+            SyncNavSelection();
+            UpdateBadges();
+            return;
         }
         Header(L.T("Nav_Inbox", "Inbox"));
         Item(Section.Notifications, L.T("Section_Notifications", "Notifications"), "", "amber");
@@ -191,12 +208,8 @@ public sealed class ShellView : Grid
         }
         if (app.User is { } user)
         {
-            var settings = Ui.IconButton("", L.T("Common_Settings", "Settings"), app.RequestSettings);
-            var info = Ui.V(0, Ui.Text(user.Name ?? user.Login, 13, "text", FontWeights.Medium), Ui.Caption("@" + user.Login));
-            var grid = Ui.Columns((Ui.Avatar(user.AvatarUrl, 26), Ui.Auto), (info, Ui.Star), (settings, Ui.Auto));
-            grid.Padding = new Thickness(12, 8, 6, 10);
             footer.Children.Add(Ui.Line());
-            footer.Children.Add(grid);
+            footer.Children.Add(new AccountFooter(user.Name ?? user.Login, app.GitAccount?.Subtitle ?? "@" + user.Login, user.AvatarUrl));
         }
     }
 
@@ -279,11 +292,15 @@ public sealed class ShellView : Grid
                 UpdateBadges();
                 break;
             case nameof(AppViewModel.User):
+            case nameof(AppViewModel.GitAccount):
             case nameof(AppViewModel.RateLimitedUntil):
                 RenderFooter();
                 break;
             case nameof(AppViewModel.ClipboardRoute):
                 RenderClipboard();
+                break;
+            case nameof(AppViewModel.ForgeSelection):
+                ShowForgeDetail();
                 break;
         }
     }
@@ -296,6 +313,11 @@ public sealed class ShellView : Grid
         var s = app.Section;
         if (!force && shownSection == s.Key) return;
         shownSection = s.Key;
+        if (app.Forge is not null)
+        {
+            ShowForgeSection(s);
+            return;
+        }
         FrameworkElement list = s.Kind switch
         {
             SectionKind.Notifications => new NotificationsView(),
@@ -325,8 +347,50 @@ public sealed class ShellView : Grid
         }
     }
 
+    private void ShowForgeSection(Section s)
+    {
+        FrameworkElement list = s.Kind switch
+        {
+            SectionKind.Prs when app.Provider.Supports(s.Pr) => new ForgeListView(s.Pr),
+            SectionKind.Claude => new ClaudeSessionsView(),
+            _ => ForgeDetailView.Unavailable(app.Provider)
+        };
+        list.Transitions = new TransitionCollection { new ContentThemeTransition() };
+        listHost.Content = list;
+        App.MainWindow?.SetSubtitle(s.Title);
+        if (s.Kind == SectionKind.Claude)
+        {
+            claudeView ??= new ClaudeWorkspaceView();
+            detailHost.Content = claudeView;
+        }
+        else
+        {
+            ShowForgeDetail();
+        }
+    }
+
+    private void ShowForgeDetail()
+    {
+        if (app.Forge is null || app.Section.Kind == SectionKind.Claude) return;
+        if (app.ForgeSelection is not { } item)
+        {
+            detailHost.Content = ForgeDetailView.Empty(app.Provider);
+            return;
+        }
+        var view = new ForgeDetailView(item, app.Provider)
+        {
+            Transitions = new TransitionCollection { new EntranceThemeTransition { FromVerticalOffset = 10, FromHorizontalOffset = 0 } }
+        };
+        detailHost.Content = view;
+    }
+
     private void ShowEmptyDetail()
     {
+        if (app.Forge is not null)
+        {
+            ShowForgeDetail();
+            return;
+        }
         if (app.Section.Kind == SectionKind.Claude) return;
         var tile = Ui.IconTile("", "violet", 56);
         tile.HorizontalAlignment = HorizontalAlignment.Center;
@@ -343,7 +407,7 @@ public sealed class ShellView : Grid
 
     private void OnRoute(Route route, bool push)
     {
-        if (app.Section.Kind == SectionKind.Claude) return;
+        if (app.Section.Kind == SectionKind.Claude || app.Forge is not null) return;
         if (!push) stack.Clear();
         if (stack.Count > 0 && stack[^1].Route == route) return;
         var view = CreateDetail(route);
