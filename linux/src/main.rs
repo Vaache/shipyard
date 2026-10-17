@@ -1,3 +1,4 @@
+mod account_lock;
 mod api;
 mod app;
 mod auth;
@@ -11,6 +12,8 @@ mod diagnostics;
 mod diff;
 mod fix_prompt;
 mod fixtures;
+mod forge;
+mod git_accounts;
 mod host;
 mod icons;
 mod list_cache;

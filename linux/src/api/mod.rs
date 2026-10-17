@@ -120,6 +120,7 @@ struct PollCache {
 
 struct Inner {
     token: String,
+    host: String,
     client: Client,
     no_redirect: Client,
     plain: Client,
@@ -195,6 +196,24 @@ pub fn rate_limit_resume(status: u16, headers: &HeaderMap, body: &[u8], now: i64
         })
     };
     resume.map(|ts| ts.min(now + RATE_LIMIT_MAX_PAUSE_SECS))
+}
+
+pub const GITHUB_HOST: &str = "github.com";
+
+pub fn rest_base(host: &str) -> String {
+    if host == GITHUB_HOST {
+        "https://api.github.com".into()
+    } else {
+        format!("https://{host}/api/v3")
+    }
+}
+
+pub fn graphql_url(host: &str) -> String {
+    if host == GITHUB_HOST {
+        "https://api.github.com/graphql".into()
+    } else {
+        format!("https://{host}/api/graphql")
+    }
 }
 
 fn reason(status: StatusCode) -> String {
@@ -292,6 +311,10 @@ fn retry_probe(mut probe: Probe, retry: bool) -> Probe {
 
 impl GitHubApi {
     pub fn new(token: &str) -> Self {
+        Self::with_host(token, GITHUB_HOST)
+    }
+
+    pub fn with_host(token: &str, host: &str) -> Self {
         let mut headers = HeaderMap::new();
         headers.insert("X-GitHub-Api-Version", HeaderValue::from_static("2022-11-28"));
         let agent = brand::user_agent();
@@ -311,18 +334,22 @@ impl GitHubApi {
             .build()
             .expect("http client");
         let plain = Client::builder().user_agent(agent).connect_timeout(CONNECT_TIMEOUT).timeout(Duration::from_secs(60)).build().expect("http client");
-        GitHubApi { inner: Arc::new(Inner { token: token.to_string(), client, no_redirect, plain, polled: Mutex::new(PollCache::default()) }) }
+        GitHubApi { inner: Arc::new(Inner { token: token.to_string(), host: host.to_string(), client, no_redirect, plain, polled: Mutex::new(PollCache::default()) }) }
     }
 
     fn auth(&self) -> String {
         format!("Bearer {}", self.inner.token)
     }
 
-    fn url(path: &str) -> String {
+    pub fn host(&self) -> &str {
+        &self.inner.host
+    }
+
+    fn url(&self, path: &str) -> String {
         if path.starts_with("http") {
             path.to_string()
         } else {
-            format!("https://api.github.com{path}")
+            format!("{}{path}", rest_base(&self.inner.host))
         }
     }
 
@@ -346,7 +373,7 @@ impl GitHubApi {
             &mut probe,
             self.inner
                 .client
-                .post("https://api.github.com/graphql")
+                .post(graphql_url(&self.inner.host))
                 .header(AUTHORIZATION, self.auth())
                 .header(ACCEPT, "application/vnd.github+json")
                 .header(CONTENT_TYPE, "application/json")
@@ -389,7 +416,7 @@ impl GitHubApi {
 
     async fn attempt(&self, method: &Method, path: &str, body: Option<&Value>, since: Option<&Validators>, retry: bool) -> ApiResult<Exchange> {
         let mut probe = retry_probe(diagnostics::begin_rest(method.as_str(), path), retry);
-        let mut req = self.inner.client.request(method.clone(), Self::url(path)).header(AUTHORIZATION, self.auth()).header(ACCEPT, "application/vnd.github+json");
+        let mut req = self.inner.client.request(method.clone(), self.url(path)).header(AUTHORIZATION, self.auth()).header(ACCEPT, "application/vnd.github+json");
         if let Some(etag) = since.and_then(|v| v.etag.as_deref()) {
             req = req.header(IF_NONE_MATCH, etag);
         }
@@ -482,7 +509,7 @@ impl GitHubApi {
             &mut probe,
             self.inner
                 .no_redirect
-                .get(Self::url(path))
+                .get(self.url(path))
                 .header(AUTHORIZATION, self.auth())
                 .header(ACCEPT, "application/vnd.github+json")
                 .send()
@@ -554,7 +581,7 @@ impl GitHubApi {
 
     async fn fetch_attempt(&self, path: &str, accept: &str, retry: bool) -> ApiResult<Option<Vec<u8>>> {
         let mut probe = retry_probe(diagnostics::begin_rest("GET", path), retry);
-        let resp = net(&mut probe, self.inner.client.get(Self::url(path)).header(AUTHORIZATION, self.auth()).header(ACCEPT, accept).send().await)?;
+        let resp = net(&mut probe, self.inner.client.get(self.url(path)).header(AUTHORIZATION, self.auth()).header(ACCEPT, accept).send().await)?;
         let status = resp.status();
         let headers = resp.headers().clone();
         probe.response(status.as_u16(), &headers);
@@ -660,6 +687,16 @@ mod tests {
         assert!(ApiError::new("x").with_kind(ErrorKind::Network).is_transient());
         assert!(!ApiError::with_status("x", 500).is_transient());
         assert!(!ApiError::with_status("x", 404).is_transient());
+    }
+
+    #[test]
+    fn enterprise_hosts_use_their_own_api() {
+        assert_eq!(rest_base(GITHUB_HOST), "https://api.github.com");
+        assert_eq!(graphql_url(GITHUB_HOST), "https://api.github.com/graphql");
+        let api = GitHubApi::with_host("t", "ghe.corp");
+        assert_eq!(api.url("/user"), "https://ghe.corp/api/v3/user");
+        assert_eq!(graphql_url(api.host()), "https://ghe.corp/api/graphql");
+        assert_eq!(GitHubApi::new("t").url("/user"), "https://api.github.com/user");
     }
 
     #[test]

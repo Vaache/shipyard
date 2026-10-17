@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::brand;
+use crate::git_accounts::GitAccount;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ClaudeProfile {
@@ -16,6 +17,8 @@ pub struct ClaudeProfile {
     pub email: Option<String>,
     #[serde(default)]
     pub plan: Option<String>,
+    #[serde(default)]
+    pub owner: Option<String>,
 }
 
 impl ClaudeProfile {
@@ -44,6 +47,8 @@ pub struct LastAccount {
 pub struct Settings {
     pub poll_interval: f64,
     pub oauth_client_id: String,
+    pub oauth_client_ids: HashMap<String, String>,
+    pub login_provider: String,
     pub theme_style: String,
     pub appearance: String,
     pub link_browser: String,
@@ -60,11 +65,14 @@ pub struct Settings {
     pub claude_launch_mode: String,
     pub claude_profiles: Vec<ClaudeProfile>,
     pub claude_active_profile: String,
+    pub claude_active_by_owner: HashMap<String, String>,
     pub local_repo_paths: HashMap<String, String>,
     pub run_in_background: bool,
     pub notify_review_requests: bool,
     pub diagnostics_enabled: bool,
     pub last_account: Option<LastAccount>,
+    pub git_accounts: Vec<GitAccount>,
+    pub git_active_account: Option<String>,
     pub window_width: i32,
     pub window_height: i32,
     pub window_maximized: bool,
@@ -75,6 +83,8 @@ impl Default for Settings {
         Settings {
             poll_interval: 30.0,
             oauth_client_id: String::new(),
+            oauth_client_ids: HashMap::new(),
+            login_provider: "github".into(),
             theme_style: "pullyard".into(),
             appearance: "auto".into(),
             link_browser: "system".into(),
@@ -91,11 +101,14 @@ impl Default for Settings {
             claude_launch_mode: "default".into(),
             claude_profiles: Vec::new(),
             claude_active_profile: "default".into(),
+            claude_active_by_owner: HashMap::new(),
             local_repo_paths: HashMap::new(),
             run_in_background: false,
             notify_review_requests: true,
             diagnostics_enabled: false,
             last_account: None,
+            git_accounts: Vec::new(),
+            git_active_account: None,
             window_width: 1380,
             window_height: 860,
             window_maximized: false,

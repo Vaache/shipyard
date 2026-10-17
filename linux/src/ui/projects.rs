@@ -8,7 +8,7 @@ use gtk::{gdk, glib};
 use super::menu::{context_menu, Menu};
 use super::widgets::*;
 use crate::api::models::*;
-use crate::{app, auth, util};
+use crate::{app, util};
 
 struct ProjectsList {
     projects: RefCell<Vec<ProjectSummary>>,
@@ -45,9 +45,7 @@ fn scope_hint() -> gtk::Box {
         b.set_sensitive(false);
         let b = b.clone();
         crate::rt::spawn_local(async move {
-            if let Ok(t) = auth::gh_token().await {
-                let _ = app::get().login(t, true).await;
-            }
+            app::get().refresh_token_from_gh().await;
             b.set_sensitive(true);
             app::get().user_refresh();
         });

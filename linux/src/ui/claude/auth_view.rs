@@ -13,7 +13,7 @@ use crate::{app, util};
 pub const INSTALL_COMMAND: &str = "curl -fsSL https://claude.ai/install.sh | bash";
 
 pub fn switch_profile(id: &str) {
-    if id == accounts::active_id() {
+    if id == accounts::active_id() || !accounts::is_visible(id) {
         return;
     }
     let a = app::get();
@@ -39,7 +39,14 @@ pub fn remove_profile(p: &ClaudeProfile) {
         return;
     }
     if accounts::active_id() == p.id {
-        switch_profile(accounts::DEFAULT_ID);
+        match accounts::visible().into_iter().find(|o| o.id != p.id) {
+            Some(other) => switch_profile(&other.id),
+            None => {
+                if let Ok(fresh) = accounts::add("Claude", false) {
+                    switch_profile(&fresh.id);
+                }
+            }
+        }
     }
     let dir = p.config_dir.clone();
     let id = p.id.clone();
@@ -70,7 +77,7 @@ pub fn profile_badge(p: &ClaudeProfile, size: i32) -> gtk::Box {
 pub fn profile_menu(menu: &mut Menu) {
     menu.section(Some("Claude accounts"));
     let active = accounts::active_id();
-    for p in accounts::profiles() {
+    for p in accounts::visible() {
         let text = format!("{}{}{}", if p.id == active { "✓ " } else { "" }, p.label, p.email.as_ref().map(|e| format!(" — {e}")).unwrap_or_default());
         let id = p.id.clone();
         menu.item(&text, move || switch_profile(&id));
@@ -100,7 +107,7 @@ pub fn profile_switcher() -> gtk::MenuButton {
     let content = hbox(6);
     content.append(&profile_badge(&active, 18));
     content.append(&label_with(&active.label, &["sy-text"]));
-    let n = accounts::profiles().len();
+    let n = accounts::visible().len();
     if n > 1 {
         content.append(&label_with(&n.to_string(), &["sy-muted", "sy-tiny"]));
     }
@@ -120,7 +127,9 @@ pub fn add_profile_sheet() {
     entry.set_placeholder_text(Some("Name, e.g. “Personal” or “Work”"));
     sheet.body.append(&entry);
     let share = gtk::CheckButton::with_label("Use my settings, CLAUDE.md, skills and plugins from the main account");
-    share.set_active(true);
+    let owns_main = accounts::owns_main();
+    share.set_active(owns_main);
+    share.set_visible(owns_main);
     sheet.body.append(&share);
     let error = label_with("", &["fg-red", "sy-small"]);
     error.set_visible(false);
@@ -131,7 +140,7 @@ pub fn add_profile_sheet() {
     sheet.footer.append(&create);
     let d = sheet.dialog.clone();
     let e = entry.clone();
-    let go = Rc::new(move || match accounts::add(&e.text(), share.is_active()) {
+    let go = Rc::new(move || match accounts::add(&e.text(), owns_main && share.is_active()) {
         Ok(p) => {
             switch_profile(&p.id);
             app::set_section(app::Section::Claude);
@@ -160,7 +169,7 @@ pub fn account_card(info: &accounts::AccountInfo, compact: bool) -> gtk::Box {
     let top = hbox(5);
     let email = ellipsized(info.email.as_deref().unwrap_or("Signed in"), &["sy-text", if compact { "sy-bold" } else { "heading" }]);
     top.append(&email);
-    if accounts::profiles().len() > 1 {
+    if accounts::visible().len() > 1 {
         top.append(&chip(&profile.label, "muted", None, false));
     }
     col.append(&top);

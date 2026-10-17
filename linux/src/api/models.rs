@@ -57,6 +57,7 @@ pub enum Route {
     Repo(RepoRef),
     Project(ProjectRef),
     Commit(RepoRef, String),
+    Forge(String),
 }
 
 impl Route {
@@ -67,6 +68,7 @@ impl Route {
             Route::Repo(r) => format!("repo:{}", r.full()),
             Route::Project(p) => format!("project:{}", p.id),
             Route::Commit(r, sha) => format!("commit:{}@{}", r.full(), sha),
+            Route::Forge(url) => format!("forge:{url}"),
         }
     }
 
@@ -327,6 +329,8 @@ pub struct SearchItem {
     pub labels: Option<Nodes<LabelInfo>>,
     #[serde(default)]
     pub commits: Option<Nodes<RollupCommitNode>>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub forge: bool,
 }
 
 impl SearchItem {
@@ -347,7 +351,9 @@ impl SearchItem {
     }
 
     pub fn route(&self) -> Route {
-        if self.is_pr() {
+        if self.forge {
+            Route::Forge(self.url.clone())
+        } else if self.is_pr() {
             Route::Pr(self.item_ref())
         } else {
             Route::Issue(self.item_ref())

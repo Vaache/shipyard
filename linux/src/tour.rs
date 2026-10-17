@@ -271,6 +271,9 @@ pub fn run(_app: Rc<App>) {
     .wait(5000)
     .shot("16-claude-chat");
     p.act(crate::ui::settings::show).wait(2500).shot("17-preferences").act(close_dialog);
+    p.act(app::set_smoke_logged_out).wait(2000).shot("18-login");
+    p.act(|| crate::ui::login::select_provider(crate::git_accounts::GitProvider::Gitlab)).wait(800).shot("18b-login-gitlab");
+    p.act(|| crate::ui::login::select_provider(crate::git_accounts::GitProvider::Bitbucket)).wait(800).shot("18c-login-bitbucket");
     p.wait(1000).act(|| {
         println!("tour: done");
         app::finish_smoke(0);

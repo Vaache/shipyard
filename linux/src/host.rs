@@ -152,6 +152,20 @@ pub fn gh_binary() -> Option<String> {
     )
 }
 
+pub fn glab_binary() -> Option<String> {
+    let h = home();
+    find(
+        "glab",
+        &[
+            "/usr/bin/glab".into(),
+            "/usr/local/bin/glab".into(),
+            "/home/linuxbrew/.linuxbrew/bin/glab".into(),
+            format!("{h}/.local/bin/glab"),
+            "/snap/bin/glab".into(),
+        ],
+    )
+}
+
 pub fn claude_binary() -> Option<String> {
     let h = home();
     find(

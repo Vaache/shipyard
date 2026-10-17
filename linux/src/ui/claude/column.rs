@@ -179,7 +179,7 @@ impl Column {
                 l.append(&colored_icon("sy-person-symbolic", 14, "amber"));
                 l.append(&wrap_label("Not signed in to Claude — sign in on the right", &["fg-amber"]));
                 self.list.append(&l);
-                if accounts::profiles().len() > 1 {
+                if accounts::visible().len() > 1 {
                     self.list.append(&auth_view::profile_switcher());
                 }
             }

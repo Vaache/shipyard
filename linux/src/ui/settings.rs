@@ -1,9 +1,13 @@
+use std::cell::Cell;
+use std::rc::Rc;
+
 use adw::prelude::*;
 
 use super::claude::auth_view;
 use super::dialogs;
 use super::widgets::*;
 use crate::claude::accounts::{self, Status};
+use crate::git_accounts::{self, GitAccount, GitProvider};
 use crate::{app, auth, settings, theme, updater, util};
 
 fn combo(title: &str, options: &[&str], selected: usize, on_change: impl Fn(usize) + 'static) -> adw::ComboRow {
@@ -36,49 +40,76 @@ fn group(title: &str, icon_name: &str, color: &str) -> adw::PreferencesGroup {
 fn account_group(dialog: &adw::PreferencesDialog) -> adw::PreferencesGroup {
     let g = group("Account", "sy-person-symbolic", "teal");
     let a = app::get();
-    let (user, scopes) = {
+    let (user, scopes, account) = {
         let s = a.state.borrow();
-        (s.user.clone(), s.scopes.clone())
+        (s.user.clone(), s.scopes.clone(), s.account.clone())
     };
+    let provider = account.as_ref().map(|x| x.provider).unwrap_or(GitProvider::Github);
     match user {
         Some(u) => {
             let row = adw::ActionRow::new();
             let name = u.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| u.login.clone());
             row.set_title(&name);
-            row.set_subtitle(&format!("@{}", u.login));
+            row.set_subtitle(&format!("{} · {}", provider.title(), account.as_ref().map(|x| x.subtitle()).unwrap_or_else(|| format!("@{}", u.login))));
             row.add_prefix(&avatar(u.avatar_url.as_deref(), 36, Some(&name)));
             g.add(&row);
-            let sc = adw::ActionRow::new();
-            sc.set_title("Token scopes");
-            sc.set_subtitle(&if scopes.is_empty() { "fine-grained / unknown".to_string() } else { scopes.join(", ") });
-            sc.set_subtitle_selectable(true);
-            g.add(&sc);
+            if provider.is_github() {
+                let sc = adw::ActionRow::new();
+                sc.set_title("Token scopes");
+                sc.set_subtitle(&if scopes.is_empty() { "fine-grained / unknown".to_string() } else { scopes.join(", ") });
+                sc.set_subtitle_selectable(true);
+                g.add(&sc);
+            }
+            if let Some(acc) = account.clone() {
+                g.add(&pin_row(acc));
+            }
             let actions = adw::ActionRow::new();
             actions.set_title("Session");
-            if auth::gh_available() {
+            if provider.is_github() && auth::gh_available() {
                 let refresh = button("Refresh token from gh");
                 refresh.set_valign(gtk::Align::Center);
                 refresh.connect_clicked(|b| {
                     b.set_sensitive(false);
                     let b = b.clone();
                     crate::rt::spawn_local(async move {
-                        if let Ok(t) = auth::gh_token().await {
-                            let _ = app::get().login(t, true).await;
-                        }
+                        app::get().refresh_token_from_gh().await;
                         b.set_sensitive(true);
                     });
                 });
                 actions.add_suffix(&refresh);
             }
-            let out = destructive("Sign out");
+            let add = button("Add account…");
+            add.set_valign(gtk::Align::Center);
+            let d = dialog.clone();
+            add.connect_clicked(move |_| {
+                d.close();
+                super::login::add_account_sheet();
+            });
+            actions.add_suffix(&add);
+            let out = destructive("Sign out…");
             out.set_valign(gtk::Align::Center);
             let d = dialog.clone();
             out.connect_clicked(move |_| {
                 d.close();
-                app::get().logout();
+                super::accounts::confirm_sign_out();
             });
             actions.add_suffix(&out);
             g.add(&actions);
+            for other in git_accounts::accounts().into_iter().filter(|x| account.as_ref().is_none_or(|c| c.id != x.id)) {
+                let r = adw::ActionRow::new();
+                r.set_title(&other.display_name());
+                r.set_subtitle(&format!("{} · {}", other.provider.title(), other.subtitle()));
+                r.add_prefix(&avatar(other.avatar_url.as_deref(), 28, Some(&other.display_name())));
+                let switch = button("Switch…");
+                switch.set_valign(gtk::Align::Center);
+                let d = dialog.clone();
+                switch.connect_clicked(move |_| {
+                    d.close();
+                    super::accounts::confirm_switch(other.clone());
+                });
+                r.add_suffix(&switch);
+                g.add(&r);
+            }
         }
         None => {
             let row = adw::ActionRow::new();
@@ -89,9 +120,60 @@ fn account_group(dialog: &adw::PreferencesDialog) -> adw::PreferencesGroup {
     g
 }
 
+fn pin_row(account: GitAccount) -> adw::SwitchRow {
+    let row = adw::SwitchRow::new();
+    row.set_title("Require PIN for this account");
+    row.set_subtitle("Asked when the app starts with this account and when switching to it.");
+    row.set_sensitive(false);
+    let guard = Rc::new(Cell::new(true));
+    let r = row.clone();
+    let g = guard.clone();
+    let id = account.id.clone();
+    crate::rt::spawn_local(async move {
+        let on = crate::account_lock::is_protected(&id).await;
+        r.set_active(on);
+        r.set_sensitive(true);
+        g.set(false);
+    });
+    row.connect_active_notify(move |r| {
+        if guard.get() {
+            return;
+        }
+        let want = r.is_active();
+        guard.set(true);
+        r.set_active(!want);
+        guard.set(false);
+        let (row, g) = (r.clone(), guard.clone());
+        let settle: Rc<dyn Fn(bool)> = Rc::new(move |on| {
+            g.set(true);
+            row.set_active(on);
+            g.set(false);
+        });
+        if want {
+            let done = settle.clone();
+            super::unlock::set_pin_sheet(&account, Rc::new(move || done(true)));
+        } else {
+            let done = settle.clone();
+            let id = account.id.clone();
+            super::unlock::unlock_sheet(
+                &account,
+                "Enter the PIN to turn it off",
+                Rc::new(move || {
+                    let (id, done) = (id.clone(), done.clone());
+                    crate::rt::spawn_local(async move {
+                        crate::account_lock::remove(&id).await;
+                        done(false);
+                    });
+                }),
+            );
+        }
+    });
+    row
+}
+
 fn claude_group(dialog: &adw::PreferencesDialog) -> adw::PreferencesGroup {
     let g = group("Claude Code", "sy-sparkles-symbolic", "coral");
-    let profiles = accounts::profiles();
+    let profiles = accounts::visible();
     let active = accounts::active_id();
     let names: Vec<String> = profiles.iter().map(|p| format!("{}{}", p.label, p.email.as_ref().map(|e| format!(" — {e}")).unwrap_or_default())).collect();
     let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
@@ -233,7 +315,9 @@ pub fn show() {
     ));
     page.add(&bg);
 
-    page.add(&claude_group(&dialog));
+    if app::get().state.borrow().phase == app::Phase::LoggedIn {
+        page.add(&claude_group(&dialog));
+    }
 
     let updates = group("Updates", "sy-download-symbolic", "green");
     updates.add(&switch("Check for updates automatically", None, settings::read(|s| s.update_auto_check), |v| settings::update(|s| s.update_auto_check = v)));

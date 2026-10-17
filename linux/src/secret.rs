@@ -4,14 +4,18 @@ use std::path::PathBuf;
 
 use crate::brand;
 
-const ACCOUNT: &str = "github-token";
+pub const DEFAULT_KEY: &str = "github-token";
 
-fn attributes() -> [(&'static str, &'static str); 2] {
-    [("service", brand::APP_ID), ("account", ACCOUNT)]
+fn attributes(key: &str) -> [(&'static str, &str); 2] {
+    [("service", brand::APP_ID), ("account", key)]
 }
 
-fn fallback_path(dir: PathBuf) -> PathBuf {
-    dir.join("token")
+fn fallback_path(dir: PathBuf, key: &str) -> PathBuf {
+    if key == DEFAULT_KEY {
+        dir.join("token")
+    } else {
+        dir.join(format!("token-{key}"))
+    }
 }
 
 async fn keyring() -> Result<oo7::Keyring, oo7::Error> {
@@ -20,9 +24,9 @@ async fn keyring() -> Result<oo7::Keyring, oo7::Error> {
     Ok(k)
 }
 
-pub async fn load(config_dir: PathBuf) -> Option<String> {
+pub async fn load(config_dir: PathBuf, key: String) -> Option<String> {
     if let Ok(k) = keyring().await {
-        if let Ok(items) = k.search_items(&attributes()).await {
+        if let Ok(items) = k.search_items(&attributes(&key)).await {
             for item in items {
                 if let Ok(secret) = item.secret().await {
                     let s = String::from_utf8_lossy(secret.as_bytes()).trim().to_string();
@@ -33,7 +37,7 @@ pub async fn load(config_dir: PathBuf) -> Option<String> {
             }
         }
     }
-    std::fs::read_to_string(fallback_path(config_dir)).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    std::fs::read_to_string(fallback_path(config_dir, &key)).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -43,13 +47,13 @@ pub enum Saved {
     Failed,
 }
 
-pub async fn save(config_dir: PathBuf, token: String) -> Saved {
-    let label = format!("{} GitHub token", brand::APP_NAME);
+pub async fn save(config_dir: PathBuf, key: String, token: String) -> Saved {
+    let label = if key == DEFAULT_KEY { format!("{} GitHub token", brand::APP_NAME) } else { format!("{} Git account token", brand::APP_NAME) };
     let stored = match keyring().await {
-        Ok(k) => k.create_item(&label, &attributes(), token.as_str(), true).await.is_ok(),
+        Ok(k) => k.create_item(&label, &attributes(&key), token.as_str(), true).await.is_ok(),
         Err(_) => false,
     };
-    let path = fallback_path(config_dir.clone());
+    let path = fallback_path(config_dir.clone(), &key);
     if stored {
         let _ = std::fs::remove_file(path);
         return Saved::Keyring;
@@ -68,9 +72,21 @@ pub async fn save(config_dir: PathBuf, token: String) -> Saved {
     }
 }
 
-pub async fn delete(config_dir: PathBuf) {
+pub async fn delete(config_dir: PathBuf, key: String) {
     if let Ok(k) = keyring().await {
-        let _ = k.delete(&attributes()).await;
+        let _ = k.delete(&attributes(&key)).await;
     }
-    let _ = std::fs::remove_file(fallback_path(config_dir));
+    let _ = std::fs::remove_file(fallback_path(config_dir, &key));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_key_keeps_its_fallback_file() {
+        let dir = PathBuf::from("/cfg");
+        assert_eq!(fallback_path(dir.clone(), DEFAULT_KEY), PathBuf::from("/cfg/token"));
+        assert_eq!(fallback_path(dir, "account-1"), PathBuf::from("/cfg/token-account-1"));
+    }
 }

@@ -16,7 +16,8 @@ pub fn item_row(item: &SearchItem, show_repo: bool) -> gtk::Box {
     title.set_ellipsize(gtk::pango::EllipsizeMode::End);
     col.append(&title);
     let meta = hbox(5);
-    let where_ = if show_repo { format!("{}#{}", item.repository.name_with_owner, item.number) } else { format!("#{}", item.number) };
+    let prefix = if item.forge && item.is_pr() { app::number_prefix() } else { "#" };
+    let where_ = if show_repo { format!("{}{prefix}{}", item.repository.name_with_owner, item.number) } else { format!("{prefix}{}", item.number) };
     meta.append(&ellipsized(&where_, &["sy-muted", "sy-small"]));
     meta.append(&label_with("·", &["sy-muted", "sy-small"]));
     meta.append(&label_with(&util::rel(Some(item.updated_at)), &["sy-muted", "sy-small"]));
@@ -92,8 +93,10 @@ pub fn item_menu(item: &SearchItem) -> Menu {
     let url = item.url.clone();
     menu.item("Copy Link", move || util::copy(&url));
     let route = item.route();
-    menu.item("Copy Short Link", move || copy_short_link(&route));
-    if item.is_pr() {
+    if route.short_link().is_some() {
+        menu.item("Copy Short Link", move || copy_short_link(&route));
+    }
+    if item.is_pr() && !item.forge {
         let cmd = format!("gh pr checkout {} -R {}", item.number, item.repository.name_with_owner);
         menu.item("Copy “gh pr checkout”", move || util::copy(&cmd));
     }
