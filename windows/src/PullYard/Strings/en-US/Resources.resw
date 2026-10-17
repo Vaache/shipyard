@@ -298,10 +298,8 @@
   <data name="Login_Continue" xml:space="preserve"><value>Continue</value></data>
   <data name="Login_CopyAndOpen" xml:space="preserve"><value>Copy and open</value></data>
   <data name="Login_CreateAtlassianToken" xml:space="preserve"><value>Create an API token at id.atlassian.com</value></data>
-  <data name="Login_CreateToken" xml:space="preserve"><value>Create a token on github.com</value></data>
   <data name="Login_CreateTokenOn" xml:space="preserve"><value>Create a token on {0}</value></data>
   <data name="Login_DeviceBody" xml:space="preserve"><value>Requires the Client ID of your own OAuth App (Settings → Developer settings → OAuth Apps, enable “Enable Device Flow”).</value></data>
-  <data name="Login_DeviceHint" xml:space="preserve"><value>Enter the code at github.com/login/device — you'll be signed in automatically.</value></data>
   <data name="Login_DeviceHintAt" xml:space="preserve"><value>Enter the code at {0} — you'll be signed in automatically.</value></data>
   <data name="Login_DeviceTitle" xml:space="preserve"><value>Sign in via browser (OAuth Device Flow)</value></data>
   <data name="Login_EnterEmail" xml:space="preserve"><value>Enter your Atlassian account email</value></data>
