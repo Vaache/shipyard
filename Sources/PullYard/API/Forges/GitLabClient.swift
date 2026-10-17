@@ -4,8 +4,8 @@ import Foundation
 final class GitLabClient: ForgeClient {
     let provider = GitProvider.gitlab
     let host: String
-    private let http: ForgeHTTP
-    private var login: String?
+    let http: ForgeHTTP
+    private(set) var login: String?
     private var approvalFilterWorks: Bool?
 
     private struct User: Decodable {
@@ -197,6 +197,10 @@ final class GitLabClient: ForgeClient {
         }
     }
 
+    func reviewBackend() -> PRBackend? {
+        GitLabPRBackend(client: self)
+    }
+
     func markDone(_ notification: ForgeNotification) async throws {
         try await http.post("/todos/\(notification.id)/mark_as_done")
     }
@@ -243,7 +247,7 @@ final class GitLabClient: ForgeClient {
         return page.isEmpty
     }
 
-    private func username() async throws -> String {
+    func username() async throws -> String {
         if let login { return login }
         return try await currentUser().login
     }

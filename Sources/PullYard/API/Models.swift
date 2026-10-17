@@ -443,6 +443,9 @@ struct PullRequestDetail: Decodable {
     let files: Nodes<FileViewed>?
     let timelineItems: Nodes<TimelineItem>
     let reviewThreads: Nodes<ReviewThread>
+    var viewerCanApprove: Bool?
+    var viewerApproved: Bool?
+    var mergeBlocker: String?
 
     var visualState: VisualState { .pr(state: state, draft: isDraft) }
     var rollup: StatusRollup? { lastCommit.nodes.first?.commit.statusCheckRollup }

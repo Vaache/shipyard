@@ -57,9 +57,8 @@ struct CommitDetailView: View {
     }
 
     private func load() async {
-        guard let api = app.api else { return }
         do {
-            let c = try await api.commit(repo, sha: sha)
+            guard let c = try await app.commitDetail(repo, sha: sha) else { return }
             let raw = c.files ?? []
             files = await Task.detached { raw.map(DiffFile.init) }.value
             collapsed = Set(files.filter { $0.lines.count > 1500 }.map(\.id))

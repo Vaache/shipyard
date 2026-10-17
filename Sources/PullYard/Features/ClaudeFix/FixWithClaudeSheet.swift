@@ -257,7 +257,8 @@ struct FixWithClaudeSheet: View {
         let generation = ciGeneration
         ciLoading = true
         defer { if ciGeneration == generation { ciLoading = false } }
-        let api = model.api, repo = model.ref.repo
+        guard let api = model.api else { return }
+        let repo = model.ref.repo
         var queue = failing.filter(needsGather)[...]
         let seed = ci.flatMap { r in r.log.map { (r.focus, $0) } }
         await withTaskGroup(of: CIFailure.self) { group in

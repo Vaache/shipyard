@@ -50,6 +50,7 @@ protocol ForgeClient: AnyObject {
     func notifications() async throws -> [ForgeNotification]
     func markDone(_ notification: ForgeNotification) async throws
     func repositories() async throws -> [ForgeRepo]
+    func reviewBackend() -> PRBackend?
 }
 
 extension ForgeClient {
@@ -57,6 +58,7 @@ extension ForgeClient {
     func notifications() async throws -> [ForgeNotification] { [] }
     func markDone(_ notification: ForgeNotification) async throws {}
     func repositories() async throws -> [ForgeRepo] { [] }
+    func reviewBackend() -> PRBackend? { nil }
 }
 
 @MainActor
@@ -121,18 +123,23 @@ final class ForgeHTTP {
         try await call("GET", path, query)
     }
 
-    func post(_ path: String, _ query: [URLQueryItem] = [], method: String = "POST") async throws {
-        let _: Empty = try await call(method, path, query, allowEmpty: true)
+    func post(_ path: String, _ query: [URLQueryItem] = [], method: String = "POST", json: [String: Any]? = nil) async throws {
+        let _: Empty = try await call(method, path, query, json: json, allowEmpty: true)
+    }
+
+    func send<T: Decodable>(_ method: String, _ path: String, _ query: [URLQueryItem] = [], json: [String: Any]? = nil) async throws -> T {
+        try await call(method, path, query, json: json)
     }
 
     private struct Empty: Decodable {}
 
-    private func call<T: Decodable>(_ method: String, _ path: String, _ query: [URLQueryItem], allowEmpty: Bool = false) async throws -> T {
+    private func call<T: Decodable>(_ method: String, _ path: String, _ query: [URLQueryItem], json: [String: Any]? = nil, allowEmpty: Bool = false) async throws -> T {
         let target = try url(path, query)
-        var (data, status) = try await send(target, method: method)
+        let body = try json.map { try JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys]) }
+        var (data, status) = try await send(target, method: method, body: body)
         if status == 401, let refresh {
             authorization = try await refresh()
-            (data, status) = try await send(target, method: method)
+            (data, status) = try await send(target, method: method, body: body)
         }
         guard (200..<300).contains(status) else {
             if status == 401 { throw APIError(message: "Token is invalid or revoked (401)", status: 401) }
@@ -146,9 +153,13 @@ final class ForgeHTTP {
         }
     }
 
-    private func send(_ url: URL, method: String = "GET") async throws -> (Data, Int) {
+    private func send(_ url: URL, method: String = "GET", body: Data? = nil) async throws -> (Data, Int) {
         var req = URLRequest(url: url)
         req.httpMethod = method
+        if let body {
+            req.httpBody = body
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         req.setValue(authorization, forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("PullYard-macOS", forHTTPHeaderField: "User-Agent")
@@ -159,6 +170,13 @@ final class ForgeHTTP {
     private static func message(_ data: Data) -> String? {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         if let m = obj["message"] as? String { return m }
+        if let m = obj["message"] as? [String], !m.isEmpty { return m.joined(separator: "; ") }
+        if let m = obj["message"] as? [String: Any], !m.isEmpty {
+            return m.keys.sorted().map { key in
+                let value = (m[key] as? [String])?.joined(separator: ", ") ?? (m[key].map { "\($0)" } ?? "")
+                return key == "base" ? value : "\(key) \(value)"
+            }.joined(separator: "; ")
+        }
         if let e = obj["error"] as? [String: Any], let m = e["message"] as? String { return m }
         if let e = obj["error_description"] as? String { return e }
         if let e = obj["error"] as? String { return e }
