@@ -127,16 +127,23 @@ public static class SettingsDialog
         var account = Ui.V(8);
         if (app.User is { } u)
         {
-            account.Children.Add(Ui.H(10, Ui.Avatar(u.AvatarUrl, 36), Ui.V(0, Ui.Text(u.Name ?? u.Login, 14, "text", FontWeights.SemiBold), Ui.Caption("@" + u.Login))));
-            account.Children.Add(Row(L.T("Settings_Scopes", "Token scopes"), Ui.Text(app.Scopes.Count == 0 ? "fine-grained / unknown" : string.Join(", ", app.Scopes), 12, "muted", wrap: true)));
+            account.Children.Add(Ui.H(10, Ui.Avatar(u.AvatarUrl, 36), Ui.V(0, Ui.Text(u.Name ?? u.Login, 14, "text", FontWeights.SemiBold), Ui.Caption(app.GitAccount?.Subtitle ?? "@" + u.Login))));
+            account.Children.Add(Row(L.T("Settings_Service", "Service"), Ui.Text(app.Provider.Title(), 12, "muted")));
+            if (app.Provider.IsGitHub()) account.Children.Add(Row(L.T("Settings_Scopes", "Token scopes"), Ui.Text(app.Scopes.Count == 0 ? "fine-grained / unknown" : string.Join(", ", app.Scopes), 12, "muted", wrap: true)));
             var buttons = Ui.H(8);
-            if (GhCli.Binary is not null) buttons.Children.Add(Ui.Button(L.T("Settings_RefreshFromGh", "Refresh token from gh"), () => app.RefreshTokenFromGh().Forget()));
+            if (app.Provider.IsGitHub() && app.GitAccount is not null && GhCli.Binary is not null) buttons.Children.Add(Ui.Button(L.T("Settings_RefreshFromGh", "Refresh token from gh"), () => app.RefreshTokenFromGh().Forget()));
+            buttons.Children.Add(Ui.Button(L.T("Accounts_Add", "Add Account…"), () =>
+            {
+                CloseOpenDialog();
+                AccountDialogs.Add(App.MainWindow?.Content?.XamlRoot).Forget();
+            }));
             buttons.Children.Add(Ui.Button(L.T("Settings_SignOut", "Sign out"), () =>
             {
-                app.Logout();
                 CloseOpenDialog();
+                AccountDialogs.ConfirmSignOut(App.MainWindow?.Content?.XamlRoot).Forget();
             }));
             account.Children.Add(buttons);
+            if (app.GitAccount is { } signedIn) account.Children.Add(LockSettings(app, signedIn));
         }
         else
         {
@@ -168,7 +175,7 @@ public static class SettingsDialog
         tray.Toggled += (_, _) => Settings.Shared.Set(Keys.CloseToTray, tray.IsOn);
         panel.Children.Add(Group(L.T("Settings_Refresh", "Refresh"), "", "green", Row(L.T("Settings_AutoRefresh", "Auto-refresh pull requests"), poll), Row(L.T("Settings_CloseToTray", "Keep running in the notification area when the window is closed"), tray)));
 
-        panel.Children.Add(Group(L.T("Section_Claude", "Claude Code"), "", "coral", ClaudeSettings(app)));
+        if (app.Phase == Phase.LoggedIn) panel.Children.Add(Group(L.T("Section_Claude", "Claude Code"), "", "coral", ClaudeSettings(app)));
 
         var auto = new ToggleSwitch { IsOn = UpdaterViewModel.AutoCheck, OnContent = "", OffContent = "" };
         auto.Toggled += (_, _) => UpdaterViewModel.AutoCheck = auto.IsOn;
@@ -214,11 +221,51 @@ public static class SettingsDialog
 
     private static void CloseOpenDialog() => openDialog?.Hide();
 
+    private static FrameworkElement LockSettings(AppViewModel app, GitAccount account)
+    {
+        var panel = Ui.V(6);
+        var protectedNow = app.Lock.IsProtected(account.Id);
+        var pin = new ToggleSwitch { IsOn = protectedNow, OnContent = "", OffContent = "" };
+        pin.Toggled += (_, _) =>
+        {
+            if (pin.IsOn == app.Lock.IsProtected(account.Id)) return;
+            var root = App.MainWindow?.Content?.XamlRoot;
+            CloseOpenDialog();
+            if (pin.IsOn) LockDialogs.SetPin(root, account).Forget();
+            else TurnOffPin(root, account).Forget();
+        };
+        panel.Children.Add(Row(L.T("Lock_RequirePin", "Require PIN for this account"), pin));
+        if (protectedNow && WindowsHello.Available)
+        {
+            var hello = new ToggleSwitch { IsOn = app.Lock.HelloEnabled(account.Id), OnContent = "", OffContent = "" };
+            hello.Toggled += async (_, _) =>
+            {
+                if (hello.IsOn == app.Lock.HelloEnabled(account.Id)) return;
+                if (hello.IsOn && !await WindowsHello.Verify(L.F("Lock_HelloEnableReason", "Turn on Windows Hello for {0}", account.Subtitle)))
+                {
+                    hello.IsOn = false;
+                    return;
+                }
+                app.Lock.SetHello(hello.IsOn, account.Id);
+            };
+            panel.Children.Add(Row(L.T("Lock_UnlockWithHello", "Unlock with Windows Hello"), hello));
+            panel.Children.Add(Ui.Text(L.T("Lock_HelloNote", "Windows Hello accepts anyone who can unlock this Windows account, with their face, fingerprint or Windows PIN. Turn it off if other people can sign in to this PC."), 12, "muted", wrap: true));
+        }
+        return panel;
+    }
+
+    private static async Task TurnOffPin(XamlRoot? root, GitAccount account)
+    {
+        var app = AppViewModel.Shared;
+        var outcome = await LockDialogs.Unlock(root, account, L.T("Lock_EnterPinToTurnOff", "Enter the PIN to turn it off"));
+        if (outcome == UnlockOutcome.Unlocked) app.Lock.RemoveLock(account.Id);
+    }
+
     private static FrameworkElement ClaudeSettings(AppViewModel app)
     {
         var panel = Ui.V(8);
         var profiles = new ComboBox { MinWidth = 240 };
-        foreach (var p in ClaudeProfiles.Shared.Profiles) profiles.Items.Add(new ComboBoxItem { Content = p.MenuTitle, Tag = p.Id });
+        foreach (var p in ClaudeProfiles.Shared.Visible) profiles.Items.Add(new ComboBoxItem { Content = p.MenuTitle, Tag = p.Id });
         profiles.SelectedItem = profiles.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == ClaudeProfiles.Shared.ActiveId);
         profiles.SelectionChanged += (_, _) =>
         {

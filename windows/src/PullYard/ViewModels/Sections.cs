@@ -1,3 +1,5 @@
+using PullYard.Core.Auth;
+using PullYard.Core.Forges;
 using PullYard.Core.Util;
 using PullYard.Services;
 
@@ -129,5 +131,99 @@ public static class StateFilters
         StateFilter.Open => L.T("State_Open", "Open"),
         StateFilter.Closed => L.T("State_Closed", "Closed"),
         _ => L.T("State_All", "All")
+    };
+}
+
+public static class ProviderText
+{
+    public static ForgeFilter Forge(this PRFilter f) => f switch
+    {
+        PRFilter.ReviewRequested => ForgeFilter.ReviewRequested,
+        PRFilter.Mine => ForgeFilter.Mine,
+        PRFilter.Assigned => ForgeFilter.Assigned,
+        PRFilter.Mentioned => ForgeFilter.Mentioned,
+        _ => ForgeFilter.Reviewed
+    };
+
+    public static PRFilter Filter(this ForgeFilter f) => f switch
+    {
+        ForgeFilter.ReviewRequested => PRFilter.ReviewRequested,
+        ForgeFilter.Mine => PRFilter.Mine,
+        ForgeFilter.Assigned => PRFilter.Assigned,
+        ForgeFilter.Mentioned => PRFilter.Mentioned,
+        _ => PRFilter.Reviewed
+    };
+
+    public static ForgeState Forge(this StateFilter s) => s switch
+    {
+        StateFilter.Open => ForgeState.Open,
+        StateFilter.Closed => ForgeState.Closed,
+        _ => ForgeState.All
+    };
+
+    public static ForgeIssueFilter Forge(this IssueFilter f) => f switch
+    {
+        IssueFilter.Assigned => ForgeIssueFilter.Assigned,
+        IssueFilter.Mine => ForgeIssueFilter.Mine,
+        _ => ForgeIssueFilter.Mentioned
+    };
+
+    public static IssueFilter Filter(this ForgeIssueFilter f) => f switch
+    {
+        ForgeIssueFilter.Assigned => IssueFilter.Assigned,
+        ForgeIssueFilter.Mine => IssueFilter.Mine,
+        _ => IssueFilter.Mentioned
+    };
+
+    public static string RepositoriesTitle(this GitProvider p) => p == GitProvider.GitLab ? L.T("Provider_Projects", "Projects") : L.T("Section_Repositories", "Repositories");
+
+    public static string ByProjectTitle(this GitProvider p) => p.UsesMergeRequests() ? L.T("Provider_MyMrsByProject", "My MRs by project") : L.T("Section_MyPrsByProject", "My PRs by project");
+
+    public static string Title(this ForgeInbox inbox) => inbox == ForgeInbox.ToDoList ? L.T("Provider_ToDoList", "To-Do List") : L.T("Section_Notifications", "Notifications");
+
+    public static string ForgeTitle(this Section s, GitProvider provider, ForgeInbox inbox) => s.Kind switch
+    {
+        SectionKind.MyPrsByRepo => provider.ByProjectTitle(),
+        SectionKind.Repos => provider.RepositoriesTitle(),
+        SectionKind.Notifications => inbox.Title(),
+        _ => s.Title
+    };
+
+    public static string RequestsTitle(this GitProvider p) => p.UsesMergeRequests() ? L.T("Provider_MergeRequests", "Merge requests") : L.T("Nav_PullRequests", "Pull requests");
+
+    public static string RequestTitle(this GitProvider p) => p.UsesMergeRequests() ? L.T("Provider_MergeRequest", "merge request") : L.T("Provider_PullRequest", "pull request");
+
+    public static string RequestShort(this GitProvider p) => p.UsesMergeRequests() ? L.T("Provider_MR", "MR") : L.T("Provider_PR", "PR");
+
+    public static string TokenTitle(this GitProvider p) => p == GitProvider.Bitbucket ? L.T("Login_ApiTokenTitle", "API token") : L.T("Login_PatTitle", "Personal Access Token");
+
+    public static string TokenHint(this GitProvider p) => p switch
+    {
+        GitProvider.GitHub or GitProvider.GitHubEnterprise => L.T("Login_PatBody", "Required scopes: repo, read:org, read:project, project, notifications, workflow."),
+        GitProvider.GitLab => L.T("Login_GitLabTokenBody", "Required scope: api (or read_api for read-only)."),
+        GitProvider.Bitbucket => L.T("Login_BitbucketTokenBody", "Use your Atlassian account email and an API token with Bitbucket read scopes for account, repositories and pull requests."),
+        _ => L.T("Login_GiteaTokenBody", "Required permissions: read for user, repository and issue.")
+    };
+
+    public static string DeviceHelp(this GitProvider p) => p == GitProvider.GitLab
+        ? L.T("Login_GitLabDeviceBody", "Requires GitLab 17.1 or later and the Application ID of your own OAuth application (User settings → Applications): not confidential, scope api, “Device authorization grant” enabled.")
+        : L.T("Login_DeviceBody", "Requires the Client ID of your own OAuth App (Settings → Developer settings → OAuth Apps, enable “Enable Device Flow”).");
+
+    public static string Glyph(this GitProvider p) => p switch
+    {
+        GitProvider.GitHub => "",
+        GitProvider.GitHubEnterprise => "",
+        GitProvider.GitLab => "",
+        GitProvider.Bitbucket => "",
+        _ => ""
+    };
+
+    public static string ColorKey(this GitProvider p) => p switch
+    {
+        GitProvider.GitHub => "violet",
+        GitProvider.GitHubEnterprise => "indigo",
+        GitProvider.GitLab => "coral",
+        GitProvider.Bitbucket => "sky",
+        _ => "green"
     };
 }

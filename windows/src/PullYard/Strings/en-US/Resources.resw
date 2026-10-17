@@ -4,6 +4,20 @@
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Accounts_Add" xml:space="preserve"><value>Add Account…</value></data>
+  <data name="Accounts_AddTitle" xml:space="preserve"><value>Add account</value></data>
+  <data name="Accounts_Expired" xml:space="preserve"><value>Sign-in for {0} has expired. Sign in again to use this account.</value></data>
+  <data name="Accounts_SignOut" xml:space="preserve"><value>Sign Out…</value></data>
+  <data name="Accounts_SignOutBody" xml:space="preserve"><value>The account is removed from {0}, and the Claude Code accounts linked to it are signed out. Other accounts and their Claude Code sign-ins are not affected.</value></data>
+  <data name="Accounts_SignOutButton" xml:space="preserve"><value>Sign Out</value></data>
+  <data name="Accounts_SignOutTitle" xml:space="preserve"><value>Sign out of {0}?</value></data>
+  <data name="Accounts_Switch" xml:space="preserve"><value>Switch account</value></data>
+  <data name="Accounts_SwitchBody" xml:space="preserve"><value>Running Claude sessions stop. Their history stays, and this account's Claude Code sign-in is kept for when you switch back.</value></data>
+  <data name="Accounts_SwitchButton" xml:space="preserve"><value>Switch</value></data>
+  <data name="Accounts_SwitchFailed" xml:space="preserve"><value>Couldn't switch account</value></data>
+  <data name="Accounts_SwitchTitle" xml:space="preserve"><value>Switch to {0}?</value></data>
+  <data name="Accounts_ThisAccount" xml:space="preserve"><value>this account</value></data>
+  <data name="Accounts_Title" xml:space="preserve"><value>Accounts</value></data>
   <data name="App_Tagline" xml:space="preserve"><value>Pull requests, without the browser</value></data>
   <data name="Board_All" xml:space="preserve"><value>All</value></data>
   <data name="Board_Draft" xml:space="preserve"><value>Draft</value></data>
@@ -244,6 +258,18 @@
   <data name="Fix_ReplyResolve" xml:space="preserve"><value>Reply &amp; resolve threads</value></data>
   <data name="Fix_Reset" xml:space="preserve"><value>Reset</value></data>
   <data name="Fix_Unresolved" xml:space="preserve"><value>Unresolved comments</value></data>
+  <data name="Forge_AllDone" xml:space="preserve"><value>All done</value></data>
+  <data name="Forge_CopyName" xml:space="preserve"><value>Copy Name</value></data>
+  <data name="Forge_FilterRepos" xml:space="preserve"><value>Filter {0}</value></data>
+  <data name="Forge_Into" xml:space="preserve"><value>into {0}</value></data>
+  <data name="Forge_LaterNote" xml:space="preserve"><value>Changed files, comments and review for {0} are coming in a later version. Open the {1} in the browser to review it.</value></data>
+  <data name="Forge_MarkDone" xml:space="preserve"><value>Mark as done</value></data>
+  <data name="Forge_MarkDoneFailed" xml:space="preserve"><value>Couldn't mark as done</value></data>
+  <data name="Forge_OpenedUpdated" xml:space="preserve"><value>opened {0} · updated {1}</value></data>
+  <data name="Forge_SearchPlaceholder" xml:space="preserve"><value>Filter: title, repository, author</value></data>
+  <data name="Forge_Select" xml:space="preserve"><value>Select a {0}</value></data>
+  <data name="Forge_Unavailable" xml:space="preserve"><value>Not available for {0} yet</value></data>
+  <data name="Forge_Updated" xml:space="preserve"><value>updated {0}</value></data>
   <data name="Html_WebViewMissing" xml:space="preserve"><value>Couldn't start the HTML view: {0}. Install the Microsoft Edge WebView2 Runtime.</value></data>
   <data name="Inline_AddToReview" xml:space="preserve"><value>Add to review</value></data>
   <data name="Inline_Help" xml:space="preserve"><value>“Add to review” saves the comment as pending and submits it with the review</value></data>
@@ -268,27 +294,77 @@
   <data name="Issue_Close" xml:space="preserve"><value>Close issue</value></data>
   <data name="Issue_Reopen" xml:space="preserve"><value>Reopen issue</value></data>
   <data name="Item_StackedOn" xml:space="preserve"><value>stacked on {0}</value></data>
+  <data name="Lock_Blocked" xml:space="preserve"><value>Too many wrong PINs. Reset the PIN to continue. This also signs out the Claude Code accounts linked to this account.</value></data>
+  <data name="Lock_EnterPin" xml:space="preserve"><value>Enter PIN</value></data>
+  <data name="Lock_EnterPinToTurnOff" xml:space="preserve"><value>Enter the PIN to turn it off</value></data>
+  <data name="Lock_ForgotPin" xml:space="preserve"><value>Forgot PIN?</value></data>
+  <data name="Lock_HelloEnableReason" xml:space="preserve"><value>Turn on Windows Hello for {0}</value></data>
+  <data name="Lock_HelloNote" xml:space="preserve"><value>Windows Hello accepts anyone who can unlock this Windows account, with their face, fingerprint or Windows PIN. Turn it off if other people can sign in to this PC.</value></data>
+  <data name="Lock_HelloReason" xml:space="preserve"><value>Unlock {0} in {1}</value></data>
+  <data name="Lock_HelloResetReason" xml:space="preserve"><value>Reset the PIN for {0}</value></data>
+  <data name="Lock_NewPin" xml:space="preserve"><value>New PIN</value></data>
+  <data name="Lock_Pin" xml:space="preserve"><value>PIN</value></data>
+  <data name="Lock_PinFormat" xml:space="preserve"><value>Use 4 to 6 digits.</value></data>
+  <data name="Lock_PinMismatch" xml:space="preserve"><value>The PINs don't match.</value></data>
+  <data name="Lock_RepeatPin" xml:space="preserve"><value>Repeat PIN</value></data>
+  <data name="Lock_RequirePin" xml:space="preserve"><value>Require PIN for this account</value></data>
+  <data name="Lock_ResetButton" xml:space="preserve"><value>Remove PIN and Sign Out</value></data>
+  <data name="Lock_ResetHelloButton" xml:space="preserve"><value>Reset PIN with Windows Hello</value></data>
+  <data name="Lock_ResetWithHello" xml:space="preserve"><value>Verify with Windows Hello to remove the PIN. The Claude Code accounts linked to this account are signed out.</value></data>
+  <data name="Lock_ResetWithoutHello" xml:space="preserve"><value>Removing the PIN also signs out of this account and of the Claude Code accounts linked to it. You'll sign in again with a token or the CLI.</value></data>
+  <data name="Lock_SetPinBody" xml:space="preserve"><value>{0} asks for the PIN when it starts with this account and when someone switches to it. Use 4 to 6 digits.</value></data>
+  <data name="Lock_SetPinButton" xml:space="preserve"><value>Set PIN</value></data>
+  <data name="Lock_SetPinTitle" xml:space="preserve"><value>Protect {0} with a PIN</value></data>
+  <data name="Lock_TryAgainIn" xml:space="preserve"><value>Try again in {0} s</value></data>
+  <data name="Lock_Unlock" xml:space="preserve"><value>Unlock</value></data>
+  <data name="Lock_UnlockWithHello" xml:space="preserve"><value>Unlock with Windows Hello</value></data>
+  <data name="Lock_UseAnotherAccount" xml:space="preserve"><value>Use another account</value></data>
+  <data name="Lock_UseHello" xml:space="preserve"><value>Use Windows Hello</value></data>
+  <data name="Lock_Wrong" xml:space="preserve"><value>Wrong PIN.</value></data>
+  <data name="Lock_WrongLeft" xml:space="preserve"><value>Wrong PIN. {0} attempts left before a pause.</value></data>
+  <data name="Lock_WrongOneLeft" xml:space="preserve"><value>Wrong PIN. 1 attempt left before a pause.</value></data>
   <data name="Log_Copy" xml:space="preserve"><value>Copy</value></data>
   <data name="Log_ErrorsOnly" xml:space="preserve"><value>Errors only</value></data>
+  <data name="Login_ApiTokenTitle" xml:space="preserve"><value>API token</value></data>
+  <data name="Login_ApplicationId" xml:space="preserve"><value>Application ID</value></data>
+  <data name="Login_BitbucketEmail" xml:space="preserve"><value>Atlassian account email</value></data>
+  <data name="Login_BitbucketTokenBody" xml:space="preserve"><value>Use your Atlassian account email and an API token with Bitbucket read scopes for account, repositories and pull requests.</value></data>
   <data name="Login_ClientId" xml:space="preserve"><value>Client ID</value></data>
+  <data name="Login_Continue" xml:space="preserve"><value>Continue</value></data>
   <data name="Login_CopyAndOpen" xml:space="preserve"><value>Copy and open</value></data>
-  <data name="Login_CreateToken" xml:space="preserve"><value>Create a token on github.com</value></data>
+  <data name="Login_CreateAtlassianToken" xml:space="preserve"><value>Create an API token at id.atlassian.com</value></data>
+  <data name="Login_CreateTokenOn" xml:space="preserve"><value>Create a token on {0}</value></data>
   <data name="Login_DeviceBody" xml:space="preserve"><value>Requires the Client ID of your own OAuth App (Settings → Developer settings → OAuth Apps, enable “Enable Device Flow”).</value></data>
-  <data name="Login_DeviceHint" xml:space="preserve"><value>Enter the code at github.com/login/device — you'll be signed in automatically.</value></data>
+  <data name="Login_DeviceHintAt" xml:space="preserve"><value>Enter the code at {0} — you'll be signed in automatically.</value></data>
   <data name="Login_DeviceTitle" xml:space="preserve"><value>Sign in via browser (OAuth Device Flow)</value></data>
+  <data name="Login_EnterEmail" xml:space="preserve"><value>Enter your Atlassian account email</value></data>
+  <data name="Login_EnterServer" xml:space="preserve"><value>Enter the server address</value></data>
   <data name="Login_GetCode" xml:space="preserve"><value>Get code</value></data>
   <data name="Login_GhBody" xml:space="preserve"><value>Use the token you're signed in with in gh.</value></data>
   <data name="Login_GhTitle" xml:space="preserve"><value>GitHub CLI</value></data>
+  <data name="Login_GitLabDeviceBody" xml:space="preserve"><value>Requires GitLab 17.1 or later and the Application ID of your own OAuth application (User settings → Applications): not confidential, scope api, “Device authorization grant” enabled.</value></data>
+  <data name="Login_GitLabHostPlaceholder" xml:space="preserve"><value>gitlab.com or gitlab.example.com</value></data>
+  <data name="Login_GitLabTokenBody" xml:space="preserve"><value>Required scope: api (or read_api for read-only).</value></data>
+  <data name="Login_GiteaHostPlaceholder" xml:space="preserve"><value>codeberg.org or git.example.com</value></data>
+  <data name="Login_GiteaTokenBody" xml:space="preserve"><value>Required permissions: read for user, repository and issue.</value></data>
+  <data name="Login_GlabBody" xml:space="preserve"><value>Use the token you're signed in with in glab.</value></data>
+  <data name="Login_GlabTitle" xml:space="preserve"><value>GitLab CLI</value></data>
   <data name="Login_PatBody" xml:space="preserve"><value>Required scopes: repo, read:org, read:project, project, notifications, workflow.</value></data>
   <data name="Login_PatTitle" xml:space="preserve"><value>Personal Access Token</value></data>
+  <data name="Login_ServerTitle" xml:space="preserve"><value>{0} server</value></data>
   <data name="Login_SignIn" xml:space="preserve"><value>Sign in</value></data>
+  <data name="Login_SignInAgain" xml:space="preserve"><value>Sign in again</value></data>
   <data name="Login_SignInWithGh" xml:space="preserve"><value>Sign in with gh</value></data>
+  <data name="Login_SignInWithGlab" xml:space="preserve"><value>Sign in with glab</value></data>
   <data name="Login_Subtitle" xml:space="preserve"><value>Fast PR browsing without a browser</value></data>
+  <data name="Login_YourAccounts" xml:space="preserve"><value>Your accounts</value></data>
+  <data name="Login_YourServer" xml:space="preserve"><value>your server</value></data>
   <data name="Menu_CheckForUpdates" xml:space="preserve"><value>Check for Updates…</value></data>
   <data name="Menu_CopyCheckout" xml:space="preserve"><value>Copy “gh pr checkout”</value></data>
   <data name="Menu_CopyLink" xml:space="preserve"><value>Copy Link</value></data>
   <data name="Menu_CopyShortLink" xml:space="preserve"><value>Copy Short Link</value></data>
   <data name="Menu_CopyShortLinkHint" xml:space="preserve"><value>Copy short link (Ctrl+Shift+C)</value></data>
+  <data name="Menu_CopyTargetBranch" xml:space="preserve"><value>Copy Target Branch</value></data>
   <data name="Menu_OpenInBrowser" xml:space="preserve"><value>Open in Browser</value></data>
   <data name="Merge_AutoEnabled" xml:space="preserve"><value>auto-merge enabled</value></data>
   <data name="Merge_Behind" xml:space="preserve"><value>Branch is behind {0}</value></data>
@@ -377,6 +453,14 @@
   <data name="Projects_RefreshToken" xml:space="preserve"><value>Refresh Token from gh</value></data>
   <data name="Projects_ScopeHelp" xml:space="preserve"><value>Run this in a terminal, then click “Refresh Token”:</value></data>
   <data name="Projects_ShowClosed" xml:space="preserve"><value>Show closed</value></data>
+  <data name="Provider_MR" xml:space="preserve"><value>MR</value></data>
+  <data name="Provider_MergeRequest" xml:space="preserve"><value>merge request</value></data>
+  <data name="Provider_MergeRequests" xml:space="preserve"><value>Merge requests</value></data>
+  <data name="Provider_MyMrsByProject" xml:space="preserve"><value>My MRs by project</value></data>
+  <data name="Provider_PR" xml:space="preserve"><value>PR</value></data>
+  <data name="Provider_Projects" xml:space="preserve"><value>Projects</value></data>
+  <data name="Provider_PullRequest" xml:space="preserve"><value>pull request</value></data>
+  <data name="Provider_ToDoList" xml:space="preserve"><value>To-Do List</value></data>
   <data name="RateLimit_Hint" xml:space="preserve"><value>GitHub rate limit reached. Live polling is paused; manual refresh still works.</value></data>
   <data name="RateLimit_Paused" xml:space="preserve"><value>Rate limited — live updates resume at {0}</value></data>
   <data name="ReReview_Other" xml:space="preserve"><value>Other…</value></data>
@@ -453,6 +537,7 @@
   <data name="Settings_Refresh" xml:space="preserve"><value>Refresh</value></data>
   <data name="Settings_RefreshFromGh" xml:space="preserve"><value>Refresh token from gh</value></data>
   <data name="Settings_Scopes" xml:space="preserve"><value>Token scopes</value></data>
+  <data name="Settings_Service" xml:space="preserve"><value>Service</value></data>
   <data name="Settings_SignOut" xml:space="preserve"><value>Sign out</value></data>
   <data name="Settings_System" xml:space="preserve"><value>System</value></data>
   <data name="Settings_SystemDefault" xml:space="preserve"><value>System default</value></data>
@@ -469,7 +554,9 @@
   <data name="Terminal_Ended" xml:space="preserve"><value>Session ended</value></data>
   <data name="Terminal_Resume" xml:space="preserve"><value>Resume session</value></data>
   <data name="Terminal_Sleeping" xml:space="preserve"><value>Session is sleeping — memory freed</value></data>
+  <data name="Toast_CopiedLink" xml:space="preserve"><value>Copied link</value></data>
   <data name="Toast_CopiedShortLink" xml:space="preserve"><value>Copied {0}</value></data>
+  <data name="Tray_MyOpenMRs" xml:space="preserve"><value>My open MRs</value></data>
   <data name="Tray_MyOpenPRs" xml:space="preserve"><value>My open PRs</value></data>
   <data name="Tray_Open" xml:space="preserve"><value>Open {0}</value></data>
   <data name="Tray_Pizza" xml:space="preserve"><value>Buy Me a Pizza…</value></data>

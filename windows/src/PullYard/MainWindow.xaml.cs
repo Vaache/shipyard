@@ -71,12 +71,18 @@ public sealed partial class MainWindow : Window
     {
         if (splashHold || model.Phase == Phase.Checking)
         {
+            if (!splashHold) shownPhase = null;
             if (Host.Content is not SplashView) Host.Content = new SplashView();
             return;
         }
         if (shownPhase == model.Phase) return;
         shownPhase = model.Phase;
-        UIElement next = model.Phase == Phase.LoggedOut ? new LoginView() : new ShellView();
+        UIElement next = model.Phase switch
+        {
+            Phase.Locked when model.LockedAccount is { } locked => new LockScreen(locked),
+            Phase.LoggedIn => new ShellView(),
+            _ => new LoginView()
+        };
         next.Transitions = new TransitionCollection { new EntranceThemeTransition { FromVerticalOffset = 12 } };
         Host.Content = next;
         SubtitleText.Text = "";

@@ -47,15 +47,25 @@ public sealed partial class GitHubApi
 
     public string Token { get; }
 
+    public string Host { get; }
+
+    private readonly string apiBase;
+    private readonly string apiHost;
+    private readonly string graphQLUrl;
+
     public RateLimitPause RateLimit { get; } = new();
 
-    public GitHubApi(string token) : this(token, SharedHttp, SharedNoRedirectHttp)
+    public GitHubApi(string token, string host = Auth.GitProviders.GitHubHost) : this(token, SharedHttp, SharedNoRedirectHttp, host)
     {
     }
 
-    internal GitHubApi(string token, HttpClient http, HttpClient? noRedirectHttp = null)
+    internal GitHubApi(string token, HttpClient http, HttpClient? noRedirectHttp = null, string host = Auth.GitProviders.GitHubHost)
     {
         Token = token;
+        Host = host;
+        apiBase = host == Auth.GitProviders.GitHubHost ? "https://api.github.com" : $"https://{host}/api/v3";
+        apiHost = new Uri(apiBase).Host;
+        graphQLUrl = host == Auth.GitProviders.GitHubHost ? "https://api.github.com/graphql" : $"https://{host}/api/graphql";
         this.http = http;
         this.noRedirectHttp = noRedirectHttp ?? http;
     }
@@ -108,7 +118,7 @@ public sealed partial class GitHubApi
     private HttpRequestMessage Request(HttpMethod method, string url, string accept = "application/vnd.github+json", bool noCache = true)
     {
         var req = new HttpRequestMessage(method, url);
-        if (Uri.TryCreate(url, UriKind.Absolute, out var target) && target.Scheme == Uri.UriSchemeHttps && target.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase))
+        if (Uri.TryCreate(url, UriKind.Absolute, out var target) && target.Scheme == Uri.UriSchemeHttps && target.Host.Equals(apiHost, StringComparison.OrdinalIgnoreCase))
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
         req.Headers.Accept.ParseAdd(accept);
         req.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
@@ -117,7 +127,7 @@ public sealed partial class GitHubApi
         return req;
     }
 
-    private static string Url(string path) => path.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? path : "https://api.github.com" + path;
+    private string Url(string path) => path.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? path : apiBase + path;
 
     private static async Task Check(HttpResponseMessage response, byte[] data)
     {
@@ -170,7 +180,7 @@ public sealed partial class GitHubApi
         var payload = new JsonObject { ["query"] = query, ["variables"] = vars }.ToJsonString();
         HttpRequestMessage Make()
         {
-            var req = Request(HttpMethod.Post, "https://api.github.com/graphql");
+            var req = Request(HttpMethod.Post, graphQLUrl);
             req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
             return req;
         }

@@ -11,7 +11,7 @@ Download from the [latest release](https://github.com/pullyard/pullyard/releases
 
 The builds are not code-signed yet, so SmartScreen may warn on first launch: click **More info → Run anyway**.
 
-**Requirements:** Windows 10 1809 or later (Windows 11 recommended for Mica), the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11). Optional: [GitHub CLI](https://cli.github.com) for one-click sign-in, [Claude Code](https://docs.claude.com/en/docs/claude-code) for the Claude workspace, Git for Windows for the workspace's change view.
+**Requirements:** Windows 10 1809 or later (Windows 11 recommended for Mica), the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11). Optional: [GitHub CLI](https://cli.github.com) or [GitLab CLI](https://gitlab.com/gitlab-org/cli) for one-click sign-in, [Claude Code](https://docs.claude.com/en/docs/claude-code) for the Claude workspace, Git for Windows for the workspace's change view.
 
 Installed copies update themselves: PullYard checks the latest GitHub release every 6 hours, downloads the installer for your architecture and restarts into the new version. The portable build opens the release page instead.
 
@@ -32,6 +32,8 @@ Everything from the macOS app, adapted to Windows:
 | Native Claude chat | Same `stream-json` protocol; the transcript renders in WebView2 (markdown via bundled marked), composer is native with `/` and `@` completion, image paste and drag & drop |
 | User notifications | `AppNotificationManager` |
 | Pull to refresh | `RefreshContainer` + Ctrl+R / F5 |
+
+Accounts: sign in with GitHub, GitHub Enterprise Server, GitLab (gitlab.com or self-managed; glab token, personal access token or OAuth Device Flow), Bitbucket Cloud (Atlassian account email + API token) or Gitea / Forgejo (access token). Add several accounts and switch between them from the sidebar footer; each account keeps its own Claude Code accounts: switching stops the running Claude sessions and activates that account's Claude sign-in, signing out signs out only the Claude Code accounts linked to it. For GitLab, Bitbucket and Gitea the sidebar shows only what the service supports: GitLab's To-Do List, merge requests (Reviewed by me when the server allows it), issues and projects; Bitbucket's review requests, created and reviewed pull requests and repositories; Gitea / Forgejo's notifications, all pull request filters, issues and repositories. Details open in the browser. Each account can require a 4–6 digit PIN at launch and when switching to it (Settings → Account), optionally unlocked with Windows Hello; the PIN itself is never stored, only a salted PBKDF2 hash in Credential Manager.
 
 Keyboard: Ctrl+R refresh, Ctrl+L open by link, Ctrl+1…6 sections, Ctrl+Shift+1…4 PR tabs, Ctrl+P go to file in a repository, Ctrl+Alt+B toggle blame in the file viewer, Ctrl+Shift+C copy the open pull request or issue as `owner/repo#123`, Ctrl+, settings, Alt+Left back, Ctrl+Enter send a comment, Enter send in Claude chat (Shift+Enter for a new line), Shift+Tab cycle the Claude permission mode.
 
@@ -77,7 +79,7 @@ iscc /DArch=x64 /DAppVersion=2.5.0 /DSourceDir=$PWD\windows\dist\x64\app /DOutpu
 
 The product name (PullYard), app ID (`PullYard.PullYard`), executable name, URL scheme (`pullyard://`), environment variable prefix (`PULLYARD_`) and GitHub owner/repo (`pullyard/pullyard`) live in one file, `windows/Branding.props` (`Brand*` properties). The C# code reads them at runtime from assembly metadata (`PullYard.Core.AppInfo`), the CI passes them to the installer, and the updater uses them for the release URL and asset names. After a rename, also update the text in this README.
 
-Settings, the token and WebView2 data are stored under the display name (`%LOCALAPPDATA%\<name>`, credential `<AppId>:github-token`), so a rename starts with a fresh profile.
+Settings, the tokens and WebView2 data are stored under the display name (`%LOCALAPPDATA%\<name>`, credentials `<name>:github-token` and `<name>:account-<id>` per added account), so a rename starts with a fresh profile.
 
 ## Layout
 

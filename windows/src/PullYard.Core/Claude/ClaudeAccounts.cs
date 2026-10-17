@@ -14,6 +14,7 @@ public sealed class ClaudeProfile
     public string? ConfigDir { get; set; }
     public string? Email { get; set; }
     public string? Plan { get; set; }
+    public string? Owner { get; set; }
 
     public bool IsDefault => ConfigDir is null;
     public string Initial => (Label.Length > 0 ? Label : Email ?? "C")[..1].ToUpperInvariant();
@@ -29,19 +30,75 @@ public sealed partial class ClaudeProfiles : ObservableObject
 
     [ObservableProperty] private List<ClaudeProfile> profiles;
     [ObservableProperty] private string activeId;
+    [ObservableProperty] private string? scope;
 
-    private ClaudeProfiles()
+    private readonly Settings settings;
+    private readonly string baseDir;
+    private Dictionary<string, string> activeByOwner;
+
+    private ClaudeProfiles() : this(Settings.Shared, Path.Combine(AppInfo.DataDirectory, "ClaudeAccounts"))
     {
-        var list = Settings.Shared.GetObject<List<ClaudeProfile>>(Keys.ClaudeProfiles) ?? new();
+    }
+
+    internal ClaudeProfiles(Settings settings, string baseDir)
+    {
+        this.settings = settings;
+        this.baseDir = baseDir;
+        var list = settings.GetObject<List<ClaudeProfile>>(Keys.ClaudeProfiles) ?? new();
         if (!list.Any(p => p.Id == DefaultId)) list.Insert(0, new ClaudeProfile { Id = DefaultId, Label = "Main" });
         profiles = list;
-        var saved = Settings.Shared.GetString(Keys.ClaudeActiveProfile) ?? DefaultId;
+        var saved = settings.GetString(Keys.ClaudeActiveProfile) ?? DefaultId;
         activeId = list.Any(p => p.Id == saved) ? saved : DefaultId;
+        activeByOwner = settings.GetObject<Dictionary<string, string>>(Keys.ClaudeActiveProfileByAccount) ?? new();
+    }
+
+    partial void OnScopeChanged(string? value) => OnPropertyChanged(nameof(Visible));
+
+    partial void OnProfilesChanged(List<ClaudeProfile> value) => OnPropertyChanged(nameof(Visible));
+
+    public List<ClaudeProfile> Visible => Scope is { } owner ? Profiles.Where(p => p.Owner == owner).ToList() : Profiles;
+
+    public bool OwnsMain => Visible.Any(p => p.IsDefault);
+
+    public List<ClaudeProfile> Owned(string owner) => Profiles.Where(p => p.Owner == owner).ToList();
+
+    public ClaudeProfile? Preferred(string owner)
+    {
+        var mine = Owned(owner);
+        return mine.FirstOrDefault(p => activeByOwner.TryGetValue(owner, out var id) && p.Id == id) ?? mine.FirstOrDefault(p => p.Id == ActiveId) ?? mine.FirstOrDefault();
+    }
+
+    public bool ClaimUnowned(string owner)
+    {
+        var claimed = false;
+        foreach (var p in Profiles.Where(p => p.Owner is null))
+        {
+            p.Owner = owner;
+            claimed = true;
+        }
+        if (!claimed) return false;
+        Profiles = Profiles.ToList();
+        Save();
+        return true;
+    }
+
+    public void Release(string id)
+    {
+        if (Profiles.FirstOrDefault(p => p.Id == id) is not { } p) return;
+        p.Owner = null;
+        p.Email = null;
+        p.Plan = null;
+        Forget(id);
+        Profiles = Profiles.ToList();
+        Save();
+    }
+
+    private void Forget(string id)
+    {
+        foreach (var key in activeByOwner.Where(kv => kv.Value == id).Select(kv => kv.Key).ToList()) activeByOwner.Remove(key);
     }
 
     public ClaudeProfile Active => Profiles.FirstOrDefault(p => p.Id == ActiveId) ?? Profiles[0];
-
-    public static string BaseDir => Path.Combine(AppInfo.DataDirectory, "ClaudeAccounts");
 
     public static string DefaultConfigDir
     {
@@ -58,8 +115,9 @@ public sealed partial class ClaudeProfiles : ObservableObject
 
     private void Save()
     {
-        Settings.Shared.Set(Keys.ClaudeProfiles, Profiles);
-        Settings.Shared.Set(Keys.ClaudeActiveProfile, ActiveId);
+        settings.Set(Keys.ClaudeProfiles, Profiles);
+        settings.Set(Keys.ClaudeActiveProfile, ActiveId);
+        settings.Set(Keys.ClaudeActiveProfileByAccount, activeByOwner);
         OnPropertyChanged(nameof(Active));
     }
 
@@ -73,10 +131,10 @@ public sealed partial class ClaudeProfiles : ObservableObject
         Save();
     }
 
-    public ClaudeProfile Add(string label, bool shareSettings)
+    public ClaudeProfile Add(string label, bool shareSettings, string? owner = null)
     {
         var id = Guid.NewGuid().ToString().ToLowerInvariant();
-        var dir = Path.Combine(BaseDir, id);
+        var dir = Path.Combine(baseDir, id);
         Directory.CreateDirectory(dir);
         if (shareSettings)
         {
@@ -115,7 +173,7 @@ public sealed partial class ClaudeProfiles : ObservableObject
             }
         }
         var name = label.Trim();
-        var profile = new ClaudeProfile { Id = id, Label = name.Length == 0 ? $"Account {Profiles.Count + 1}" : name, ConfigDir = dir };
+        var profile = new ClaudeProfile { Id = id, Label = name.Length == 0 ? $"Account {Profiles.Count + 1}" : name, ConfigDir = dir, Owner = owner ?? Scope };
         Profiles = Profiles.Append(profile).ToList();
         Save();
         return profile;
@@ -141,14 +199,16 @@ public sealed partial class ClaudeProfiles : ObservableObject
     {
         if (id == DefaultId) return;
         Profiles = Profiles.Where(p => p.Id != id).ToList();
+        Forget(id);
         if (ActiveId == id) ActiveId = DefaultId;
         Save();
     }
 
     public void SetActive(string id)
     {
-        if (!Profiles.Any(p => p.Id == id)) return;
+        if (Profiles.FirstOrDefault(p => p.Id == id) is not { } profile) return;
         ActiveId = id;
+        if (profile.Owner is { } owner) activeByOwner[owner] = id;
         Save();
     }
 }
@@ -335,6 +395,17 @@ public sealed partial class ClaudeAccountStore : ObservableObject
         if (ClaudeLauncher.Command is not { } cmd) return;
         var env = ClaudeLauncher.ProcessEnvironment(configDir ?? ClaudeProfiles.Shared.ActiveOverride);
         await Proc.Run(cmd.File, cmd.PrefixArgs.Concat(new[] { "auth", "logout" }), env: env, timeout: TimeSpan.FromSeconds(30));
+        await Refresh();
+    }
+
+    public async Task Logout(IReadOnlyCollection<ClaudeProfile> profiles)
+    {
+        if (profiles.Count == 0 || ClaudeLauncher.Command is not { } cmd) return;
+        foreach (var profile in profiles)
+        {
+            var env = ClaudeLauncher.ProcessEnvironment(profile.ConfigDir);
+            await Proc.Run(cmd.File, cmd.PrefixArgs.Concat(new[] { "auth", "logout" }), env: env, timeout: TimeSpan.FromSeconds(30));
+        }
         await Refresh();
     }
 }
