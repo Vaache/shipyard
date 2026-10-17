@@ -258,12 +258,18 @@
   <data name="Fix_ReplyResolve" xml:space="preserve"><value>Reply &amp; resolve threads</value></data>
   <data name="Fix_Reset" xml:space="preserve"><value>Reset</value></data>
   <data name="Fix_Unresolved" xml:space="preserve"><value>Unresolved comments</value></data>
+  <data name="Forge_AllDone" xml:space="preserve"><value>All done</value></data>
+  <data name="Forge_CopyName" xml:space="preserve"><value>Copy Name</value></data>
+  <data name="Forge_FilterRepos" xml:space="preserve"><value>Filter {0}</value></data>
   <data name="Forge_Into" xml:space="preserve"><value>into {0}</value></data>
   <data name="Forge_LaterNote" xml:space="preserve"><value>Changed files, comments and review for {0} are coming in a later version. Open the {1} in the browser to review it.</value></data>
+  <data name="Forge_MarkDone" xml:space="preserve"><value>Mark as done</value></data>
+  <data name="Forge_MarkDoneFailed" xml:space="preserve"><value>Couldn't mark as done</value></data>
   <data name="Forge_OpenedUpdated" xml:space="preserve"><value>opened {0} · updated {1}</value></data>
   <data name="Forge_SearchPlaceholder" xml:space="preserve"><value>Filter: title, repository, author</value></data>
   <data name="Forge_Select" xml:space="preserve"><value>Select a {0}</value></data>
   <data name="Forge_Unavailable" xml:space="preserve"><value>Not available for {0} yet</value></data>
+  <data name="Forge_Updated" xml:space="preserve"><value>updated {0}</value></data>
   <data name="Html_WebViewMissing" xml:space="preserve"><value>Couldn't start the HTML view: {0}. Install the Microsoft Edge WebView2 Runtime.</value></data>
   <data name="Inline_AddToReview" xml:space="preserve"><value>Add to review</value></data>
   <data name="Inline_Help" xml:space="preserve"><value>“Add to review” saves the comment as pending and submits it with the review</value></data>
@@ -421,8 +427,11 @@
   <data name="Provider_MR" xml:space="preserve"><value>MR</value></data>
   <data name="Provider_MergeRequest" xml:space="preserve"><value>merge request</value></data>
   <data name="Provider_MergeRequests" xml:space="preserve"><value>Merge requests</value></data>
+  <data name="Provider_MyMrsByProject" xml:space="preserve"><value>My MRs by project</value></data>
   <data name="Provider_PR" xml:space="preserve"><value>PR</value></data>
+  <data name="Provider_Projects" xml:space="preserve"><value>Projects</value></data>
   <data name="Provider_PullRequest" xml:space="preserve"><value>pull request</value></data>
+  <data name="Provider_ToDoList" xml:space="preserve"><value>To-Do List</value></data>
   <data name="RateLimit_Hint" xml:space="preserve"><value>GitHub rate limit reached. Live polling is paused; manual refresh still works.</value></data>
   <data name="RateLimit_Paused" xml:space="preserve"><value>Rate limited — live updates resume at {0}</value></data>
   <data name="ReReview_Other" xml:space="preserve"><value>Other…</value></data>

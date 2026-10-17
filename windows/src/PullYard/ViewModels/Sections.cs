@@ -1,4 +1,5 @@
 using PullYard.Core.Auth;
+using PullYard.Core.Forges;
 using PullYard.Core.Util;
 using PullYard.Services;
 
@@ -160,7 +161,33 @@ public static class ProviderText
         _ => ForgeState.All
     };
 
-    public static bool Supports(this GitProvider p, PRFilter f) => p.SupportedFilters().Contains(f.Forge());
+    public static ForgeIssueFilter Forge(this IssueFilter f) => f switch
+    {
+        IssueFilter.Assigned => ForgeIssueFilter.Assigned,
+        IssueFilter.Mine => ForgeIssueFilter.Mine,
+        _ => ForgeIssueFilter.Mentioned
+    };
+
+    public static IssueFilter Filter(this ForgeIssueFilter f) => f switch
+    {
+        ForgeIssueFilter.Assigned => IssueFilter.Assigned,
+        ForgeIssueFilter.Mine => IssueFilter.Mine,
+        _ => IssueFilter.Mentioned
+    };
+
+    public static string RepositoriesTitle(this GitProvider p) => p == GitProvider.GitLab ? L.T("Provider_Projects", "Projects") : L.T("Section_Repositories", "Repositories");
+
+    public static string ByProjectTitle(this GitProvider p) => p.UsesMergeRequests() ? L.T("Provider_MyMrsByProject", "My MRs by project") : L.T("Section_MyPrsByProject", "My PRs by project");
+
+    public static string Title(this ForgeInbox inbox) => inbox == ForgeInbox.ToDoList ? L.T("Provider_ToDoList", "To-Do List") : L.T("Section_Notifications", "Notifications");
+
+    public static string ForgeTitle(this Section s, GitProvider provider, ForgeInbox inbox) => s.Kind switch
+    {
+        SectionKind.MyPrsByRepo => provider.ByProjectTitle(),
+        SectionKind.Repos => provider.RepositoriesTitle(),
+        SectionKind.Notifications => inbox.Title(),
+        _ => s.Title
+    };
 
     public static string RequestsTitle(this GitProvider p) => p.UsesMergeRequests() ? L.T("Provider_MergeRequests", "Merge requests") : L.T("Nav_PullRequests", "Pull requests");
 

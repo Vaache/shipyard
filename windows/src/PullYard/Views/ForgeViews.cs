@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 using PullYard.Controls;
 using PullYard.Core.Api;
 using PullYard.Core.Auth;
+using PullYard.Core.Forges;
 using PullYard.Core.Util;
 using PullYard.Services;
 using PullYard.ViewModels;
@@ -13,16 +14,19 @@ namespace PullYard.Views;
 
 public sealed class ForgeListView : ListPane
 {
-    private readonly PRFilter filter;
+    private readonly Section kind;
+    private readonly bool grouped;
     private readonly ForgeListViewModel vm = new();
+    private readonly HashSet<string> collapsed = new();
     private StateFilter stateFilter = StateFilter.Open;
     private string text = "";
     private List<SearchItem> visible = new();
     private bool syncing;
 
-    public ForgeListView(PRFilter filter) : base(filter.Title(), "FeedRowTemplate")
+    public ForgeListView(Section kind, string title) : base(title, "FeedRowTemplate")
     {
-        this.filter = filter;
+        this.kind = kind;
+        grouped = kind.Kind == SectionKind.MyPrsByRepo;
         FilterRow.Children.Add(StateBar(stateFilter, f =>
         {
             stateFilter = f;
@@ -34,6 +38,7 @@ public sealed class ForgeListView : ListPane
             Render();
         }, 150));
         List.SelectionChanged += OnSelection;
+        List.ItemClick += OnItemClick;
         List.ContextRequested += OnContext;
         vm.PropertyChanged += OnVm;
         Model.PropertyChanged += OnModel;
@@ -51,7 +56,7 @@ public sealed class ForgeListView : ListPane
 
     protected override Task OnPullRefresh() => Reload(silent: true);
 
-    private Task Reload(bool silent = false) => vm.Load(Model.Forge, Model.GitAccount?.Id ?? "", filter, stateFilter, silent);
+    private Task Reload(bool silent = false) => vm.Load(Model.Forge, Model.GitAccount?.Id ?? "", kind, stateFilter, silent);
 
     private void OnModel(object? sender, PropertyChangedEventArgs e)
     {
@@ -86,15 +91,32 @@ public sealed class ForgeListView : ListPane
     {
         syncing = true;
         visible = text.Length == 0 ? vm.Items : vm.Items.Where(i => Matches(i, text)).ToList();
-        List.ItemsSource = visible;
+        if (grouped)
+        {
+            var rows = new List<object>();
+            foreach (var g in visible.GroupBy(i => i.Repository.NameWithOwner))
+            {
+                var group = new RepoGroup(g.Key, g.ToList());
+                var open = !collapsed.Contains(g.Key) || text.Length > 0;
+                rows.Add(new GroupHeaderItem { Group = group, Expanded = open });
+                if (open) rows.AddRange(group.Items.Select(i => (object)new GroupedSearchItem(i)));
+            }
+            List.ItemsSource = rows;
+        }
+        else
+        {
+            List.ItemsSource = visible;
+        }
         syncing = false;
         SyncSelection();
         UpdateState();
     }
 
+    private string CountSuffix => kind.Kind == SectionKind.Issues ? "" : " " + Model.Provider.RequestShort();
+
     private void UpdateState()
     {
-        CountText.Text = visible.Count > 0 ? $"{visible.Count} {Model.Provider.RequestShort()}" : "";
+        CountText.Text = visible.Count > 0 ? visible.Count + CountSuffix : "";
         SetLoading(vm.Loading, vm.Items.Count > 0);
         Footer.Update(vm.LastUpdated, vm.Refreshing && !vm.Loading, vm.Items.Count == 0 ? null : vm.Error);
         if (visible.Count == 0)
@@ -109,22 +131,44 @@ public sealed class ForgeListView : ListPane
         }
     }
 
+    private static SearchItem? ItemOf(object? row) => row switch
+    {
+        SearchItem s => s,
+        GroupedSearchItem g => g.Item,
+        _ => null
+    };
+
     private void SyncSelection()
     {
         syncing = true;
-        List.SelectedItem = Model.ForgeSelection is { } selected ? visible.FirstOrDefault(i => i.Id == selected.Id) : null;
+        object? match = null;
+        if (Model.ForgeSelection is { } selected && List.ItemsSource is System.Collections.IEnumerable rows)
+            foreach (var row in rows)
+                if (ItemOf(row)?.Id == selected.Id)
+                {
+                    match = row;
+                    break;
+                }
+        List.SelectedItem = match;
         syncing = false;
     }
 
     private void OnSelection(object sender, SelectionChangedEventArgs e)
     {
-        if (syncing || List.SelectedItem is not SearchItem item || item.Id == Model.ForgeSelection?.Id) return;
+        if (syncing || ItemOf(List.SelectedItem) is not { } item || item.Id == Model.ForgeSelection?.Id) return;
         Model.ForgeSelection = item;
+    }
+
+    private void OnItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is not GroupHeaderItem h) return;
+        if (!collapsed.Remove(h.Group.Id)) collapsed.Add(h.Group.Id);
+        Render();
     }
 
     private void OnContext(UIElement sender, Microsoft.UI.Xaml.Input.ContextRequestedEventArgs args)
     {
-        if ((args.OriginalSource as FrameworkElement)?.DataContext is not SearchItem item) return;
+        if (ItemOf((args.OriginalSource as FrameworkElement)?.DataContext) is not { } item) return;
         args.Handled = true;
         ItemMenu(item).ShowAt((FrameworkElement)args.OriginalSource);
     }
@@ -133,6 +177,213 @@ public sealed class ForgeListView : ListPane
         Ui.MenuItem(L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(item.Url), "\uE774"),
         Ui.MenuItem(L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(item.Url), "\uE71B"),
         item.BaseRefName is { } baseRef ? Ui.MenuItem(L.T("Menu_CopyTargetBranch", "Copy Target Branch"), () => WindowInterop.Copy(baseRef), "\uE8C8") : null);
+}
+
+public sealed record ForgeNotificationItem(ForgeNotification Notification, Action Done) : IRowContent
+{
+    public UIElement BuildRow()
+    {
+        var n = Notification;
+        var meta = Ui.H(5, Ui.Caption(n.Reason, "accent"));
+        if (n.Repo.Length > 0)
+        {
+            meta.Children.Add(Ui.Caption("·"));
+            meta.Children.Add(Ui.Caption(n.Repo));
+        }
+        meta.Children.Add(Ui.Caption("·"));
+        meta.Children.Add(Ui.Caption(Fmt.Rel(n.UpdatedAt)));
+        var body = Ui.V(3, Ui.Text(n.Title, 13.5, n.Unread ? "text" : "muted", FontWeights.SemiBold, maxLines: 2), meta);
+        if (n.Author is { } author) body.Children.Add(Ui.Caption($"{n.Kind} · @{author.Login}", "dim"));
+        var done = Ui.IconButton("\uE73E", L.T("Forge_MarkDone", "Mark as done"), Done);
+        done.VerticalAlignment = VerticalAlignment.Top;
+        var avatar = Ui.Avatar(n.Author?.AvatarUrl, 22);
+        avatar.VerticalAlignment = VerticalAlignment.Top;
+        var grid = Ui.Columns((avatar, Ui.Auto), (body, Ui.Star), (done, Ui.Auto));
+        grid.ColumnSpacing = 10;
+        grid.Padding = new Thickness(0, 6, 0, 6);
+        return grid;
+    }
+}
+
+public sealed record ForgeRepoItem(ForgeRepo Repo) : IRowContent
+{
+    public UIElement BuildRow()
+    {
+        var r = Repo;
+        var tile = Ui.IconTile(r.IsPrivate ? "\uE72E" : "\uE8F1", Palette.ProjectKey(r.FullName), 22);
+        tile.VerticalAlignment = VerticalAlignment.Top;
+        var body = Ui.V(3, Ui.Text(r.FullName, 13.5, "text", FontWeights.SemiBold, maxLines: 1));
+        if (!string.IsNullOrEmpty(r.Description)) body.Children.Add(Ui.Text(r.Description, 12, "muted", maxLines: 2));
+        var stats = Ui.H(10);
+        if (r.DefaultBranch is { } branch) stats.Children.Add(Ui.H(3, Ui.Glyph("\uE8F1", 11), Ui.Caption(branch)));
+        if (r.Stars is > 0) stats.Children.Add(Ui.H(3, Ui.Glyph("\uE734", 11, "amber"), Ui.Caption(r.Stars.Value.ToString(), "amber")));
+        if (r.UpdatedAt is { } updated) stats.Children.Add(Ui.Caption(L.F("Forge_Updated", "updated {0}", Fmt.Rel(updated)), "dim"));
+        body.Children.Add(stats);
+        var grid = Ui.Columns((tile, Ui.Auto), (body, Ui.Star));
+        grid.ColumnSpacing = 10;
+        grid.Padding = new Thickness(0, 5, 0, 5);
+        return grid;
+    }
+}
+
+public sealed class ForgeInboxView : ListPane
+{
+    private List<ForgeNotification> items = new();
+    private bool loading;
+    private string? error;
+    private DateTimeOffset? lastUpdated;
+
+    public ForgeInboxView(string title) : base(title, "GenericRowTemplate")
+    {
+        List.IsItemClickEnabled = true;
+        List.SelectionMode = ListViewSelectionMode.None;
+        List.ItemClick += (_, e) =>
+        {
+            if (e.ClickedItem is ForgeNotificationItem n) LinkBrowser.Open(n.Notification.Url);
+        };
+        List.ContextRequested += (_, args) =>
+        {
+            if ((args.OriginalSource as FrameworkElement)?.DataContext is not ForgeNotificationItem row) return;
+            args.Handled = true;
+            var n = row.Notification;
+            Ui.Menu(
+                Ui.MenuItem(L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(n.Url), "\uE774"),
+                Ui.MenuItem(L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(n.Url), "\uE71B"),
+                Ui.MenuItem(L.T("Forge_MarkDone", "Mark as done"), () => MarkDone(n).Forget(), "\uE73E")).ShowAt((FrameworkElement)args.OriginalSource);
+        };
+    }
+
+    protected override void OnAttached() => Load(true).Forget();
+
+    protected override void OnLiveTick() => Load(false).Forget();
+
+    protected override Task OnPullRefresh() => Load(false);
+
+    private async Task Load(bool first)
+    {
+        if (Model.Forge is not { } forge) return;
+        loading = first && items.Count == 0;
+        Render();
+        try
+        {
+            var fresh = await forge.Notifications();
+            if (!ReferenceEquals(Model.Forge, forge)) return;
+            items = fresh;
+            Model.UnreadCount = fresh.Count(n => n.Unread);
+            lastUpdated = DateTimeOffset.Now;
+            error = null;
+        }
+        catch (Exception e)
+        {
+            if (e is not OperationCanceledException) error = e.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+        Render();
+    }
+
+    private async Task MarkDone(ForgeNotification n)
+    {
+        if (Model.Forge is not { } forge) return;
+        try
+        {
+            await forge.MarkDone(n);
+            items = items.Where(i => i.Id != n.Id).ToList();
+            Model.UnreadCount = items.Count(i => i.Unread);
+            Render();
+        }
+        catch (Exception e)
+        {
+            await Dialogs.Alert(XamlRoot, L.T("Forge_MarkDoneFailed", "Couldn't mark as done"), e.Message);
+        }
+    }
+
+    private void Render()
+    {
+        List.ItemsSource = items.Select(n => new ForgeNotificationItem(n, () => MarkDone(n).Forget())).ToList();
+        CountText.Text = items.Count > 0 ? items.Count.ToString() : "";
+        Footer.Update(lastUpdated, false, items.Count == 0 ? null : error);
+        if (items.Count > 0) ShowOverlay(null);
+        else if (loading) ShowOverlay(Ui.Loading());
+        else if (error is { } e) ShowOverlay(Ui.Error(e, () => Load(true).Forget()));
+        else ShowOverlay(Ui.Empty("\uE73E", "green", L.T("Forge_AllDone", "All done")));
+    }
+}
+
+public sealed class ForgeReposView : ListPane
+{
+    private List<ForgeRepo> repos = new();
+    private string text = "";
+    private bool loading;
+    private string? error;
+    private DateTimeOffset? lastUpdated;
+
+    public ForgeReposView(string title) : base(title, "GenericRowTemplate")
+    {
+        FilterRow.Children.Add(SearchBox(L.F("Forge_FilterRepos", "Filter {0}", title.ToLower(Fmt.Culture)), t =>
+        {
+            text = t.Trim();
+            Render();
+        }, 150));
+        List.IsItemClickEnabled = true;
+        List.SelectionMode = ListViewSelectionMode.None;
+        List.ItemClick += (_, e) =>
+        {
+            if (e.ClickedItem is ForgeRepoItem r) LinkBrowser.Open(r.Repo.Url);
+        };
+        List.ContextRequested += (_, args) =>
+        {
+            if ((args.OriginalSource as FrameworkElement)?.DataContext is not ForgeRepoItem row) return;
+            args.Handled = true;
+            var r = row.Repo;
+            Ui.Menu(
+                Ui.MenuItem(L.T("Menu_OpenInBrowser", "Open in Browser"), () => LinkBrowser.Open(r.Url), "\uE774"),
+                Ui.MenuItem(L.T("Menu_CopyLink", "Copy Link"), () => WindowInterop.Copy(r.Url), "\uE71B"),
+                Ui.MenuItem(L.T("Forge_CopyName", "Copy Name"), () => WindowInterop.Copy(r.FullName), "\uE8C8")).ShowAt((FrameworkElement)args.OriginalSource);
+        };
+    }
+
+    protected override void OnAttached() => Load().Forget();
+
+    protected override Task OnPullRefresh() => Load();
+
+    private async Task Load()
+    {
+        if (Model.Forge is not { } forge) return;
+        loading = repos.Count == 0;
+        Render();
+        try
+        {
+            var fresh = await forge.Repositories();
+            if (!ReferenceEquals(Model.Forge, forge)) return;
+            repos = fresh;
+            lastUpdated = DateTimeOffset.Now;
+            error = null;
+        }
+        catch (Exception e)
+        {
+            if (e is not OperationCanceledException) error = e.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+        Render();
+    }
+
+    private void Render()
+    {
+        var visible = text.Length == 0 ? repos : repos.Where(r => r.FullName.Contains(text, StringComparison.OrdinalIgnoreCase) || (r.Description?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
+        List.ItemsSource = visible.Select(r => new ForgeRepoItem(r)).ToList();
+        CountText.Text = repos.Count > 0 ? repos.Count.ToString() : "";
+        Footer.Update(lastUpdated, false, repos.Count == 0 ? null : error);
+        if (visible.Count > 0) ShowOverlay(null);
+        else if (loading) ShowOverlay(Ui.Loading());
+        else if (error is { } e && repos.Count == 0) ShowOverlay(Ui.Error(e, () => Load().Forget()));
+        else ShowOverlay(Ui.Empty("\uE8F1", "teal", L.T("Common_NothingHere", "Nothing here")));
+    }
 }
 
 public sealed class ForgeDetailView : Grid

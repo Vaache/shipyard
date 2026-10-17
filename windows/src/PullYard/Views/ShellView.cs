@@ -131,8 +131,26 @@ public sealed class ShellView : Grid
         }
         if (app.Forge is not null)
         {
-            Header(app.Provider.RequestsTitle());
-            foreach (var f in app.Provider.SupportedFilters()) Item(Section.Prs(f.Filter()), f.Filter().Title(), f.Filter().Glyph(), f.Filter().ColorKey());
+            var caps = app.ForgeCaps;
+            var provider = app.Provider;
+            if (caps.HasInbox)
+            {
+                Header(L.T("Nav_Inbox", "Inbox"));
+                Item(Section.Notifications, caps.Inbox.Title(), "\uEA8F", "amber");
+            }
+            Header(provider.RequestsTitle());
+            foreach (var f in caps.PullFilters) Item(Section.Prs(f.Filter()), f.Filter().Title(), f.Filter().Glyph(), f.Filter().ColorKey());
+            if (caps.PullFilters.Contains(Core.Auth.ForgeFilter.Mine)) Item(Section.MyPrsByRepo, provider.ByProjectTitle(), "\uE8B7", "coral");
+            if (caps.IssueFilters.Count > 0)
+            {
+                Header(L.T("Nav_Issues", "Issues"));
+                foreach (var f in caps.IssueFilters) Item(Section.Issues(f.Filter()), f.Filter().Title(), f.Filter().Glyph(), f.Filter().ColorKey());
+            }
+            if (caps.Repositories)
+            {
+                Header(L.T("Nav_Code", "Code"));
+                Item(Section.Repos, provider.RepositoriesTitle(), "\uE8F1", "teal");
+            }
             Header(L.T("Nav_AI", "AI"));
             Item(Section.Claude, L.T("Section_Claude", "Claude Code"), "\uE945", "coral");
             SyncNavSelection();
@@ -300,6 +318,9 @@ public sealed class ShellView : Grid
             case nameof(AppViewModel.ForgeSelection):
                 ShowForgeDetail();
                 break;
+            case nameof(AppViewModel.ForgeCaps):
+                BuildNavItems();
+                break;
         }
     }
 
@@ -347,15 +368,18 @@ public sealed class ShellView : Grid
 
     private void ShowForgeSection(Section s)
     {
-        FrameworkElement list = s.Kind switch
+        var title = s.ForgeTitle(app.Provider, app.ForgeCaps.Inbox);
+        FrameworkElement list = !app.ForgeSupports(s) ? ForgeDetailView.Unavailable(app.Provider) : s.Kind switch
         {
-            SectionKind.Prs when app.Provider.Supports(s.Pr) => new ForgeListView(s.Pr),
+            SectionKind.Prs or SectionKind.MyPrsByRepo or SectionKind.Issues => new ForgeListView(s, title),
+            SectionKind.Notifications => new ForgeInboxView(title),
+            SectionKind.Repos => new ForgeReposView(title),
             SectionKind.Claude => new ClaudeSessionsView(),
             _ => ForgeDetailView.Unavailable(app.Provider)
         };
         list.Transitions = new TransitionCollection { new ContentThemeTransition() };
         listHost.Content = list;
-        App.MainWindow?.SetSubtitle(s.Title);
+        App.MainWindow?.SetSubtitle(title);
         if (s.Kind == SectionKind.Claude)
         {
             claudeView ??= new ClaudeWorkspaceView();

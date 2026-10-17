@@ -34,6 +34,7 @@ public sealed partial class AppViewModel : ObservableObject
     [ObservableProperty] private GitAccount? gitAccount;
     [ObservableProperty] private IForgeClient? forge;
     [ObservableProperty] private SearchItem? forgeSelection;
+    [ObservableProperty] private ForgeCapabilities forgeCaps = ForgeCapabilities.Initial;
 
     public ClaudeWorkspace Claude { get; private set; } = null!;
     public UpdaterViewModel Updater { get; } = new();
@@ -261,11 +262,40 @@ public sealed partial class AppViewModel : ObservableObject
         Scopes = new();
         DetailRoot = null;
         ForgeSelection = null;
-        if (Section.Kind == SectionKind.Prs ? !account.Provider.Supports(Section.Pr) : Section.Kind != SectionKind.Claude)
-            Section = Section.Prs(account.Provider.SupportedFilters().FirstOrDefault(ForgeFilter.Mine).Filter());
+        ForgeCaps = ForgeCapabilities.Initial;
+        if (!ForgeSupports(Section)) Section = Section.Prs(PRFilter.ReviewRequested);
         Phase = Phase.LoggedIn;
         StartPolling();
+        LoadCapabilities(client).Forget();
     }
+
+    private async Task LoadCapabilities(IForgeClient client)
+    {
+        ForgeCapabilities caps;
+        try
+        {
+            caps = await client.Capabilities();
+        }
+        catch
+        {
+            return;
+        }
+        if (!ReferenceEquals(Forge, client)) return;
+        if (!caps.Same(ForgeCaps)) ForgeCaps = caps;
+        if (!ForgeSupports(Section)) Section = Section.Prs(caps.PullFilters.FirstOrDefault(ForgeFilter.Mine).Filter());
+        await RefreshBadges();
+    }
+
+    public bool ForgeSupports(Section section) => section.Kind switch
+    {
+        SectionKind.Prs => ForgeCaps.PullFilters.Contains(section.Pr.Forge()),
+        SectionKind.MyPrsByRepo => ForgeCaps.PullFilters.Contains(ForgeFilter.Mine),
+        SectionKind.Issues => ForgeCaps.IssueFilters.Contains(section.Issue.Forge()),
+        SectionKind.Notifications => ForgeCaps.HasInbox,
+        SectionKind.Repos => ForgeCaps.Repositories,
+        SectionKind.Claude => true,
+        _ => false
+    };
 
     private async Task VerifyForge(IForgeClient client)
     {
@@ -711,7 +741,8 @@ public sealed partial class AppViewModel : ObservableObject
 
     private async Task RefreshForgeBadges(IForgeClient forge)
     {
-        var supported = forge.Provider.SupportedFilters();
+        var caps = ForgeCaps;
+        var supported = caps.PullFilters;
         if (supported.Contains(ForgeFilter.ReviewRequested))
         {
             try
@@ -738,7 +769,22 @@ public sealed partial class AppViewModel : ObservableObject
             {
             }
         }
-        UnreadCount = 0;
+        if (caps.HasInbox)
+        {
+            try
+            {
+                var inbox = await forge.Notifications();
+                if (!ReferenceEquals(Forge, forge)) return;
+                UnreadCount = inbox.Count(n => n.Unread);
+            }
+            catch
+            {
+            }
+        }
+        else
+        {
+            UnreadCount = 0;
+        }
         LastBadgeRefresh = DateTimeOffset.Now;
     }
 

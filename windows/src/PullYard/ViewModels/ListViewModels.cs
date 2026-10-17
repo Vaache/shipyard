@@ -211,10 +211,17 @@ public sealed partial class ForgeListViewModel : ObservableObject
 
     public static void ClearCache() => Cache.Clear();
 
-    public async Task Load(IForgeClient? forge, string account, PRFilter filter, StateFilter state, bool silent = false)
+    public static Task<List<SearchItem>> Fetch(IForgeClient forge, Section kind, StateFilter state) => kind.Kind switch
+    {
+        SectionKind.Issues => forge.Issues(kind.Issue.Forge(), state.Forge()),
+        SectionKind.MyPrsByRepo => forge.PullRequests(Core.Auth.ForgeFilter.Mine, state.Forge()),
+        _ => forge.PullRequests(kind.Pr.Forge(), state.Forge())
+    };
+
+    public async Task Load(IForgeClient? forge, string account, Section kind, StateFilter state, bool silent = false)
     {
         if (forge is null) return;
-        var key = $"{account}|{filter}|{state}";
+        var key = $"{account}|{kind.Key}|{state}";
         var switched = false;
         if (key != currentKey)
         {
@@ -238,7 +245,7 @@ public sealed partial class ForgeListViewModel : ObservableObject
         Refreshing = true;
         try
         {
-            var fresh = await forge.PullRequests(filter.Forge(), state.Forge());
+            var fresh = await Fetch(forge, kind, state);
             if (gen != generation) return;
             var updated = DateTimeOffset.Now;
             Cache[key] = (fresh, updated);

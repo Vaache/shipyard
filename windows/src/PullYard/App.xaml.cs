@@ -136,7 +136,7 @@ public partial class App : Application
             var prefix = m.Provider.NumberPrefix();
             void AddSection(string title, int count, List<SearchItem> list, PRFilter filter)
             {
-                if (forge && !m.Provider.Supports(filter)) return;
+                if (forge && !m.ForgeSupports(Section.Prs(filter))) return;
                 items.Add(new() { Text = $"{title.ToUpperInvariant()}  ({count})", Action = () => { m.Section = Section.Prs(filter); ShowMainWindow(); } });
                 if (list.Count == 0) items.Add(new() { Text = "    " + L.T("Common_NothingHere", "Nothing here"), Disabled = true });
                 foreach (var item in list.Take(10))
@@ -174,10 +174,10 @@ public partial class App : Application
             }
             AddSection(L.T("Tray_ReviewRequests", "Review requests"), m.ReviewRequestCount, m.ReviewRequests, PRFilter.ReviewRequested);
             AddSection(m.Provider.UsesMergeRequests() ? L.T("Tray_MyOpenMRs", "My open MRs") : L.T("Tray_MyOpenPRs", "My open PRs"), m.MyPRCount, m.MyPRs, PRFilter.Mine);
-            if (!forge)
+            if (!forge || m.ForgeCaps.HasInbox)
             {
                 var unread = m.UnreadCount >= 50 ? "50+" : m.UnreadCount.ToString();
-                items.Add(new() { Text = L.T("Section_Notifications", "Notifications") + (m.UnreadCount > 0 ? $"  ({unread})" : ""), Action = () => { m.Section = Section.Notifications; ShowMainWindow(); } });
+                items.Add(new() { Text = (forge ? m.ForgeCaps.Inbox.Title() : L.T("Section_Notifications", "Notifications")) + (m.UnreadCount > 0 ? $"  ({unread})" : ""), Action = () => { m.Section = Section.Notifications; ShowMainWindow(); } });
             }
             items.Add(new() { Text = L.T("Common_Refresh", "Refresh"), Action = () => m.RefreshBadges().Forget() });
         }
