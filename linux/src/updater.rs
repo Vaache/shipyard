@@ -184,6 +184,9 @@ async fn fetch_latest() -> Result<Release, ApiError> {
 }
 
 pub async fn check_on_launch() {
+    if !brand::updates_in_app() {
+        return;
+    }
     let done = UPDATER.with(|u| {
         let mut u = u.borrow_mut();
         let d = u.launch_done;

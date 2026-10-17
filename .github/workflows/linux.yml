@@ -17,6 +17,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  FLATPAK_CARGO_GENERATOR: https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/74697c75b630d7330e77250fc13cb5ea688d9479/cargo/flatpak-cargo-generator.py
 
 jobs:
   build:
@@ -62,10 +63,10 @@ jobs:
       - name: Unit tests
         env:
           CARGO_PROFILE_DEV_DEBUG: '0'
-        run: cargo test
+        run: cargo test --locked
 
       - name: Build
-        run: cargo build --release
+        run: cargo build --release --locked
 
       - name: Launch checks
         run: |
@@ -206,43 +207,168 @@ jobs:
           path: shots
           if-no-files-found: error
 
-  flatpak:
-    name: Flatpak (x86_64)
-    needs: build
+  cargo-sources:
+    name: Cargo.lock and Flathub sources
     runs-on: ubuntu-24.04
-    container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-47
-      options: --privileged
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249
         with:
-          name: packaging
-          path: linux/dist
+          toolchain: stable
 
-      - name: Bundle name
-        id: names
+      - name: Cargo.lock in sync
+        id: lock
+        working-directory: linux
         run: |
-          . linux/dist/brand.out
-          echo "bundle=${APP_NAME}-linux-x86_64.flatpak" >> "$GITHUB_OUTPUT"
-          echo "manifest=linux/dist/flatpak/${APP_ID}.yml" >> "$GITHUB_OUTPUT"
+          if cargo metadata --locked --format-version 1 >/dev/null; then
+            echo "linux/Cargo.lock is up to date"
+          else
+            cargo metadata --format-version 1 >/dev/null
+            echo "::error file=linux/Cargo.lock::linux/Cargo.lock is missing or out of date. Commit the Cargo.lock from the flathub-sources artifact."
+            echo "stale=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate cargo-sources.json
+        run: |
+          python3 -m venv "$RUNNER_TEMP/fcg"
+          "$RUNNER_TEMP/fcg/bin/pip" install --quiet aiohttp tomlkit
+          curl -sSfL -o "$RUNNER_TEMP/flatpak-cargo-generator.py" "$FLATPAK_CARGO_GENERATOR"
+          "$RUNNER_TEMP/fcg/bin/python" "$RUNNER_TEMP/flatpak-cargo-generator.py" linux/Cargo.lock -o linux/packaging/flathub/cargo-sources.json
+
+      - name: Upload generated files
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flathub-sources
+          path: |
+            linux/Cargo.lock
+            linux/packaging/flathub/cargo-sources.json
+          if-no-files-found: error
+
+      - name: Committed files match
+        env:
+          STALE: ${{ steps.lock.outputs.stale }}
+        run: |
+          git add -N linux/Cargo.lock linux/packaging/flathub/cargo-sources.json
+          if ! git diff --quiet -- linux/Cargo.lock linux/packaging/flathub/cargo-sources.json; then
+            git diff --stat -- linux/Cargo.lock linux/packaging/flathub/cargo-sources.json
+            echo "::error file=linux/packaging/flathub/cargo-sources.json::cargo-sources.json does not match linux/Cargo.lock. Commit the files from the flathub-sources artifact."
+            exit 1
+          fi
+          test "$STALE" != 1
+
+  flatpak:
+    name: Flatpak (x86_64)
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+    env:
+      MANIFEST: linux/packaging/flathub/io.github.pullyard.PullYard.yml
+      LOCAL_MANIFEST: io.github.pullyard.PullYard.local.yml
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Names
+        run: |
+          set -a; . linux/brand.env; set +a
+          echo "APP_ID=${APP_ID}" >> "$GITHUB_ENV"
+          echo "BUNDLE=${APP_NAME}-linux-x86_64.flatpak" >> "$GITHUB_ENV"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "PULLYARD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           fi
 
-      - uses: flathub-infra/flatpak-github-actions/flatpak-builder@933e9e8ca36e85046ebca8e211f0785c6becac40
+      - name: Local manifest
+        env:
+          PULLYARD_UPDATES: app
+        run: |
+          linux/packaging/flathub/local-manifest.sh "$LOCAL_MANIFEST"
+          cat "$LOCAL_MANIFEST"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          bundle: ${{ steps.names.outputs.bundle }}
-          manifest-path: ${{ steps.names.outputs.manifest }}
-          cache-key: flatpak-builder-${{ hashFiles('linux/Cargo.toml') }}
-          upload-artifact: true
+          path: .flatpak-builder
+          key: flathub-${{ hashFiles('linux/packaging/flathub/*.yml', 'linux/packaging/flathub/cargo-sources.json') }}-${{ github.sha }}
+          restore-keys: flathub-${{ hashFiles('linux/packaging/flathub/*.yml', 'linux/packaging/flathub/cargo-sources.json') }}-
+
+      - name: Runtime, SDK and Builder
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak-builder --user --install-deps-from=flathub --install-deps-only builddir "$LOCAL_MANIFEST"
+          flatpak install --user -y --noninteractive flathub org.flatpak.Builder
+
+      - name: Download sources
+        run: flatpak-builder --user --download-only --force-clean builddir "$LOCAL_MANIFEST"
+
+      - name: Offline build
+        run: |
+          flatpak-builder --user --sandbox --disable-download --disable-rofiles-fuse --force-clean \
+            --default-branch=stable --mirror-screenshots-url=https://dl.flathub.org/media/ \
+            --repo=repo builddir "$LOCAL_MANIFEST"
+          ls builddir
+          if [ -d builddir/screenshots ]; then
+            ostree commit --repo=repo --canonical-permissions --branch=screenshots/x86_64 builddir/screenshots
+          else
+            echo "::warning::builddir/screenshots was not created; screenshots were not mirrored"
+          fi
+
+      - name: Flathub lint
+        run: |
+          lint() {
+            flatpak run --command=flatpak-builder-lint org.flatpak.Builder "$@" > "lint-$1.json" || true
+            cat "lint-$1.json"
+          }
+          lint manifest "$MANIFEST"
+          lint repo repo
+          python3 - lint-manifest.json lint-repo.json <<'PY'
+          import json, sys
+          pending = {"finish-args-flatpak-spawn-access", "finish-args-home-filesystem-access"}
+          failed = False
+          for path in sys.argv[1:]:
+              kind = path[5:-5]
+              raw = open(path).read().strip()
+              if not raw:
+                  print(f"flatpak-builder-lint {kind}: no findings")
+                  continue
+              try:
+                  data = json.loads(raw)
+              except ValueError:
+                  print(f"::error::flatpak-builder-lint {kind} produced no report")
+                  failed = True
+                  continue
+              for code in data.get("warnings", []):
+                  print(f"::warning::flatpak-builder-lint {kind}: {code}")
+              for code in data.get("errors", []):
+                  if code in pending:
+                      print(f"::warning::flatpak-builder-lint {kind}: {code} (needs a Flathub exception, see the submission notes)")
+                  else:
+                      print(f"::error::flatpak-builder-lint {kind}: {code}")
+                      failed = True
+              for line in data.get("info", []):
+                  print(f"flatpak-builder-lint {kind} info: {line}")
+              if data.get("message"):
+                  print(f"flatpak-builder-lint {kind}: {data['message']}")
+          sys.exit(1 if failed else 0)
+          PY
+
+      - name: Bundle
+        run: |
+          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo repo "$BUNDLE" "$APP_ID" stable
+          ls -la "$BUNDLE"
 
       - name: Launch check
         run: |
-          . linux/dist/brand.out
-          flatpak install -y --user --noninteractive "${{ steps.names.outputs.bundle }}"
-          flatpak run "${APP_ID}" --version
+          flatpak install --user -y --noninteractive "$BUNDLE"
+          flatpak info --show-permissions "$APP_ID"
+          flatpak run "$APP_ID" --version
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flatpak-x86_64
+          path: ${{ env.BUNDLE }}
+          if-no-files-found: error
 
   release:
     name: Attach to release

@@ -20,4 +20,7 @@ fn main() {
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| env::var("CARGO_PKG_VERSION").unwrap_or_default());
     println!("cargo:rustc-env=BRAND_VERSION={version}");
+    println!("cargo:rerun-if-env-changed=PULLYARD_UPDATES");
+    let updates = env::var("PULLYARD_UPDATES").ok().map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty()).unwrap_or_else(|| "app".to_string());
+    println!("cargo:rustc-env=BRAND_UPDATES={updates}");
 }
