@@ -70,7 +70,7 @@ struct AccountSwitcherFooter: View {
                 Avatar(url: user.avatarUrl, size: 24)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(user.name ?? user.login).font(.callout.weight(.medium)).lineLimit(1)
-                    Text(app.account?.subtitle ?? "@\(user.login)").font(.caption).foregroundStyle(Color.syMuted).lineLimit(1)
+                    Text(app.accountSubtitle ?? "").font(.caption).foregroundStyle(Color.syMuted).lineLimit(1)
                 }
                 Spacer()
                 Menu {

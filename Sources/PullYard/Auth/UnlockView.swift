@@ -19,10 +19,10 @@ struct UnlockView: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Avatar(url: account.avatarUrl, size: 56)
+            Avatar(url: Demo.isOn ? nil : account.avatarUrl, size: 56)
             VStack(spacing: 2) {
-                Text(account.name ?? account.login).font(.title3.weight(.semibold)).foregroundStyle(Color.syText)
-                Text("\(account.provider.title) · \(account.subtitle)").font(.callout).foregroundStyle(Color.syMuted)
+                Text(Demo.isOn ? Demo.user.name ?? Demo.user.login : account.name ?? account.login).font(.title3.weight(.semibold)).foregroundStyle(Color.syText)
+                Text("\(account.provider.title) · \(Demo.isOn ? "@\(Demo.user.login)" : account.subtitle)").font(.callout).foregroundStyle(Color.syMuted)
             }
             Text(title).font(.headline).foregroundStyle(Color.syText).padding(.top, 4)
             if blocked {

@@ -37,7 +37,7 @@ struct SettingsView: View {
                         Avatar(url: u.avatarUrl, size: 36)
                         VStack(alignment: .leading) {
                             Text(u.name ?? u.login).font(.headline).foregroundStyle(Color.syText)
-                            Text(app.account?.subtitle ?? "@\(u.login)").foregroundStyle(Color.syMuted)
+                            Text(app.accountSubtitle ?? "").foregroundStyle(Color.syMuted)
                         }
                         Spacer()
                         Text(app.provider.title).font(.caption.weight(.semibold)).foregroundStyle(Color.syMuted)

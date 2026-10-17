@@ -403,6 +403,11 @@ final class AppModel {
 
     var provider: GitProvider { account?.provider ?? .github }
 
+    var accountSubtitle: String? {
+        if Demo.isOn { return user.map { "@\($0.login)" } }
+        return account?.subtitle ?? user.map { "@\($0.login)" }
+    }
+
     var cacheAccount: String? {
         Demo.isOn ? nil : (account?.cacheKey ?? user?.login)
     }
