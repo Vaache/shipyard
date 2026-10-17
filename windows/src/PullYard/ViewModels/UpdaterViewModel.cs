@@ -57,7 +57,6 @@ public sealed partial class UpdaterViewModel : ObservableObject
         launchCheckDone = true;
         StartPeriodic();
         if (!AutoCheck) return;
-        if (Settings.Shared.GetDate(Keys.UpdateLastCheck) is { } last && DateTimeOffset.Now - last < CheckInterval) return;
         await Check(false);
     }
 

@@ -109,7 +109,6 @@ final class Updater {
         UpdateNotifier.shared.install()
         startPeriodicChecks()
         guard defaults.object(forKey: Self.autoCheckKey) as? Bool ?? true else { return }
-        if let last = defaults.object(forKey: Self.lastCheckKey) as? Date, Date().timeIntervalSince(last) < Self.checkInterval { return }
         await check(userInitiated: false)
     }
 
