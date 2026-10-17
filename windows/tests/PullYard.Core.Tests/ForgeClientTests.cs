@@ -10,22 +10,6 @@ namespace PullYard.Core.Tests;
 
 public class ForgeClientTests
 {
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        public Dictionary<string, (HttpStatusCode Status, string Body)> Routes { get; } = new();
-        public List<HttpRequestMessage> Requests { get; } = new();
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
-        {
-            lock (Requests) Requests.Add(request);
-            var path = request.RequestUri!.AbsolutePath;
-            var (status, body) = Routes.FirstOrDefault(r => path.EndsWith(r.Key, StringComparison.Ordinal)) is { Key: not null } hit
-                ? hit.Value
-                : (HttpStatusCode.NotFound, "{\"message\":\"not found\"}");
-            return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
-        }
-    }
-
     private static GitAccount Account(GitProvider provider, string host, string login = "", string? email = null, string? userId = null) =>
         new() { Id = "test", Provider = provider, Host = host, Login = login, Email = email, UserId = userId, CredentialKey = "test" };
 
@@ -34,7 +18,7 @@ public class ForgeClientTests
     [Fact]
     public async Task GitLabMapsMergeRequests()
     {
-        var stub = new StubHandler();
+        var stub = new ForgeStub();
         stub.Routes["/api/v4/user"] = (HttpStatusCode.OK, """{"id":7,"username":"sofia","name":"Sofia","avatar_url":"https://a/s.png"}""");
         stub.Routes["/api/v4/merge_requests"] = (HttpStatusCode.OK, """
             [{"iid":12,"title":"Fix login","web_url":"https://gitlab.example.com/group/sub/app/-/merge_requests/12","state":"merged","draft":false,
@@ -42,7 +26,7 @@ public class ForgeClientTests
               "author":{"username":"max","avatar_url":null},"references":{"full":"group/sub/app!12"},"user_notes_count":3,
               "labels":[{"name":"bug","color":"#FF0000"}]}]
             """);
-        var client = new GitLabClient(Account(GitProvider.GitLab, "gitlab.example.com"), GitCredential.Of("glpat-x"), client: new HttpClient(stub));
+        var client = new GitLabClient(Account(GitProvider.GitLab, "gitlab.example.com"), GitCredential.Of("glpat-x"), client: stub.Client());
         var user = await client.CurrentUser();
         Assert.Equal("sofia", user.Login);
         Assert.Equal("7", user.Id);
@@ -68,9 +52,9 @@ public class ForgeClientTests
     [Fact]
     public async Task GitLabClosedQueriesMergedAndClosed()
     {
-        var stub = new StubHandler();
+        var stub = new ForgeStub();
         stub.Routes["/api/v4/merge_requests"] = (HttpStatusCode.OK, "[]");
-        var client = new GitLabClient(Account(GitProvider.GitLab, "gitlab.com", "sofia"), GitCredential.Of("t"), client: new HttpClient(stub));
+        var client = new GitLabClient(Account(GitProvider.GitLab, "gitlab.com", "sofia"), GitCredential.Of("t"), client: stub.Client());
         await client.PullRequests(ForgeFilter.Mine, ForgeState.Closed);
         Assert.Equal(2, stub.Requests.Count);
         Assert.Contains("state=merged", stub.Requests[0].RequestUri!.Query);
@@ -79,18 +63,103 @@ public class ForgeClientTests
     }
 
     [Fact]
-    public async Task GitLabUnsupportedFilterReturnsEmpty()
+    public async Task GitLabMentionedComesFromTodos()
     {
-        var stub = new StubHandler();
-        var client = new GitLabClient(Account(GitProvider.GitLab, "gitlab.com", "sofia"), GitCredential.Of("t"), client: new HttpClient(stub));
-        Assert.Empty(await client.PullRequests(ForgeFilter.Mentioned, ForgeState.Open));
-        Assert.Empty(stub.Requests);
+        var stub = new ForgeStub();
+        stub.QueryRoutes.Add(("action=mentioned&state=pending", HttpStatusCode.OK, """
+            [{"id":1,"action_name":"mentioned","target_type":"MergeRequest","state":"pending","created_at":"2026-10-01T10:00:00Z",
+              "target":{"iid":4,"title":"Mention me","web_url":"https://gitlab.com/g/p/-/merge_requests/4","state":"opened",
+                "created_at":"2026-10-01T09:00:00Z","updated_at":"2026-10-01T10:00:00Z","references":{"full":"g/p!4"},"labels":["bug"]}},
+             {"id":2,"action_name":"mentioned","target_type":"MergeRequest","state":"pending","created_at":"2026-10-01T10:00:00Z","target":{"broken":true}}]
+            """));
+        stub.Routes["/api/v4/todos"] = (HttpStatusCode.OK, "[]");
+        var client = new GitLabClient(Account(GitProvider.GitLab, "gitlab.com", "sofia"), GitCredential.Of("t"), client: stub.Client());
+        var items = await client.PullRequests(ForgeFilter.Mentioned, ForgeState.Open);
+        var mr = Assert.Single(items);
+        Assert.Equal(4, mr.Number);
+        Assert.Equal("bug", mr.Labels!.Items[0].Name);
+        Assert.Equal("g/p", mr.Repository.NameWithOwner);
+        Assert.Equal(4, stub.Containing("/todos").Count);
+        Assert.Single(stub.Containing("action=directly_addressed&state=done"));
+    }
+
+    [Fact]
+    public async Task GitLabIssuesAndInbox()
+    {
+        var stub = new ForgeStub();
+        stub.Routes["/api/v4/issues"] = (HttpStatusCode.OK, """
+            [{"iid":9,"title":"Crash","web_url":"https://gitlab.com/g/p/-/issues/9","state":"opened",
+              "created_at":"2026-10-01T09:00:00Z","updated_at":"2026-10-02T09:00:00Z","references":{"full":"g/sub/p#9"},
+              "author":{"username":"max","avatar_url":null},"user_notes_count":1,"labels":[{"name":"p1","color":"#00ff00"}]}]
+            """);
+        stub.Routes["/api/v4/todos"] = (HttpStatusCode.OK, """
+            [{"id":77,"action_name":"review_requested","target_type":"MergeRequest","target_url":"https://gitlab.com/g/p/-/merge_requests/4",
+              "state":"pending","created_at":"2026-10-01T10:00:00Z","author":{"username":"max","avatar_url":null},
+              "project":{"path_with_namespace":"g/p"},"target":{"iid":4,"title":"Review this"}}]
+            """);
+        stub.Routes["/api/v4/todos/77/mark_as_done"] = (HttpStatusCode.Created, "{}");
+        var client = new GitLabClient(Account(GitProvider.GitLab, "gitlab.com", "sofia"), GitCredential.Of("t"), client: stub.Client());
+        var issue = Assert.Single(await client.Issues(ForgeIssueFilter.Assigned, ForgeState.Open));
+        Assert.False(issue.IsPR);
+        Assert.Equal("OPEN", issue.IssueState);
+        Assert.Equal("g/sub/p", issue.Repository.NameWithOwner);
+        Assert.Equal("00ff00", issue.Labels!.Items[0].Color);
+        Assert.Contains("scope=assigned_to_me", stub.LastQuery);
+        var note = Assert.Single(await client.Notifications());
+        Assert.Equal("Review requested", note.Reason);
+        Assert.Equal("Review this", note.Title);
+        Assert.Equal("MR", note.Kind);
+        Assert.Equal("g/p", note.Repo);
+        Assert.Equal("max", note.Author!.Login);
+        Assert.True(note.Unread);
+        await client.MarkDone(note);
+        Assert.Equal(HttpMethod.Post, stub.Requests[^1].Method);
+        Assert.EndsWith("/api/v4/todos/77/mark_as_done", stub.Requests[^1].RequestUri!.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task GitLabReviewedOnlyWhenApprovalFilterWorks()
+    {
+        var free = new ForgeStub();
+        free.QueryRoutes.Add(("pullyard-probe-", HttpStatusCode.OK, """[{"iid":1,"title":"x","web_url":"https://gitlab.com/g/p/-/merge_requests/1","state":"opened","created_at":"2026-10-01T09:00:00Z","updated_at":"2026-10-01T09:00:00Z"}]"""));
+        var freeCaps = await new GitLabClient(Account(GitProvider.GitLab, "gitlab.com", "sofia"), GitCredential.Of("t"), client: free.Client()).Capabilities();
+        Assert.DoesNotContain(ForgeFilter.Reviewed, freeCaps.PullFilters);
+        Assert.Equal(ForgeInbox.ToDoList, freeCaps.Inbox);
+        Assert.True(freeCaps.Repositories);
+        Assert.Equal(3, freeCaps.IssueFilters.Count);
+
+        var premium = new ForgeStub();
+        premium.QueryRoutes.Add(("pullyard-probe-", HttpStatusCode.OK, "[]"));
+        premium.Routes["/api/v4/merge_requests"] = (HttpStatusCode.OK, """
+            [{"iid":2,"title":"Mine","web_url":"https://gitlab.com/g/p/-/merge_requests/2","state":"merged","created_at":"2026-10-01T09:00:00Z","updated_at":"2026-10-01T09:00:00Z","author":{"username":"Sofia"}},
+             {"iid":3,"title":"Theirs","web_url":"https://gitlab.com/g/p/-/merge_requests/3","state":"opened","created_at":"2026-10-01T09:00:00Z","updated_at":"2026-10-02T09:00:00Z","author":{"username":"max"}}]
+            """);
+        var client = new GitLabClient(Account(GitProvider.GitLab, "gitlab.com", "sofia"), GitCredential.Of("t"), client: premium.Client());
+        Assert.Contains(ForgeFilter.Reviewed, (await client.Capabilities()).PullFilters);
+        var reviewed = await client.PullRequests(ForgeFilter.Reviewed, ForgeState.All);
+        Assert.Equal(new[] { 3 }, reviewed.Select(i => i.Number));
+        Assert.Single(premium.Containing("pullyard-probe-"));
+        Assert.Contains("approved_by_usernames[]=sofia", premium.LastQuery);
+    }
+
+    [Fact]
+    public async Task GitLabProjects()
+    {
+        var stub = new ForgeStub();
+        stub.Routes["/api/v4/projects"] = (HttpStatusCode.OK, """
+            [{"path_with_namespace":"g/p","description":"App","web_url":"https://gitlab.com/g/p","visibility":"private","last_activity_at":"2026-10-01T09:00:00.123Z","default_branch":"main","star_count":3}]
+            """);
+        var repo = Assert.Single(await new GitLabClient(Account(GitProvider.GitLab, "gitlab.com", "sofia"), GitCredential.Of("t"), client: stub.Client()).Repositories());
+        Assert.Equal("g/p", repo.FullName);
+        Assert.True(repo.IsPrivate);
+        Assert.Equal(3, repo.Stars);
+        Assert.Contains("membership=true", stub.LastQuery);
     }
 
     [Fact]
     public async Task GitLabRefreshesExpiredToken()
     {
-        var stub = new StubHandler();
+        var stub = new ForgeStub();
         var calls = 0;
         var handler = new DelegateHandler(r =>
         {
@@ -116,7 +185,7 @@ public class ForgeClientTests
     [Fact]
     public async Task BitbucketMineAcrossWorkspaces()
     {
-        var stub = new StubHandler();
+        var stub = new ForgeStub();
         stub.Routes["/2.0/user/workspaces"] = (HttpStatusCode.OK, """{"values":[{"workspace":{"slug":"acme"}},{"workspace":{"slug":"side"}}]}""");
         stub.Routes["/pullrequests/%7Bu-1%7D"] = (HttpStatusCode.OK, """
             {"values":[{"id":5,"title":"Add cache","state":"OPEN","draft":true,
@@ -126,7 +195,7 @@ public class ForgeClientTests
               "links":{"html":{"href":"https://bitbucket.org/acme/api/pull-requests/5"}},"comment_count":2,
               "participants":[{"approved":true,"state":"approved"}]}]}
             """);
-        var client = new BitbucketClient(Account(GitProvider.Bitbucket, "bitbucket.org", "sofia", "s@example.com", "{u-1}"), GitCredential.Of("tok"), new HttpClient(stub));
+        var client = new BitbucketClient(Account(GitProvider.Bitbucket, "bitbucket.org", "sofia", "s@example.com", "{u-1}"), GitCredential.Of("tok"), stub.Client());
         var items = await client.PullRequests(ForgeFilter.Mine, ForgeState.Open);
         var pr = Assert.Single(items);
         Assert.Equal("acme/api", pr.Repository.NameWithOwner);
@@ -143,32 +212,13 @@ public class ForgeClientTests
     }
 
     [Fact]
-    public async Task BitbucketReviewRequestsQueryReviewerAcrossRepos()
-    {
-        var stub = new StubHandler();
-        stub.Routes["/2.0/user/workspaces"] = (HttpStatusCode.OK, """{"values":[{"workspace":{"slug":"acme"}}]}""");
-        stub.Routes["/2.0/repositories/acme"] = (HttpStatusCode.OK, """{"values":[{"full_name":"acme/api"},{"full_name":"acme/web"}]}""");
-        stub.Routes["/acme/api/pullrequests"] = (HttpStatusCode.OK, """
-            {"values":[{"id":9,"title":"Review me","state":"OPEN","created_on":"2026-10-01T10:00:00Z","updated_on":"2026-10-04T10:00:00Z",
-              "destination":{"repository":{"full_name":"acme/api"}},"participants":[{"approved":false,"state":"changes_requested"}]}]}
-            """);
-        var client = new BitbucketClient(Account(GitProvider.Bitbucket, "bitbucket.org", "sofia", "s@example.com", "{u-1}"), GitCredential.Of("tok"), new HttpClient(stub));
-        var items = await client.PullRequests(ForgeFilter.ReviewRequested, ForgeState.Open);
-        var pr = Assert.Single(items);
-        Assert.Equal("CHANGES_REQUESTED", pr.ReviewDecision);
-        Assert.Equal("https://bitbucket.org/acme/api/pull-requests/9", pr.Url);
-        var search = stub.Requests.First(r => r.RequestUri!.AbsolutePath.EndsWith("/acme/api/pullrequests"));
-        Assert.Contains("q=reviewers.uuid%3D%22%7Bu-1%7D%22", search.RequestUri!.Query);
-    }
-
-    [Fact]
     public async Task BitbucketCachesResults()
     {
-        var stub = new StubHandler();
+        var stub = new ForgeStub();
         stub.Routes["/2.0/user/workspaces"] = (HttpStatusCode.OK, """{"values":[{"workspace":{"slug":"acme"}}]}""");
         stub.Routes["/pullrequests/%7Bu-1%7D"] = (HttpStatusCode.OK, """{"values":[]}""");
         var now = DateTimeOffset.Now;
-        var client = new BitbucketClient(Account(GitProvider.Bitbucket, "bitbucket.org", "sofia", "s@example.com", "{u-1}"), GitCredential.Of("tok"), new HttpClient(stub), () => now);
+        var client = new BitbucketClient(Account(GitProvider.Bitbucket, "bitbucket.org", "sofia", "s@example.com", "{u-1}"), GitCredential.Of("tok"), stub.Client(), () => now);
         await client.PullRequests(ForgeFilter.Mine, ForgeState.Open);
         var count = stub.Requests.Count;
         await client.PullRequests(ForgeFilter.Mine, ForgeState.Open);
@@ -181,14 +231,14 @@ public class ForgeClientTests
     [Fact]
     public async Task GiteaMapsMergedPull()
     {
-        var stub = new StubHandler();
+        var stub = new ForgeStub();
         stub.Routes["/api/v1/repos/issues/search"] = (HttpStatusCode.OK, """
             [{"number":3,"title":"Docs","html_url":"https://codeberg.org/me/site/pulls/3","state":"closed",
               "created_at":"2026-09-01T10:00:00+02:00","updated_at":"2026-09-02T10:00:00Z",
               "user":{"id":1,"login":"me","full_name":"","avatar_url":"https://a/me.png"},
               "repository":{"full_name":"me/site"},"comments":0,"labels":null,"pull_request":{"merged":true,"draft":false}}]
             """);
-        var client = new GiteaClient(Account(GitProvider.Gitea, "codeberg.org", "me"), GitCredential.Of("tok"), new HttpClient(stub));
+        var client = new GiteaClient(Account(GitProvider.Gitea, "codeberg.org", "me"), GitCredential.Of("tok"), stub.Client());
         var items = await client.PullRequests(ForgeFilter.Mine, ForgeState.Closed);
         var pr = Assert.Single(items);
         Assert.Equal("MERGED", pr.PrState);
@@ -204,9 +254,9 @@ public class ForgeClientTests
     [Fact]
     public async Task GiteaUserWithoutFullName()
     {
-        var stub = new StubHandler();
+        var stub = new ForgeStub();
         stub.Routes["/api/v1/user"] = (HttpStatusCode.OK, """{"id":42,"login":"me","full_name":"","avatar_url":"https://a/me.png"}""");
-        var client = new GiteaClient(Account(GitProvider.Gitea, "git.example.com"), GitCredential.Of("tok"), new HttpClient(stub));
+        var client = new GiteaClient(Account(GitProvider.Gitea, "git.example.com"), GitCredential.Of("tok"), stub.Client());
         var user = await client.CurrentUser();
         Assert.Equal("me", user.Login);
         Assert.Null(user.Name);
@@ -217,9 +267,9 @@ public class ForgeClientTests
     [Fact]
     public async Task UnauthorizedIsReported()
     {
-        var stub = new StubHandler();
+        var stub = new ForgeStub();
         stub.Routes["/api/v1/user"] = (HttpStatusCode.Unauthorized, """{"message":"bad token"}""");
-        var client = new GiteaClient(Account(GitProvider.Gitea, "codeberg.org"), GitCredential.Of("x"), new HttpClient(stub));
+        var client = new GiteaClient(Account(GitProvider.Gitea, "codeberg.org"), GitCredential.Of("x"), stub.Client());
         var e = await Assert.ThrowsAsync<ApiException>(() => client.CurrentUser());
         Assert.Equal(401, e.Status);
     }
@@ -227,9 +277,9 @@ public class ForgeClientTests
     [Fact]
     public async Task ServerErrorMessageIsSurfaced()
     {
-        var stub = new StubHandler();
+        var stub = new ForgeStub();
         stub.Routes["/api/v4/user"] = (HttpStatusCode.Forbidden, """{"error":"insufficient_scope","error_description":"needs api"}""");
-        var client = new GitLabClient(Account(GitProvider.GitLab, "gitlab.com"), GitCredential.Of("x"), client: new HttpClient(stub));
+        var client = new GitLabClient(Account(GitProvider.GitLab, "gitlab.com"), GitCredential.Of("x"), client: stub.Client());
         var e = await Assert.ThrowsAsync<ApiException>(() => client.CurrentUser());
         Assert.Equal(403, e.Status);
         Assert.Contains("needs api", e.Message);
@@ -328,8 +378,6 @@ public class GitAccountTests : IDisposable
         Assert.True(GitProvider.GitLab.UsesMergeRequests());
         Assert.Equal("!", GitProvider.GitLab.NumberPrefix());
         Assert.Equal("#", GitProvider.Bitbucket.NumberPrefix());
-        Assert.Equal(new[] { ForgeFilter.ReviewRequested, ForgeFilter.Mine }, GitProvider.Bitbucket.SupportedFilters());
-        Assert.Equal(5, GitProvider.Gitea.SupportedFilters().Count);
     }
 
     [Fact]

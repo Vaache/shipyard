@@ -53,13 +53,6 @@ public static class GitProviders
 
     public static bool SupportsDeviceFlow(this GitProvider p) => p.IsGitHub() || p == GitProvider.GitLab;
 
-    public static IReadOnlyList<ForgeFilter> SupportedFilters(this GitProvider p) => p switch
-    {
-        GitProvider.GitLab => new[] { ForgeFilter.ReviewRequested, ForgeFilter.Mine, ForgeFilter.Assigned },
-        GitProvider.Bitbucket => new[] { ForgeFilter.ReviewRequested, ForgeFilter.Mine },
-        _ => Enum.GetValues<ForgeFilter>()
-    };
-
     public static string TokenPlaceholder(this GitProvider p) => p switch
     {
         GitProvider.GitHub or GitProvider.GitHubEnterprise => "ghp_… or github_pat_…",

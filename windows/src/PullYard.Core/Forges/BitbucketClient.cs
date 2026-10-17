@@ -1,3 +1,4 @@
+using System.Globalization;
 using PullYard.Core.Api;
 using PullYard.Core.Auth;
 
@@ -27,6 +28,11 @@ public sealed class BitbucketClient : IForgeClient
         public UserLinks? Links { get; set; }
     }
 
+    private sealed class AccountRef
+    {
+        public string? Uuid { get; set; }
+    }
+
     private sealed class Page<T> where T : class
     {
         public List<T>? Values { get; set; }
@@ -44,9 +50,9 @@ public sealed class BitbucketClient : IForgeClient
         public string? Name => Workspace?.Slug ?? Slug;
     }
 
-    private sealed class Repo
+    private sealed class HtmlLinks
     {
-        public string FullName { get; set; } = "";
+        public Link? Html { get; set; }
     }
 
     private sealed class Branch
@@ -54,21 +60,33 @@ public sealed class BitbucketClient : IForgeClient
         public string Name { get; set; } = "";
     }
 
+    private sealed class Repo
+    {
+        public string FullName { get; set; } = "";
+        public string? Description { get; set; }
+        public bool? IsPrivate { get; set; }
+        public DateTimeOffset? UpdatedOn { get; set; }
+        public Branch? Mainbranch { get; set; }
+        public HtmlLinks? Links { get; set; }
+    }
+
+    private sealed class RepoName
+    {
+        public string FullName { get; set; } = "";
+    }
+
     private sealed class Endpoint
     {
         public Branch? Branch { get; set; }
-        public Repo? Repository { get; set; }
+        public RepoName? Repository { get; set; }
     }
 
     private sealed class Participant
     {
+        public AccountRef? User { get; set; }
+        public string? Role { get; set; }
         public bool? Approved { get; set; }
         public string? State { get; set; }
-    }
-
-    private sealed class PrLinks
-    {
-        public Link? Html { get; set; }
     }
 
     private sealed class PullRequest
@@ -81,14 +99,18 @@ public sealed class BitbucketClient : IForgeClient
         public DateTimeOffset UpdatedOn { get; set; }
         public User? Author { get; set; }
         public Endpoint? Destination { get; set; }
-        public PrLinks? Links { get; set; }
+        public HtmlLinks? Links { get; set; }
         public int? CommentCount { get; set; }
         public List<Participant>? Participants { get; set; }
+        public List<AccountRef>? Reviewers { get; set; }
     }
 
     private readonly ForgeHttp http;
-    private readonly Dictionary<string, (DateTimeOffset At, List<SearchItem> Items)> cache = new();
     private readonly Func<DateTimeOffset> now;
+    private readonly Dictionary<string, (DateTimeOffset At, List<SearchItem> Items)> cache = new();
+    private readonly Dictionary<ForgeState, (DateTimeOffset At, List<PullRequest> Pulls)> reviewCache = new();
+    private (DateTimeOffset At, List<Repo> Repos)? repoCache;
+    private bool participantFilterWorks = true;
     private string? uuid;
     private List<string>? workspaces;
 
@@ -111,6 +133,9 @@ public sealed class BitbucketClient : IForgeClient
         return new ForgeUser(u.Nickname ?? u.Username ?? u.DisplayName ?? u.Uuid, u.DisplayName, u.Links?.Avatar?.Href, u.Uuid);
     }
 
+    public Task<ForgeCapabilities> Capabilities(CancellationToken ct = default) =>
+        Task.FromResult(new ForgeCapabilities(new[] { ForgeFilter.ReviewRequested, ForgeFilter.Mine, ForgeFilter.Reviewed }, Array.Empty<ForgeIssueFilter>(), ForgeInbox.None, true));
+
     public async Task<List<SearchItem>> PullRequests(ForgeFilter filter, ForgeState state, CancellationToken ct = default)
     {
         var key = $"{filter}|{state}";
@@ -123,51 +148,116 @@ public sealed class BitbucketClient : IForgeClient
         return items;
     }
 
-    private async Task<List<SearchItem>> Fetch(ForgeFilter filter, ForgeState state, CancellationToken ct)
+    public async Task<List<ForgeRepo>> Repositories(CancellationToken ct = default) =>
+        (await MemberRepos(ct).ConfigureAwait(false))
+        .Select(r => new ForgeRepo(r.FullName, string.IsNullOrEmpty(r.Description) ? null : r.Description, r.Links?.Html?.Href ?? $"https://bitbucket.org/{r.FullName}", r.IsPrivate ?? true, r.UpdatedOn, r.Mainbranch?.Name, null))
+        .ToList();
+
+    private static List<(string, string)> StateQuery(ForgeState state)
     {
-        if (filter is not (ForgeFilter.Mine or ForgeFilter.ReviewRequested)) return new();
-        var me = uuid ?? (await CurrentUser(ct).ConfigureAwait(false)).Id ?? "";
-        var spaces = await WorkspaceSlugs(ct).ConfigureAwait(false);
         var states = state switch
         {
             ForgeState.Open => new[] { "OPEN" },
             ForgeState.Closed => new[] { "MERGED", "DECLINED", "SUPERSEDED" },
             _ => new[] { "OPEN", "MERGED", "DECLINED", "SUPERSEDED" }
         };
-        var common = states.Select(s => ("state", s)).Concat(new[] { ("pagelen", "50"), ("sort", "-updated_on"), ("fields", "+values.participants") }).ToList();
-        var items = new List<SearchItem>();
-        if (filter == ForgeFilter.Mine)
+        return states.Select(s => ("state", s)).Concat(new[] { ("pagelen", "50"), ("sort", "-updated_on"), ("fields", "+values.participants,+values.reviewers") }).ToList();
+    }
+
+    private async Task<List<SearchItem>> Fetch(ForgeFilter filter, ForgeState state, CancellationToken ct)
+    {
+        var me = await UserId(ct).ConfigureAwait(false);
+        switch (filter)
         {
-            foreach (var ws in spaces)
-            {
-                var page = await http.Get<Page<PullRequest>>($"/workspaces/{Uri.EscapeDataString(ws)}/pullrequests/{Uri.EscapeDataString(me)}", common, ct).ConfigureAwait(false);
-                items.AddRange((page.Values ?? new()).Select(Item));
-            }
-            return items.NewestFirst();
+            case ForgeFilter.Mine:
+                var items = new List<SearchItem>();
+                foreach (var ws in await WorkspaceSlugs(ct).ConfigureAwait(false))
+                {
+                    var page = await http.Get<Page<PullRequest>>($"/workspaces/{Uri.EscapeDataString(ws)}/pullrequests/{Uri.EscapeDataString(me)}", StateQuery(state), ct).ConfigureAwait(false);
+                    items.AddRange((page.Values ?? new()).Select(Item));
+                }
+                return items.NewestFirst();
+            case ForgeFilter.ReviewRequested:
+                return (await ReviewPulls(state, me, ct).ConfigureAwait(false)).Where(p => AwaitsReview(p, me)).Select(Item).NewestFirst();
+            case ForgeFilter.Reviewed:
+                return (await ReviewPulls(state, me, ct).ConfigureAwait(false)).Where(p => Reviewed(p, me)).Select(Item).NewestFirst();
+            default:
+                return new();
         }
-        var repos = new List<string>();
-        foreach (var ws in spaces)
-        {
-            if (repos.Count >= MaxRepos) break;
-            var page = await http.Get<Page<Repo>>($"/repositories/{Uri.EscapeDataString(ws)}", new[] { ("role", "member"), ("sort", "-updated_on"), ("pagelen", MaxRepos.ToString()) }, ct).ConfigureAwait(false);
-            repos.AddRange((page.Values ?? new()).Select(r => r.FullName));
-        }
-        Exception? lastError = null;
-        foreach (var repo in repos.Take(MaxRepos))
+    }
+
+    private async Task<List<PullRequest>> ReviewPulls(ForgeState state, string me, CancellationToken ct)
+    {
+        if (reviewCache.TryGetValue(state, out var hit) && now() - hit.At < CacheTtl) return hit.Pulls;
+        var pulls = new List<PullRequest>();
+        ApiException? lastError = null;
+        foreach (var repo in (await MemberRepos(ct).ConfigureAwait(false)).Take(MaxRepos))
         {
             try
             {
-                var page = await http.Get<Page<PullRequest>>($"/repositories/{repo}/pullrequests", common.Append(("q", $"reviewers.uuid=\"{me}\"")), ct).ConfigureAwait(false);
-                items.AddRange((page.Values ?? new()).Select(Item));
+                pulls.AddRange(await RepoPulls(repo.FullName, state, me, ct).ConfigureAwait(false));
             }
             catch (ApiException e)
             {
                 lastError = e;
             }
         }
-        if (items.Count == 0 && lastError is ApiException { Status: 401 }) throw lastError;
-        return items.NewestFirst();
+        if (pulls.Count == 0 && lastError is { Status: 401 }) throw lastError;
+        reviewCache[state] = (now(), pulls);
+        return pulls;
     }
+
+    private async Task<List<PullRequest>> RepoPulls(string repo, ForgeState state, string me, CancellationToken ct)
+    {
+        var reviewer = $"reviewers.uuid=\"{me}\"";
+        if (participantFilterWorks)
+        {
+            try
+            {
+                var page = await http.Get<Page<PullRequest>>($"/repositories/{repo}/pullrequests", StateQuery(state).Append(("q", $"{reviewer} OR participants.user.uuid=\"{me}\"")), ct).ConfigureAwait(false);
+                return page.Values ?? new();
+            }
+            catch (ApiException e) when (e.Status == 400)
+            {
+                participantFilterWorks = false;
+            }
+        }
+        var fallback = await http.Get<Page<PullRequest>>($"/repositories/{repo}/pullrequests", StateQuery(state).Append(("q", reviewer)), ct).ConfigureAwait(false);
+        return fallback.Values ?? new();
+    }
+
+    private static bool Same(string? a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    private static Participant? Mine(PullRequest pr, string me) => pr.Participants?.FirstOrDefault(p => Same(p.User?.Uuid, me));
+
+    private static bool AwaitsReview(PullRequest pr, string me)
+    {
+        var mine = Mine(pr, me);
+        var isReviewer = pr.Reviewers?.Any(r => Same(r.Uuid, me)) == true || mine?.Role == "REVIEWER";
+        return isReviewer && mine?.Approved != true && mine?.State is null;
+    }
+
+    private static bool Reviewed(PullRequest pr, string me)
+    {
+        if (Same(pr.Author?.Uuid, me) || Mine(pr, me) is not { } mine) return false;
+        return mine.Approved == true || mine.State is "approved" or "changes_requested";
+    }
+
+    private async Task<List<Repo>> MemberRepos(CancellationToken ct)
+    {
+        if (repoCache is { } known && now() - known.At < CacheTtl) return known.Repos;
+        var repos = new List<Repo>();
+        foreach (var ws in await WorkspaceSlugs(ct).ConfigureAwait(false))
+        {
+            var page = await http.Get<Page<Repo>>($"/repositories/{Uri.EscapeDataString(ws)}", new[] { ("role", "member"), ("sort", "-updated_on"), ("pagelen", "100") }, ct).ConfigureAwait(false);
+            repos.AddRange(page.Values ?? new());
+        }
+        repos = repos.OrderByDescending(r => r.UpdatedOn ?? DateTimeOffset.MinValue).ToList();
+        repoCache = (now(), repos);
+        return repos;
+    }
+
+    private async Task<string> UserId(CancellationToken ct) => uuid ?? (await CurrentUser(ct).ConfigureAwait(false)).Id ?? "";
 
     private async Task<List<string>> WorkspaceSlugs(CancellationToken ct)
     {
@@ -195,11 +285,12 @@ public sealed class BitbucketClient : IForgeClient
             "MERGED" => "MERGED",
             _ => "CLOSED"
         };
+        var participants = pr.Participants ?? new();
         string? review = null;
-        if ((pr.Participants ?? new()).Any(p => p.State == "changes_requested")) review = "CHANGES_REQUESTED";
-        else if ((pr.Participants ?? new()).Any(p => p.Approved == true)) review = "APPROVED";
+        if (participants.Any(p => p.State == "changes_requested")) review = "CHANGES_REQUESTED";
+        else if (participants.Any(p => p.Approved == true)) review = "APPROVED";
         var repo = pr.Destination?.Repository?.FullName ?? "?";
-        return ForgeItems.Item(pr.Id, pr.Title, pr.Links?.Html?.Href ?? $"https://bitbucket.org/{repo}/pull-requests/{pr.Id}", state, pr.Draft ?? false, pr.CreatedOn, pr.UpdatedOn,
+        return ForgeItems.Item(pr.Id, pr.Title, pr.Links?.Html?.Href ?? $"https://bitbucket.org/{repo}/pull-requests/{pr.Id.ToString(CultureInfo.InvariantCulture)}", state, pr.Draft ?? false, pr.CreatedOn, pr.UpdatedOn,
             pr.Destination?.Branch?.Name, pr.Author?.Nickname ?? pr.Author?.DisplayName, pr.Author?.Links?.Avatar?.Href, repo, pr.CommentCount, Array.Empty<LabelInfo>(), review);
     }
 }
