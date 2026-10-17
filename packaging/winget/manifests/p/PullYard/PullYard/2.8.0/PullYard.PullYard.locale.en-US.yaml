@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
+
+PackageIdentifier: PullYard.PullYard
+PackageVersion: 2.8.0
+PackageLocale: en-US
+Publisher: PullYard
+PublisherUrl: https://github.com/pullyard
+PublisherSupportUrl: https://github.com/pullyard/pullyard/issues
+Author: Vaache
+PackageName: PullYard
+PackageUrl: https://pullyard.github.io/pullyard/
+License: MIT
+LicenseUrl: https://github.com/pullyard/pullyard/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Vaache
+ShortDescription: Pull requests, without the browser. A tiny native GitHub client with a Claude Code workspace.
+Description: |-
+  PullYard is a native GitHub pull request client for Windows, macOS and Linux.
+  Review conversations, commits, checks and changed files; comment, approve, request changes and merge; follow notifications, issues, repositories with git blame and GitHub Projects boards, all without opening a browser.
+  A built-in Claude Code workspace puts a native chat for the Claude Code CLI next to the pull request, its changed files and its branch, with one-click "Fix with Claude Code" from review feedback.
+Moniker: pullyard
+Tags:
+- claude-code
+- code-review
+- git
+- github
+- pull-request
+- winui3
+ReleaseNotesUrl: https://pullyard.github.io/pullyard/changelog.html#v2.8.0
+ManifestType: defaultLocale
+ManifestVersion: 1.10.0
