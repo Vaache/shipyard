@@ -45,7 +45,6 @@ public sealed partial class AppViewModel : ObservableObject
     public event Action? OpenLinkRequested;
     public event Action? SettingsRequested;
     public event Action? ActivateRequested;
-    public event Action<string>? ToastRequested;
     public event Action? AddAccountRequested;
 
     private DateTimeOffset lastLiveRefresh = DateTimeOffset.Now;
@@ -179,8 +178,8 @@ public sealed partial class AppViewModel : ObservableObject
             if (known is not null) User = known.User;
             Api = early;
             Phase = Phase.LoggedIn;
+            if (account is not null) BindClaude(account);
             StartPolling();
-            if (account is not null) Accounts.MarkUsed(account);
         }
         var api = early ?? new GitHubApi(token, host);
         try
@@ -200,6 +199,7 @@ public sealed partial class AppViewModel : ObservableObject
             Forge = null;
             Account = known?.CacheKey;
             if (known is not null) User = known.User;
+            if (account is not null) BindClaude(account);
             Api = api;
             Phase = Phase.LoggedIn;
             StartPolling();
@@ -215,7 +215,6 @@ public sealed partial class AppViewModel : ObservableObject
         {
             GitAccount = updated;
             Accounts.Update(updated);
-            Accounts.MarkUsed(updated);
         }
         var key = updated?.CacheKey ?? user.Login;
         if (!string.Equals(Account, key, StringComparison.OrdinalIgnoreCase))
@@ -235,7 +234,7 @@ public sealed partial class AppViewModel : ObservableObject
         if (account is not null)
         {
             Accounts.Update(account);
-            Accounts.MarkUsed(account);
+            BindClaude(account);
         }
         GitAccount = account;
         Forge = null;
@@ -253,7 +252,7 @@ public sealed partial class AppViewModel : ObservableObject
     private void EnterForge(GitAccount account, IForgeClient client)
     {
         if (GitAccount?.Id != account.Id) ForgeListViewModel.ClearCache();
-        Accounts.MarkUsed(account);
+        BindClaude(account);
         GitAccount = account;
         Forge = client;
         Api = null;
@@ -278,7 +277,6 @@ public sealed partial class AppViewModel : ObservableObject
             GitAccount = updated;
             User = updated.User;
             Accounts.Update(updated);
-            Accounts.MarkUsed(updated);
         }
         catch (ApiException e) when (e.Status == 401)
         {
@@ -319,14 +317,14 @@ public sealed partial class AppViewModel : ObservableObject
             var api = new GitHubApi(credential.Token, host);
             var (user, scopes) = await api.CurrentUser();
             var saved = Accounts.Upsert(draft.With(user), credential);
-            await LeaveCurrent(saved);
+            LeaveCurrent(saved);
             EnterGitHub(saved, api, user, scopes, credential.Token);
             return;
         }
         if (MakeForge(draft, credential) is not { } probe) return;
         var u = await probe.CurrentUser();
         var stored = Accounts.Upsert(draft.With(u.User, u.Id), credential);
-        await LeaveCurrent(stored);
+        LeaveCurrent(stored);
         if (MakeForge(stored, credential) is { } client) EnterForge(stored, client);
     }
 
@@ -335,48 +333,66 @@ public sealed partial class AppViewModel : ObservableObject
         if (id == GitAccount?.Id && Phase == Phase.LoggedIn) return;
         if (Accounts.Find(id) is not { } target) return;
         if (Accounts.Credential(target) is not { } credential)
-        {
-            Accounts.Remove(id);
-            ShowToast(L.F("Accounts_Missing", "Sign-in for {0} is missing. Add the account again", target.Subtitle));
-            return;
-        }
-        await LeaveCurrent(target);
+            throw new ApiException(L.F("Accounts_Expired", "Sign-in for {0} has expired. Sign in again to use this account.", target.Subtitle), 401);
+        LeaveCurrent(target);
         await Resume(target, credential);
     }
 
-    private async Task LeaveCurrent(GitAccount next)
+    private void LeaveCurrent(GitAccount next)
     {
-        if (Accounts.LastUsedIdentity is { } last && last != next.Identity) await SignOutOfClaude();
         if (Phase == Phase.LoggedIn && GitAccount?.Id != next.Id) ResetSession(forgetCache: false, Phase.Checking);
         Accounts.SetActive(next.Id);
     }
 
-    public async Task SignOutOfClaude()
+    private void BindClaude(GitAccount account)
     {
+        var profiles = ClaudeProfiles.Shared;
+        if (profiles.Owned(account.Id).Count == 0 && !profiles.ClaimUnowned(account.Id))
+        {
+            try
+            {
+                profiles.Add($"{account.Provider.ShortTitle()} @{account.Login}", false, account.Id);
+            }
+            catch (Exception e)
+            {
+                ErrorLog.Write(e, "creating Claude profile failed");
+            }
+        }
+        profiles.Scope = account.Id;
+        if (profiles.Preferred(account.Id) is { } target && target.Id != profiles.ActiveId) SwitchClaudeProfile(target.Id);
+    }
+
+    private async Task UnbindClaude(GitAccount account)
+    {
+        var profiles = ClaudeProfiles.Shared;
+        var owned = profiles.Owned(account.Id);
         Claude.CloseAllForProfileSwitch();
-        await ClaudeAccountStore.Shared.LogoutAll();
+        await ClaudeAccountStore.Shared.Logout(owned);
+        foreach (var p in owned)
+        {
+            if (p.IsDefault) profiles.Release(p.Id);
+            else profiles.Remove(p.Id);
+        }
+        profiles.Scope = null;
         await Claude.ReloadProjects();
-        ShowToast(L.T("Accounts_ClaudeSignedOut", "Signed out of Claude Code"));
     }
 
     public async Task SignOut()
     {
         var current = GitAccount;
-        await SignOutOfClaude();
+        if (current is not null) await UnbindClaude(current);
         ResetSession(forgetCache: true);
         if (current is not null) Accounts.Remove(current.Id);
         else CredentialStore.Delete();
-        Accounts.MarkUsed(null);
     }
 
     private void Revoked()
     {
-        if (GitAccount is { } account) Accounts.Remove(account.Id);
+        if (GitAccount is { } account) Accounts.ForgetCredential(account.Id);
         else CredentialStore.Delete();
-        ResetSession(forgetCache: true);
+        ClaudeProfiles.Shared.Scope = null;
+        ResetSession(forgetCache: false);
     }
-
-    public void ShowToast(string text) => ToastRequested?.Invoke(text);
 
     private static void Remember(string token, string login)
     {
@@ -650,7 +666,7 @@ public sealed partial class AppViewModel : ObservableObject
 
     public void SwitchClaudeProfile(string id)
     {
-        if (id == ClaudeProfiles.Shared.ActiveId) return;
+        if (id == ClaudeProfiles.Shared.ActiveId || ClaudeProfiles.Shared.Visible.All(p => p.Id != id)) return;
         Claude.CloseAllForProfileSwitch();
         ClaudeProfiles.Shared.SetActive(id);
         ClaudeUsageStore.Shared.Windows = new();
@@ -668,8 +684,22 @@ public sealed partial class AppViewModel : ObservableObject
     public void RemoveClaudeProfile(string id)
     {
         var profiles = ClaudeProfiles.Shared;
-        if (profiles.Profiles.FirstOrDefault(p => p.Id == id) is not { IsDefault: false } profile) return;
-        if (profiles.ActiveId == id) SwitchClaudeProfile(ClaudeProfiles.DefaultId);
+        if (profiles.Visible.FirstOrDefault(p => p.Id == id) is not { IsDefault: false } profile) return;
+        if (profiles.ActiveId == id)
+        {
+            if (profiles.Visible.FirstOrDefault(p => p.Id != id) is { } other) SwitchClaudeProfile(other.Id);
+            else
+            {
+                try
+                {
+                    SwitchClaudeProfile(profiles.Add("Claude", false).Id);
+                }
+                catch (Exception e)
+                {
+                    ErrorLog.Write(e, "creating Claude profile failed");
+                }
+            }
+        }
         RemoveProfile(profile).Forget();
     }
 

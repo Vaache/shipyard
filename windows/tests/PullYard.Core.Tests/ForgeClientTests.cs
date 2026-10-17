@@ -375,18 +375,92 @@ public class GitAccountTests : IDisposable
         Assert.Equal(gitlab.Id, again.Id);
         Assert.Equal("account-a", again.CredentialKey);
         store.SetActive(gitlab.Id);
-        store.MarkUsed(gitlab);
 
         var reloaded = new GitAccounts(new Settings(Path.Combine(dir, "settings.json")), vault);
         var account = Assert.Single(reloaded.All);
         Assert.Equal(GitProvider.GitLab, account.Provider);
         Assert.Equal(gitlab.Id, reloaded.ActiveId);
-        Assert.Equal(gitlab.Identity, reloaded.LastUsedIdentity);
         Assert.Equal("glpat2", reloaded.Credential(account)!.Token);
+
+        Assert.True(reloaded.HasCredential(account));
+        reloaded.ForgetCredential(account.Id);
+        Assert.False(reloaded.HasCredential(account));
+        Assert.Single(reloaded.All);
+        Assert.Equal(gitlab.Id, reloaded.ActiveId);
+        vault.Save(account.CredentialKey, "glpat3");
 
         reloaded.Remove(account.Id);
         Assert.Empty(reloaded.All);
         Assert.Null(reloaded.ActiveId);
         Assert.Empty(vault.Items);
+    }
+}
+
+public class ClaudeProfileOwnershipTests : IDisposable
+{
+    private readonly string dir = Path.Combine(Path.GetTempPath(), "pullyard-profiles-" + Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(dir, true);
+        }
+        catch
+        {
+        }
+    }
+
+    private Claude.ClaudeProfiles Make() => new(new Settings(Path.Combine(dir, "settings.json")), Path.Combine(dir, "ClaudeAccounts"));
+
+    [Fact]
+    public void FirstAccountClaimsExistingProfilesAndOthersGetTheirOwn()
+    {
+        var profiles = Make();
+        var work = profiles.Add("Work", false);
+        Assert.Null(work.Owner);
+        Assert.True(profiles.ClaimUnowned("a"));
+        Assert.Equal(2, profiles.Owned("a").Count);
+        Assert.False(profiles.ClaimUnowned("b"));
+        var mine = profiles.Add("GitLab @sofia", false, "b");
+        profiles.Scope = "b";
+        Assert.Equal(new[] { mine.Id }, profiles.Visible.Select(p => p.Id));
+        Assert.False(profiles.OwnsMain);
+        profiles.Scope = "a";
+        Assert.True(profiles.OwnsMain);
+        Assert.Equal(2, profiles.Visible.Count);
+        Assert.Equal("a", profiles.Add("Personal", false).Owner);
+    }
+
+    [Fact]
+    public void RemembersActiveProfilePerAccount()
+    {
+        var profiles = Make();
+        profiles.ClaimUnowned("a");
+        var second = profiles.Add("Second", false, "a");
+        var other = profiles.Add("Other", false, "b");
+        profiles.SetActive(second.Id);
+        profiles.SetActive(other.Id);
+        Assert.Equal(second.Id, profiles.Preferred("a")!.Id);
+        Assert.Equal(other.Id, profiles.Preferred("b")!.Id);
+        var reloaded = Make();
+        Assert.Equal(second.Id, reloaded.Preferred("a")!.Id);
+        Assert.Equal("a", reloaded.Profiles.First(p => p.IsDefault).Owner);
+        Assert.Null(reloaded.Preferred("nobody"));
+    }
+
+    [Fact]
+    public void ReleasedMainProfileCanBeClaimedByNextAccount()
+    {
+        var profiles = Make();
+        profiles.ClaimUnowned("a");
+        profiles.UpdateCachedInfo("s@example.com", "Max");
+        profiles.Release(Claude.ClaudeProfiles.DefaultId);
+        var main = profiles.Profiles.First(p => p.IsDefault);
+        Assert.Null(main.Owner);
+        Assert.Null(main.Email);
+        Assert.Null(profiles.Preferred("a"));
+        Assert.True(profiles.ClaimUnowned("b"));
+        Assert.Equal(Claude.ClaudeProfiles.DefaultId, profiles.Preferred("b")!.Id);
     }
 }

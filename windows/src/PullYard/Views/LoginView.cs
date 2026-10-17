@@ -26,7 +26,9 @@ public sealed class LoginView : Grid
     private readonly PasswordBox tokenBox = new();
     private readonly TextBox clientIdBox = new();
     private readonly StackPanel devicePanel = Ui.V(8);
+    private readonly SelectorBar picker = new() { HorizontalAlignment = HorizontalAlignment.Center };
     private GitProvider provider;
+    private GitAccount? prefill;
     private CancellationTokenSource? deviceCts;
 
     public LoginView(bool embedded = false, Action? onDone = null)
@@ -53,7 +55,6 @@ public sealed class LoginView : Grid
             if (SavedAccounts() is { } accounts) stack.Children.Add(accounts);
         }
 
-        var picker = new SelectorBar { HorizontalAlignment = HorizontalAlignment.Center };
         foreach (var p in GitProviders.All)
         {
             var item = new SelectorBarItem { Text = p.ShortTitle(), Tag = p };
@@ -71,15 +72,6 @@ public sealed class LoginView : Grid
         stack.Children.Add(picker);
         stack.Children.Add(providerArea);
 
-        if (app.Accounts.LastUsedIdentity is not null)
-        {
-            var text = embedded
-                ? L.T("Login_AddSwitches", "Adding an account switches to it.") + " " + AccountDialogs.ClaudeNote
-                : L.T("Login_DifferentAccountNote", "Signing in with a different account also signs out of Claude Code.");
-            var note = Ui.Columns((Ui.Glyph("", 13), Ui.Auto), (Ui.Text(text, 12, "muted", wrap: true), Ui.Star));
-            note.ColumnSpacing = 8;
-            stack.Children.Add(note);
-        }
         stack.Children.Add(busyRing);
         stack.Children.Add(errorBar);
 
@@ -107,12 +99,22 @@ public sealed class LoginView : Grid
         {
             var id = a.Id;
             var info = Ui.V(0, Ui.Text(a.Name ?? (a.Login.Length > 0 ? a.Login : a.Provider.Title()), 13, "text", FontWeights.Medium), Ui.Caption($"{a.Provider.Title()} · {a.Subtitle}"));
-            var go = Ui.Button(L.T("Login_Continue", "Continue"), () => RunLogin(() => app.SwitchAccount(id)));
+            var target = a;
+            var go = app.Accounts.HasCredential(a)
+                ? Ui.Button(L.T("Login_Continue", "Continue"), () => RunLogin(() => app.SwitchAccount(id)))
+                : Ui.Button(L.T("Login_SignInAgain", "Sign in again"), () => Prefill(target));
             var row = Ui.Columns((Ui.Avatar(a.AvatarUrl, 24), Ui.Auto), (info, Ui.Star), (go, Ui.Auto));
             row.ColumnSpacing = 10;
             rows.Add(row);
         }
         return Card(L.T("Login_YourAccounts", "Your accounts"), "", "green", rows.ToArray());
+    }
+
+    private void Prefill(GitAccount account)
+    {
+        prefill = account;
+        if (provider == account.Provider) RenderProvider();
+        else picker.SelectedItem = picker.Items.FirstOrDefault(i => i.Tag is GitProvider p && p == account.Provider);
     }
 
     private void RenderProvider()
@@ -132,6 +134,13 @@ public sealed class LoginView : Grid
         tokenBox.PlaceholderText = provider.TokenPlaceholder();
         clientIdBox.PlaceholderText = provider == GitProvider.GitLab ? L.T("Login_ApplicationId", "Application ID") : L.T("Login_ClientId", "Client ID");
         clientIdBox.Text = Settings.Shared.GetString(ClientIdKey) ?? "";
+        if (prefill is { } again && again.Provider == provider)
+        {
+            if (provider.HostEditable()) hostBox.Text = again.Host;
+            emailBox.Text = again.Email ?? "";
+            prefill = null;
+            DispatcherQueue.TryEnqueue(() => tokenBox.Focus(FocusState.Programmatic));
+        }
 
         if (provider.HostEditable())
             providerArea.Children.Add(Card(L.F("Login_ServerTitle", "{0} server", provider.Title()), "", "teal", hostBox));

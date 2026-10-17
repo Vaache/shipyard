@@ -138,7 +138,7 @@ public sealed class ClaudeSessionsView : ListPane
         {
             ClaudeAccountStatus.LoggedIn when store.Info is { } info => ClaudeAccountCard.Create(info, compact: true),
             ClaudeAccountStatus.LoggedOut => Ui.V(6, Ui.H(6, Ui.Glyph("", 12, "amber"), Ui.Text(L.T("Claude_SignInRight", "Not signed in to Claude — sign in on the right"), 12.5, "amber", wrap: true)),
-                ClaudeProfiles.Shared.Profiles.Count > 1 ? ClaudeAccountCard.Switcher() : null),
+                ClaudeProfiles.Shared.Visible.Count > 1 ? ClaudeAccountCard.Switcher() : null),
             ClaudeAccountStatus.NotInstalled => Ui.H(6, Ui.Glyph("", 12, "amber"), Ui.Text(L.T("Claude_NotFound", "claude CLI not found — see the right side"), 12.5, "amber", wrap: true)),
             _ => null
         };
@@ -231,7 +231,7 @@ public static class ClaudeAccountCard
     {
         var profile = ClaudeProfiles.Shared.Active;
         var nameRow = Ui.H(5, Ui.Text(info.Email ?? L.T("Claude_SignedIn", "Signed in"), compact ? 13 : 15, "text", FontWeights.Medium));
-        if (ClaudeProfiles.Shared.Profiles.Count > 1) nameRow.Children.Add(Ui.Chip(profile.Label, "muted"));
+        if (ClaudeProfiles.Shared.Visible.Count > 1) nameRow.Children.Add(Ui.Chip(profile.Label, "muted"));
         var sub = Ui.H(5);
         if (info.OrgName is { } org) sub.Children.Add(Ui.Caption(org));
         if (info.Subscription is { } plan) sub.Children.Add(Ui.Chip(plan, "coral"));
@@ -266,7 +266,7 @@ public static class ClaudeAccountCard
         var profiles = ClaudeProfiles.Shared;
         var menu = new MenuFlyout();
         menu.Items.Add(new MenuFlyoutItem { Text = L.T("Claude_Accounts", "Claude accounts"), IsEnabled = false });
-        foreach (var p in profiles.Profiles)
+        foreach (var p in profiles.Visible)
         {
             var id = p.Id;
             menu.Items.Add(Ui.CheckItem(p.MenuTitle, id == profiles.ActiveId, () => app.SwitchClaudeProfile(id)));
@@ -306,7 +306,8 @@ public static class ClaudeDialogs
     {
         if (root is null) return;
         var name = new TextBox { PlaceholderText = L.T("Claude_ProfileName", "Name, e.g. “Personal” or “Work”") };
-        var share = new CheckBox { Content = L.T("Claude_ShareSettings", "Use my settings, CLAUDE.md, skills and plugins from the main account"), IsChecked = true };
+        var ownsMain = ClaudeProfiles.Shared.OwnsMain;
+        var share = new CheckBox { Content = L.T("Claude_ShareSettings", "Use my settings, CLAUDE.md, skills and plugins from the main account"), IsChecked = true, Visibility = ownsMain ? Visibility.Visible : Visibility.Collapsed };
         var error = Ui.Text("", 12, "red", wrap: true);
         var panel = Ui.V(10, Ui.Text(L.T("Claude_ProfileHelp", "The account gets its own sign-in, session history and limits. Sign-in opens right after."), 13, "muted", wrap: true), name, share, error);
         var d = Dialogs.Create(root, L.T("Claude_NewAccount", "New Claude account"), panel, L.T("Claude_CreateAndSignIn", "Create and sign in"));
@@ -314,7 +315,7 @@ public static class ClaudeDialogs
         {
             try
             {
-                var p = ClaudeProfiles.Shared.Add(name.Text, share.IsChecked == true);
+                var p = ClaudeProfiles.Shared.Add(name.Text, ownsMain && share.IsChecked == true);
                 var app = AppViewModel.Shared;
                 app.SwitchClaudeProfile(p.Id);
                 app.Section = Section.Claude;

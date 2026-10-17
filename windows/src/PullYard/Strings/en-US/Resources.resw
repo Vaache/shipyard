@@ -6,15 +6,15 @@
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="Accounts_Add" xml:space="preserve"><value>Add Account…</value></data>
   <data name="Accounts_AddTitle" xml:space="preserve"><value>Add account</value></data>
-  <data name="Accounts_ClaudeNote" xml:space="preserve"><value>Claude Code is signed out too, for every Claude account on this PC and in the terminal. Open Claude sessions close; their history stays.</value></data>
-  <data name="Accounts_ClaudeSignedOut" xml:space="preserve"><value>Signed out of Claude Code</value></data>
-  <data name="Accounts_Missing" xml:space="preserve"><value>Sign-in for {0} is missing. Add the account again</value></data>
+  <data name="Accounts_Expired" xml:space="preserve"><value>Sign-in for {0} has expired. Sign in again to use this account.</value></data>
   <data name="Accounts_SignOut" xml:space="preserve"><value>Sign Out…</value></data>
-  <data name="Accounts_SignOutBody" xml:space="preserve"><value>The account is removed from {0}.</value></data>
+  <data name="Accounts_SignOutBody" xml:space="preserve"><value>The account is removed from {0}, and the Claude Code accounts linked to it are signed out. Other accounts and their Claude Code sign-ins are not affected.</value></data>
   <data name="Accounts_SignOutButton" xml:space="preserve"><value>Sign Out</value></data>
   <data name="Accounts_SignOutTitle" xml:space="preserve"><value>Sign out of {0}?</value></data>
   <data name="Accounts_Switch" xml:space="preserve"><value>Switch account</value></data>
-  <data name="Accounts_SwitchButton" xml:space="preserve"><value>Switch and Sign Out of Claude Code</value></data>
+  <data name="Accounts_SwitchBody" xml:space="preserve"><value>Running Claude sessions stop. Their history stays, and this account's Claude Code sign-in is kept for when you switch back.</value></data>
+  <data name="Accounts_SwitchButton" xml:space="preserve"><value>Switch</value></data>
+  <data name="Accounts_SwitchFailed" xml:space="preserve"><value>Couldn't switch account</value></data>
   <data name="Accounts_SwitchTitle" xml:space="preserve"><value>Switch to {0}?</value></data>
   <data name="Accounts_ThisAccount" xml:space="preserve"><value>this account</value></data>
   <data name="Accounts_Title" xml:space="preserve"><value>Accounts</value></data>
@@ -290,7 +290,6 @@
   <data name="Item_StackedOn" xml:space="preserve"><value>stacked on {0}</value></data>
   <data name="Log_Copy" xml:space="preserve"><value>Copy</value></data>
   <data name="Log_ErrorsOnly" xml:space="preserve"><value>Errors only</value></data>
-  <data name="Login_AddSwitches" xml:space="preserve"><value>Adding an account switches to it.</value></data>
   <data name="Login_ApiTokenTitle" xml:space="preserve"><value>API token</value></data>
   <data name="Login_ApplicationId" xml:space="preserve"><value>Application ID</value></data>
   <data name="Login_BitbucketEmail" xml:space="preserve"><value>Atlassian account email</value></data>
@@ -305,7 +304,6 @@
   <data name="Login_DeviceHint" xml:space="preserve"><value>Enter the code at github.com/login/device — you'll be signed in automatically.</value></data>
   <data name="Login_DeviceHintAt" xml:space="preserve"><value>Enter the code at {0} — you'll be signed in automatically.</value></data>
   <data name="Login_DeviceTitle" xml:space="preserve"><value>Sign in via browser (OAuth Device Flow)</value></data>
-  <data name="Login_DifferentAccountNote" xml:space="preserve"><value>Signing in with a different account also signs out of Claude Code.</value></data>
   <data name="Login_EnterEmail" xml:space="preserve"><value>Enter your Atlassian account email</value></data>
   <data name="Login_EnterServer" xml:space="preserve"><value>Enter the server address</value></data>
   <data name="Login_GetCode" xml:space="preserve"><value>Get code</value></data>
@@ -322,6 +320,7 @@
   <data name="Login_PatTitle" xml:space="preserve"><value>Personal Access Token</value></data>
   <data name="Login_ServerTitle" xml:space="preserve"><value>{0} server</value></data>
   <data name="Login_SignIn" xml:space="preserve"><value>Sign in</value></data>
+  <data name="Login_SignInAgain" xml:space="preserve"><value>Sign in again</value></data>
   <data name="Login_SignInWithGh" xml:space="preserve"><value>Sign in with gh</value></data>
   <data name="Login_SignInWithGlab" xml:space="preserve"><value>Sign in with glab</value></data>
   <data name="Login_Subtitle" xml:space="preserve"><value>Fast PR browsing without a browser</value></data>

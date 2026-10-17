@@ -224,7 +224,7 @@ public static class SettingsDialog
     {
         var panel = Ui.V(8);
         var profiles = new ComboBox { MinWidth = 240 };
-        foreach (var p in ClaudeProfiles.Shared.Profiles) profiles.Items.Add(new ComboBoxItem { Content = p.MenuTitle, Tag = p.Id });
+        foreach (var p in ClaudeProfiles.Shared.Visible) profiles.Items.Add(new ComboBoxItem { Content = p.MenuTitle, Tag = p.Id });
         profiles.SelectedItem = profiles.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == ClaudeProfiles.Shared.ActiveId);
         profiles.SelectionChanged += (_, _) =>
         {

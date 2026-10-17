@@ -46,7 +46,6 @@ public sealed class ShellView : Grid
         Children.Add(nav);
         app.PropertyChanged += OnAppChanged;
         app.RouteRequested += OnRoute;
-        app.ToastRequested += Toast;
         app.AddAccountRequested += OnAddAccount;
         app.Claude.PropertyChanged += OnClaudeChanged;
         app.Updater.PropertyChanged += OnUpdaterChanged;
@@ -55,7 +54,6 @@ public sealed class ShellView : Grid
         {
             app.PropertyChanged -= OnAppChanged;
             app.RouteRequested -= OnRoute;
-            app.ToastRequested -= Toast;
             app.AddAccountRequested -= OnAddAccount;
             app.Claude.PropertyChanged -= OnClaudeChanged;
             app.Updater.PropertyChanged -= OnUpdaterChanged;

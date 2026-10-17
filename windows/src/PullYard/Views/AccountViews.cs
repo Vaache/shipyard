@@ -11,8 +11,6 @@ namespace PullYard.Views;
 
 public static class AccountDialogs
 {
-    public static string ClaudeNote => L.T("Accounts_ClaudeNote", "Claude Code is signed out too, for every Claude account on this PC and in the terminal. Open Claude sessions close; their history stays.");
-
     public static MenuFlyout Menu(XamlRoot? root)
     {
         var app = AppViewModel.Shared;
@@ -24,7 +22,7 @@ public static class AccountDialogs
             var target = a;
             menu.Items.Add(Ui.MenuItem($"{a.Provider.Title()} — {a.Subtitle}", () =>
             {
-                if (!current) ConfirmSwitch(root, target).Forget();
+                if (!current) Switch(root, target).Forget();
             }, current ? "" : a.Provider.Glyph()));
         }
         menu.Items.Add(Ui.MenuItem(L.T("Accounts_Add", "Add Account…"), () => Add(root).Forget(), ""));
@@ -33,17 +31,26 @@ public static class AccountDialogs
         return menu;
     }
 
-    public static async Task ConfirmSwitch(XamlRoot? root, GitAccount target)
+    public static async Task Switch(XamlRoot? root, GitAccount target)
     {
-        if (!await Dialogs.Confirm(root, L.F("Accounts_SwitchTitle", "Switch to {0}?", target.Subtitle), L.T("Accounts_SwitchButton", "Switch and Sign Out of Claude Code"), message: ClaudeNote)) return;
-        await AppViewModel.Shared.SwitchAccount(target.Id);
+        var app = AppViewModel.Shared;
+        if (app.Claude.RunningCount > 0 && !await Dialogs.Confirm(root, L.F("Accounts_SwitchTitle", "Switch to {0}?", target.Subtitle), L.T("Accounts_SwitchButton", "Switch"), false,
+                L.T("Accounts_SwitchBody", "Running Claude sessions stop. Their history stays, and this account's Claude Code sign-in is kept for when you switch back."))) return;
+        try
+        {
+            await app.SwitchAccount(target.Id);
+        }
+        catch (Exception e)
+        {
+            await Dialogs.Alert(root ?? App.MainWindow?.Content?.XamlRoot, L.T("Accounts_SwitchFailed", "Couldn't switch account"), e.Message);
+        }
     }
 
     public static async Task<bool> ConfirmSignOut(XamlRoot? root)
     {
         var app = AppViewModel.Shared;
         var name = app.GitAccount?.Subtitle ?? (app.User is { } u ? "@" + u.Login : L.T("Accounts_ThisAccount", "this account"));
-        var message = L.F("Accounts_SignOutBody", "The account is removed from {0}.", Core.AppInfo.DisplayName) + " " + ClaudeNote;
+        var message = L.F("Accounts_SignOutBody", "The account is removed from {0}, and the Claude Code accounts linked to it are signed out. Other accounts and their Claude Code sign-ins are not affected.", Core.AppInfo.DisplayName);
         if (!await Dialogs.Confirm(root, L.F("Accounts_SignOutTitle", "Sign out of {0}?", name), L.T("Accounts_SignOutButton", "Sign Out"), message: message)) return false;
         await app.SignOut();
         return true;

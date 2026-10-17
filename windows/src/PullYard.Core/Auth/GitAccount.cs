@@ -169,7 +169,6 @@ public sealed class GitAccounts
     public const string DefaultCredentialKey = "github-token";
     private const string ListKey = "git.accounts";
     private const string ActiveKey = "git.activeAccount";
-    private const string LastUsedKey = "git.lastUsedAccount";
 
     private readonly Settings settings;
     private readonly ICredentialVault vault;
@@ -177,7 +176,6 @@ public sealed class GitAccounts
     private List<GitAccount> accounts;
 
     public string? ActiveId { get; private set; }
-    public string? LastUsedIdentity { get; private set; }
 
     public event Action? Changed;
 
@@ -187,13 +185,11 @@ public sealed class GitAccounts
         this.vault = vault;
         accounts = settings.GetObject<List<GitAccount>>(ListKey) ?? new();
         ActiveId = settings.GetString(ActiveKey);
-        LastUsedIdentity = settings.GetString(LastUsedKey);
         if (accounts.Count == 0 && vault.Load(DefaultCredentialKey) is not null)
         {
             var legacy = new GitAccount { Id = NewId(), Provider = GitProvider.GitHub, Host = GitProviders.GitHubHost, CredentialKey = DefaultCredentialKey };
             accounts.Add(legacy);
             ActiveId = legacy.Id;
-            LastUsedIdentity = legacy.Identity;
             Save();
         }
         if (ActiveId is null || accounts.All(a => a.Id != ActiveId)) ActiveId = accounts.FirstOrDefault()?.Id;
@@ -225,6 +221,13 @@ public sealed class GitAccounts
     public GitCredential? Credential(GitAccount account) => vault.Load(account.CredentialKey) is { } raw ? GitCredential.Decode(raw) : null;
 
     public void Store(GitCredential credential, GitAccount account) => vault.Save(account.CredentialKey, credential.Encoded);
+
+    public bool HasCredential(GitAccount account) => vault.Load(account.CredentialKey) is not null;
+
+    public void ForgetCredential(string id)
+    {
+        if (Find(id) is { } account) vault.Delete(account.CredentialKey);
+    }
 
     public GitAccount Upsert(GitAccount candidate, GitCredential credential)
     {
@@ -270,12 +273,6 @@ public sealed class GitAccounts
         Save();
     }
 
-    public void MarkUsed(GitAccount? account)
-    {
-        LastUsedIdentity = account?.Identity;
-        settings.Set(LastUsedKey, LastUsedIdentity);
-    }
-
     public void Remove(string id)
     {
         GitAccount? removed;
@@ -296,7 +293,6 @@ public sealed class GitAccounts
         lock (gate) snapshot = accounts.Select(a => a.Copy()).ToList();
         settings.Set(ListKey, snapshot);
         settings.Set(ActiveKey, ActiveId);
-        settings.Set(LastUsedKey, LastUsedIdentity);
         Changed?.Invoke();
     }
 }

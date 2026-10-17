@@ -169,6 +169,7 @@ public static class Keys
     public const string ClaudeUi = "claude.ui";
     public const string ClaudeProfiles = "claude.profiles";
     public const string ClaudeActiveProfile = "claude.activeProfile";
+    public const string ClaudeActiveProfileByAccount = "claude.activeProfileByAccount";
     public const string ClaudeTarget = "claudeTarget.v2";
     public const string ClaudePermissionMode = "claudeMode";
     public const string LocalRepoPaths = "localRepoPaths";
