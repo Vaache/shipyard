@@ -34,6 +34,17 @@ public static class AccountDialogs
     public static async Task Switch(XamlRoot? root, GitAccount target)
     {
         var app = AppViewModel.Shared;
+        if (target.Id != app.GitAccount?.Id && app.Lock.IsProtected(target.Id))
+        {
+            switch (await LockDialogs.Unlock(root, target, L.T("Lock_EnterPin", "Enter PIN")))
+            {
+                case UnlockOutcome.Cancelled:
+                    return;
+                case UnlockOutcome.NeedsSignIn:
+                    await Add(root);
+                    return;
+            }
+        }
         if (app.Claude.RunningCount > 0 && !await Dialogs.Confirm(root, L.F("Accounts_SwitchTitle", "Switch to {0}?", target.Subtitle), L.T("Accounts_SwitchButton", "Switch"), false,
                 L.T("Accounts_SwitchBody", "Running Claude sessions stop. Their history stays, and this account's Claude Code sign-in is kept for when you switch back."))) return;
         try

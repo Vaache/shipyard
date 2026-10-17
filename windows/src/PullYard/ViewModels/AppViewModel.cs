@@ -10,7 +10,9 @@ using PullYard.Services;
 
 namespace PullYard.ViewModels;
 
-public enum Phase { Checking, LoggedOut, LoggedIn }
+public enum Phase { Checking, LoggedOut, Locked, LoggedIn }
+
+public enum LockReset { Cancelled, Unlocked, NeedsSignIn }
 
 public sealed partial class AppViewModel : ObservableObject
 {
@@ -35,10 +37,12 @@ public sealed partial class AppViewModel : ObservableObject
     [ObservableProperty] private IForgeClient? forge;
     [ObservableProperty] private SearchItem? forgeSelection;
     [ObservableProperty] private ForgeCapabilities forgeCaps = ForgeCapabilities.Initial;
+    [ObservableProperty] private GitAccount? lockedAccount;
 
     public ClaudeWorkspace Claude { get; private set; } = null!;
     public UpdaterViewModel Updater { get; } = new();
     public GitAccounts Accounts { get; } = new(Settings.Shared, new CredentialVault());
+    public AccountLock Lock { get; } = new(new VaultLockStore(new CredentialVault()));
 
     public event Action? RefreshRequested;
     public event Action? LiveTick;
@@ -65,6 +69,7 @@ public sealed partial class AppViewModel : ObservableObject
         context = SynchronizationContext.Current;
         ClaudeAccountStore.Shared.Attach(SynchronizationContext.Current!);
         Task.Run(ListSnapshotStore.Shared.Prune).Forget();
+        WindowsHello.Refresh().Forget();
         Restore().Forget();
     }
 
@@ -144,7 +149,50 @@ public sealed partial class AppViewModel : ObservableObject
             Phase = Phase.LoggedOut;
             return;
         }
+        if (Lock.IsProtected(account.Id))
+        {
+            LockedAccount = account;
+            ClaudeProfiles.Shared.Scope = "";
+            Phase = Phase.Locked;
+            return;
+        }
         await Resume(account, credential);
+    }
+
+    public async Task Unlocked(GitAccount account)
+    {
+        if (LockedAccount?.Id != account.Id)
+        {
+            await SwitchAccount(account.Id);
+            return;
+        }
+        LockedAccount = null;
+        Phase = Phase.Checking;
+        if (Accounts.Credential(account) is { } credential) await Resume(account, credential);
+        else Phase = Phase.LoggedOut;
+    }
+
+    public void UseAnotherAccount()
+    {
+        LockedAccount = null;
+        Phase = Phase.LoggedOut;
+    }
+
+    public async Task<LockReset> ResetLock(GitAccount account)
+    {
+        var hello = false;
+        if (WindowsHello.Available)
+        {
+            if (!await WindowsHello.Verify(L.F("Lock_HelloResetReason", "Reset the PIN for {0}", account.Subtitle))) return LockReset.Cancelled;
+            hello = true;
+        }
+        Lock.RemoveLock(account.Id);
+        if (ClaudeProfiles.Shared.Scope == account.Id) Claude.CloseAllForProfileSwitch();
+        await ClaudeAccountStore.Shared.Logout(ClaudeProfiles.Shared.Owned(account.Id));
+        if (hello) return LockReset.Unlocked;
+        Accounts.ForgetCredential(account.Id);
+        if (LockedAccount?.Id == account.Id) UseAnotherAccount();
+        return LockReset.NeedsSignIn;
     }
 
     private async Task Resume(GitAccount account, GitCredential credential)
@@ -412,8 +460,15 @@ public sealed partial class AppViewModel : ObservableObject
         var current = GitAccount;
         if (current is not null) await UnbindClaude(current);
         ResetSession(forgetCache: true);
-        if (current is not null) Accounts.Remove(current.Id);
-        else CredentialStore.Delete();
+        if (current is not null)
+        {
+            Lock.RemoveLock(current.Id);
+            Accounts.Remove(current.Id);
+        }
+        else
+        {
+            CredentialStore.Delete();
+        }
     }
 
     private void Revoked()
@@ -508,8 +563,23 @@ public sealed partial class AppViewModel : ObservableObject
         }
     }
 
+    private string? pendingUrl;
+
+    partial void OnPhaseChanged(Phase value)
+    {
+        if (value == Phase.Checking) return;
+        var url = pendingUrl;
+        pendingUrl = null;
+        if (value == Phase.LoggedIn && url is not null) Handle(url);
+    }
+
     public void Handle(string url)
     {
+        if (Phase != Phase.LoggedIn)
+        {
+            if (Phase == Phase.Checking) pendingUrl = url;
+            return;
+        }
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
         if (!uri.Scheme.StartsWith(AppInfo.UrlScheme, StringComparison.OrdinalIgnoreCase) && !uri.Scheme.StartsWith(AppInfo.LegacyUrlScheme, StringComparison.OrdinalIgnoreCase) && !uri.Scheme.StartsWith("ghlite", StringComparison.OrdinalIgnoreCase)) return;
         if (uri.Host == "section")

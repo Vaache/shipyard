@@ -101,13 +101,29 @@ public sealed class LoginView : Grid
             var info = Ui.V(0, Ui.Text(a.Name ?? (a.Login.Length > 0 ? a.Login : a.Provider.Title()), 13, "text", FontWeights.Medium), Ui.Caption($"{a.Provider.Title()} · {a.Subtitle}"));
             var target = a;
             var go = app.Accounts.HasCredential(a)
-                ? Ui.Button(L.T("Login_Continue", "Continue"), () => RunLogin(() => app.SwitchAccount(id)))
+                ? Ui.Button(L.T("Login_Continue", "Continue"), () => RunLogin(() => Continue(target)))
                 : Ui.Button(L.T("Login_SignInAgain", "Sign in again"), () => Prefill(target));
             var row = Ui.Columns((Ui.Avatar(a.AvatarUrl, 24), Ui.Auto), (info, Ui.Star), (go, Ui.Auto));
             row.ColumnSpacing = 10;
             rows.Add(row);
         }
         return Card(L.T("Login_YourAccounts", "Your accounts"), "", "green", rows.ToArray());
+    }
+
+    private async Task Continue(GitAccount account)
+    {
+        if (app.Lock.IsProtected(account.Id))
+        {
+            switch (await LockDialogs.Unlock(XamlRoot, account, L.T("Lock_EnterPin", "Enter PIN")))
+            {
+                case UnlockOutcome.Cancelled:
+                    return;
+                case UnlockOutcome.NeedsSignIn:
+                    Prefill(account);
+                    return;
+            }
+        }
+        await app.SwitchAccount(account.Id);
     }
 
     private void Prefill(GitAccount account)
