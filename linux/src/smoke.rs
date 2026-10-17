@@ -6,6 +6,7 @@ use gtk::glib;
 use crate::api::models::*;
 use crate::api::GitHubApi;
 use crate::app::{self, App, IssueFilter, PrFilter, Section};
+use crate::forge::ForgeCapabilities;
 use crate::git_accounts::GitProvider;
 use crate::ui::pr::model::{Change, PrModel};
 
@@ -195,7 +196,10 @@ pub fn run(_app: Rc<App>) {
         }
     });
     step(next(400), "deep link", || app::get().handle_url(&format!("{}://section/repos", crate::brand::URL_SCHEME)));
-    step(next(300), "gitlab account", || app::set_smoke_forge(GitProvider::Gitlab));
+    step(next(300), "gitlab account", || {
+        let caps = ForgeCapabilities { pull_filters: PrFilter::ALL.to_vec(), issue_filters: IssueFilter::ALL.to_vec(), inbox_title: Some("To-Do List"), repositories: true };
+        app::set_smoke_forge(GitProvider::Gitlab, caps)
+    });
     step(next(400), "forge item", || {
         let item: SearchItem = crate::forge::ForgeItem {
             number: 12,
@@ -217,14 +221,24 @@ pub fn run(_app: Rc<App>) {
         crate::ui::forge_view::remember(std::slice::from_ref(&item));
         app::select(Some(item.route()));
     });
-    for f in GitProvider::Gitlab.supported_filters() {
-        step(next(250), "forge section", move || app::set_section(Section::Prs(f)));
+    let forge_sections: Vec<Section> = PrFilter::ALL
+        .iter()
+        .map(|f| Section::Prs(*f))
+        .chain([Section::MyPrsByRepo, Section::Notifications, Section::Repos])
+        .chain(IssueFilter::ALL.iter().map(|f| Section::Issues(*f)))
+        .collect();
+    for s in forge_sections {
+        step(next(250), "forge section", move || app::set_section(s));
     }
     step(next(250), "forge claude section", || app::set_section(Section::Claude));
     step(next(300), "account menu", || {
         crate::ui::accounts::menu();
     });
-    step(next(300), "bitbucket account", || app::set_smoke_forge(GitProvider::Bitbucket));
+    step(next(300), "bitbucket account", || {
+        let caps = ForgeCapabilities { pull_filters: vec![PrFilter::ReviewRequested, PrFilter::Mine, PrFilter::Reviewed], issue_filters: vec![], inbox_title: None, repositories: true };
+        app::set_smoke_forge(GitProvider::Bitbucket, caps)
+    });
+    step(next(300), "bitbucket repos", || app::set_section(Section::Repos));
     step(next(400), "login providers", || {
         app::set_smoke_logged_out();
         for p in GitProvider::ALL {
@@ -232,11 +246,21 @@ pub fn run(_app: Rc<App>) {
         }
     });
     step(next(400), "add account sheet", crate::ui::login::add_account_sheet);
+    let locked = || {
+        let mut a = crate::git_accounts::GitAccount::draft(GitProvider::Gitlab, "smoke.invalid", None);
+        a.login = "smoke".into();
+        a
+    };
+    step(next(400), "pin sheets", move || {
+        crate::ui::unlock::set_pin_sheet(&locked(), Rc::new(|| {}));
+        crate::ui::unlock::unlock_sheet(&locked(), "Enter PIN", Rc::new(|| {}));
+    });
+    step(next(400), "lock screen", move || app::set_smoke_locked(locked()));
     step(next(1200), "done", || {
         println!("smoke: ok");
         app::finish_smoke(0);
     });
-    glib::timeout_add_local_once(Duration::from_secs(60), || {
+    glib::timeout_add_local_once(Duration::from_secs(90), || {
         eprintln!("smoke: timed out");
         app::finish_smoke(3);
     });

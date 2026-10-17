@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::models::RestUser;
 use crate::api::ApiError;
-use crate::app::PrFilter;
 use crate::{secret, settings};
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -109,11 +108,11 @@ impl GitProvider {
         }
     }
 
-    pub fn supported_filters(&self) -> Vec<PrFilter> {
-        match self {
-            GitProvider::Github | GitProvider::GithubEnterprise | GitProvider::Gitea => PrFilter::ALL.to_vec(),
-            GitProvider::Gitlab => vec![PrFilter::ReviewRequested, PrFilter::Mine, PrFilter::Assigned],
-            GitProvider::Bitbucket => vec![PrFilter::ReviewRequested, PrFilter::Mine],
+    pub fn repositories_title(&self) -> &'static str {
+        if *self == GitProvider::Gitlab {
+            "Projects"
+        } else {
+            "Repositories"
         }
     }
 
@@ -464,8 +463,8 @@ mod tests {
         assert_eq!(GitProvider::Gitlab.request_short(), "MR");
         assert_eq!(GitProvider::Gitlab.number_prefix(), "!");
         assert_eq!(GitProvider::Github.number_prefix(), "#");
-        assert_eq!(GitProvider::Bitbucket.supported_filters(), vec![PrFilter::ReviewRequested, PrFilter::Mine]);
-        assert_eq!(GitProvider::Gitea.supported_filters().len(), PrFilter::ALL.len());
+        assert_eq!(GitProvider::Gitlab.repositories_title(), "Projects");
+        assert_eq!(GitProvider::Gitea.repositories_title(), "Repositories");
     }
 
     #[test]

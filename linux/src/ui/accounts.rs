@@ -10,10 +10,7 @@ pub fn confirm_switch(account: GitAccount) {
         return;
     }
     let id = account.id.clone();
-    let run = move || {
-        let id = id.clone();
-        crate::rt::spawn_local(async move { app::get().switch_account(id).await });
-    };
+    let run = move || app::get().request_switch(id.clone());
     if app::claude_running() {
         dialogs::confirm(&format!("Switch to {}?", account.subtitle()), Some(app::CLAUDE_SWITCH_NOTE), "Switch", false, run);
     } else {

@@ -8,13 +8,14 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 
 use reqwest::header::{ACCEPT, AUTHORIZATION};
-use reqwest::StatusCode;
-use serde::de::DeserializeOwned;
+use reqwest::{Method, StatusCode};
+use serde::de::{DeserializeOwned, Deserializer};
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::api::models::{Actor, Count, Date, LabelInfo, Nodes, RepoName, SearchItem};
 use crate::api::{http_client, ApiError, ApiResult};
-use crate::app::PrFilter;
+use crate::app::{IssueFilter, PrFilter};
 use crate::auth::{self, Endpoint};
 use crate::git_accounts::{GitAccount, GitCredential, GitProvider};
 use crate::secret;
@@ -28,6 +29,75 @@ pub struct ForgeUser {
     pub name: Option<String>,
     pub avatar_url: Option<String>,
     pub id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForgeCapabilities {
+    pub pull_filters: Vec<PrFilter>,
+    pub issue_filters: Vec<IssueFilter>,
+    pub inbox_title: Option<&'static str>,
+    pub repositories: bool,
+}
+
+impl Default for ForgeCapabilities {
+    fn default() -> Self {
+        ForgeCapabilities { pull_filters: vec![PrFilter::ReviewRequested, PrFilter::Mine], issue_filters: vec![], inbox_title: None, repositories: false }
+    }
+}
+
+impl ForgeCapabilities {
+    pub fn has_inbox(&self) -> bool {
+        self.inbox_title.is_some()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForgeNotification {
+    pub id: String,
+    pub title: String,
+    pub repo: String,
+    pub kind: String,
+    pub reason: String,
+    pub url: String,
+    pub updated_at: Date,
+    pub author: Option<Actor>,
+    pub unread: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForgeRepo {
+    pub full_name: String,
+    pub description: Option<String>,
+    pub url: String,
+    pub is_private: bool,
+    pub updated_at: Option<Date>,
+    pub default_branch: Option<String>,
+    pub stars: Option<i64>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum FlexLabel {
+    Detailed {
+        name: String,
+        #[serde(default)]
+        color: Option<String>,
+    },
+    Name(String),
+}
+
+impl FlexLabel {
+    pub fn info(self) -> LabelInfo {
+        match self {
+            FlexLabel::Detailed { name, color } => label(name, color),
+            FlexLabel::Name(name) => label(name, None),
+        }
+    }
+}
+
+pub fn lenient<'de, D: Deserializer<'de>, T: DeserializeOwned>(d: D) -> Result<Option<T>, D::Error> {
+    let v = Option::<Value>::deserialize(d)?;
+    Ok(v.and_then(|v| serde_json::from_value(v).ok()))
 }
 
 #[derive(Clone)]
@@ -76,9 +146,9 @@ impl ForgeHttp {
         Ok(u)
     }
 
-    async fn send(&self, url: &url::Url) -> ApiResult<(StatusCode, Vec<u8>)> {
+    async fn send(&self, method: &Method, url: &url::Url) -> ApiResult<(StatusCode, Vec<u8>)> {
         let authorization = lock(&self.authorization).clone();
-        let resp = http_client().get(url.clone()).header(AUTHORIZATION, authorization).header(ACCEPT, "application/json").send().await.map_err(|e| self.network_error(e))?;
+        let resp = http_client().request(method.clone(), url.clone()).header(AUTHORIZATION, authorization).header(ACCEPT, "application/json").send().await.map_err(|e| self.network_error(e))?;
         let status = resp.status();
         let bytes = resp.bytes().await.map_err(|e| self.network_error(e))?;
         Ok((status, bytes.to_vec()))
@@ -104,10 +174,19 @@ impl ForgeHttp {
     }
 
     pub async fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&'static str, String)]) -> ApiResult<T> {
+        let body = self.call(Method::GET, path, query).await?;
+        serde_json::from_slice(&body).map_err(|e| ApiError::new(format!("Failed to parse response from {}: {e}", self.service)))
+    }
+
+    pub async fn post(&self, method: Method, path: &str, query: &[(&'static str, String)]) -> ApiResult<()> {
+        self.call(method, path, query).await.map(|_| ())
+    }
+
+    async fn call(&self, method: Method, path: &str, query: &[(&'static str, String)]) -> ApiResult<Vec<u8>> {
         let target = self.url(path, query)?;
-        let (mut status, mut body) = self.send(&target).await?;
+        let (mut status, mut body) = self.send(&method, &target).await?;
         if status == StatusCode::UNAUTHORIZED && self.refresh().await? {
-            (status, body) = self.send(&target).await?;
+            (status, body) = self.send(&method, &target).await?;
         }
         if !status.is_success() {
             if status == StatusCode::UNAUTHORIZED {
@@ -116,7 +195,7 @@ impl ForgeHttp {
             let reason = error_message(&body).unwrap_or_else(|| status.canonical_reason().unwrap_or("error").to_string());
             return Err(ApiError::with_status(format!("{} {}: {reason}", self.service, status.as_u16()), status.as_u16()));
         }
-        serde_json::from_slice(&body).map_err(|e| ApiError::new(format!("Failed to parse response from {}: {e}", self.service)))
+        Ok(body)
     }
 }
 
@@ -126,6 +205,10 @@ struct ClientState {
     user_id: Option<String>,
     workspaces: Option<Vec<String>>,
     cache: HashMap<String, (Instant, Vec<SearchItem>)>,
+    approval_filter: Option<bool>,
+    participant_filter_broken: bool,
+    review_cache: HashMap<String, (Instant, Vec<bitbucket::PullRequest>)>,
+    repo_cache: Option<(Instant, Vec<bitbucket::Repo>)>,
 }
 
 struct Inner {
@@ -204,10 +287,49 @@ impl ForgeClient {
         }
     }
 
-    pub async fn pull_requests(&self, filter: PrFilter, state: StateFilter) -> ApiResult<Vec<SearchItem>> {
-        if !self.inner.provider.supported_filters().contains(&filter) {
-            return Ok(vec![]);
+    pub async fn capabilities(&self) -> ForgeCapabilities {
+        match self.inner.provider {
+            GitProvider::Gitlab => gitlab::capabilities(self).await,
+            GitProvider::Bitbucket => bitbucket::capabilities(),
+            GitProvider::Gitea => gitea::capabilities(),
+            GitProvider::Github | GitProvider::GithubEnterprise => ForgeCapabilities::default(),
         }
+    }
+
+    pub async fn issues(&self, filter: IssueFilter, state: StateFilter) -> ApiResult<Vec<SearchItem>> {
+        match self.inner.provider {
+            GitProvider::Gitlab => gitlab::issues(self, filter, state).await,
+            GitProvider::Gitea => gitea::issues(self, filter, state).await,
+            _ => Ok(vec![]),
+        }
+    }
+
+    pub async fn notifications(&self) -> ApiResult<Vec<ForgeNotification>> {
+        match self.inner.provider {
+            GitProvider::Gitlab => gitlab::notifications(self).await,
+            GitProvider::Gitea => gitea::notifications(self).await,
+            _ => Ok(vec![]),
+        }
+    }
+
+    pub async fn mark_done(&self, n: &ForgeNotification) -> ApiResult<()> {
+        match self.inner.provider {
+            GitProvider::Gitlab => self.http().post(Method::POST, &format!("/todos/{}/mark_as_done", n.id), &[]).await,
+            GitProvider::Gitea => self.http().post(Method::PATCH, &format!("/notifications/threads/{}", n.id), &[("to-status", "read".into())]).await,
+            _ => Ok(()),
+        }
+    }
+
+    pub async fn repositories(&self) -> ApiResult<Vec<ForgeRepo>> {
+        match self.inner.provider {
+            GitProvider::Gitlab => gitlab::repositories(self).await,
+            GitProvider::Bitbucket => bitbucket::repositories(self).await,
+            GitProvider::Gitea => gitea::repositories(self).await,
+            _ => Ok(vec![]),
+        }
+    }
+
+    pub async fn pull_requests(&self, filter: PrFilter, state: StateFilter) -> ApiResult<Vec<SearchItem>> {
         match self.inner.provider {
             GitProvider::Gitlab => gitlab::pull_requests(self, filter, state).await,
             GitProvider::Bitbucket => bitbucket::pull_requests(self, filter, state).await,
@@ -261,6 +383,29 @@ impl From<ForgeItem> for SearchItem {
     }
 }
 
+pub fn issue(f: ForgeItem) -> SearchItem {
+    let open = f.state == "OPEN";
+    let completed = f.state != "NOT_PLANNED";
+    let mut item: SearchItem = f.into();
+    item.typename = "Issue".into();
+    item.pr_state = None;
+    item.is_draft = None;
+    item.base_ref_name = None;
+    item.review_decision = None;
+    item.issue_state = Some(if open { "OPEN" } else { "CLOSED" }.into());
+    item.state_reason = if open { None } else { Some(if completed { "COMPLETED" } else { "NOT_PLANNED" }.into()) };
+    item
+}
+
+pub fn state_matches(state: StateFilter, item: &SearchItem) -> bool {
+    let open = if item.is_pr() { item.pr_state.as_deref() == Some("OPEN") } else { item.issue_state.as_deref() == Some("OPEN") };
+    match state {
+        StateFilter::Open => open,
+        StateFilter::Closed => !open,
+        StateFilter::All => true,
+    }
+}
+
 pub fn label(name: String, color: Option<String>) -> LabelInfo {
     LabelInfo { name, color: color.unwrap_or_else(|| "888888".into()).trim_start_matches('#').to_string() }
 }
@@ -302,6 +447,48 @@ mod tests {
         let out = newest_first(vec![item("u1", "2026-01-02T00:00:00Z"), item("u2", "2026-01-05T00:00:00Z"), item("u1", "2026-01-09T00:00:00Z")]);
         assert_eq!(out.iter().map(|i| i.url.as_str()).collect::<Vec<_>>(), ["u2", "u1"]);
         assert!(out.iter().all(|i| i.forge && i.is_pr()));
+    }
+
+    #[test]
+    fn issues_and_state_filter() {
+        let mut f = ForgeItem {
+            number: 3,
+            title: "bug".into(),
+            url: "u3".into(),
+            state: "CLOSED",
+            draft: false,
+            created: "2026-01-01T00:00:00Z".parse().unwrap(),
+            updated: "2026-01-01T00:00:00Z".parse().unwrap(),
+            base: None,
+            author: None,
+            avatar: None,
+            repo: "a/b".into(),
+            comments: None,
+            labels: vec![],
+            review: None,
+        };
+        let closed = issue(ForgeItem { url: "u4".into(), ..clone_item(&f) });
+        assert!(!closed.is_pr());
+        assert_eq!(closed.issue_state.as_deref(), Some("CLOSED"));
+        assert_eq!(closed.state_reason.as_deref(), Some("COMPLETED"));
+        assert!(state_matches(StateFilter::Closed, &closed));
+        f.state = "OPEN";
+        let open = issue(f);
+        assert!(state_matches(StateFilter::Open, &open));
+        assert!(!state_matches(StateFilter::Closed, &open));
+        assert!(state_matches(StateFilter::Open, &item("u5", "2026-01-01T00:00:00Z")));
+    }
+
+    fn clone_item(f: &ForgeItem) -> ForgeItem {
+        ForgeItem { number: f.number, title: f.title.clone(), url: f.url.clone(), state: f.state, draft: f.draft, created: f.created, updated: f.updated, base: None, author: None, avatar: None, repo: f.repo.clone(), comments: None, labels: vec![], review: None }
+    }
+
+    #[test]
+    fn flexible_labels() {
+        let labels: Vec<FlexLabel> = serde_json::from_str(r##"["docs", {"name": "bug", "color": "#ff0000"}]"##).unwrap();
+        let infos: Vec<LabelInfo> = labels.into_iter().map(FlexLabel::info).collect();
+        assert_eq!(infos[0].color, "888888");
+        assert_eq!(infos[1].color, "ff0000");
     }
 
     #[test]

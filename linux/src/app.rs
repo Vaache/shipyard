@@ -11,7 +11,7 @@ use crate::api::{ApiError, GitHubApi};
 use crate::brand;
 use crate::claude::workspace::Workspace;
 use crate::demo;
-use crate::forge::ForgeClient;
+use crate::forge::{ForgeCapabilities, ForgeClient};
 use crate::git_accounts::{self, GitAccount, GitCredential, GitProvider};
 use crate::secret;
 use crate::settings;
@@ -183,6 +183,7 @@ impl Section {
 pub enum Phase {
     Checking,
     LoggedOut,
+    Locked,
     LoggedIn,
 }
 
@@ -191,6 +192,8 @@ pub struct State {
     pub api: Option<GitHubApi>,
     pub account: Option<GitAccount>,
     pub forge: Option<ForgeClient>,
+    pub forge_caps: ForgeCapabilities,
+    pub locked: Option<GitAccount>,
     pub user: Option<RestUser>,
     pub scopes: Vec<String>,
     pub section: Section,
@@ -273,16 +276,31 @@ pub fn cache_account() -> String {
         .unwrap_or_default()
 }
 
+pub fn forge_caps() -> ForgeCapabilities {
+    try_get().map(|a| a.state.borrow().forge_caps.clone()).unwrap_or_default()
+}
+
+pub fn caps_allow(caps: &ForgeCapabilities, s: Section) -> bool {
+    match s {
+        Section::Prs(f) => caps.pull_filters.contains(&f),
+        Section::MyPrsByRepo => caps.pull_filters.contains(&PrFilter::Mine),
+        Section::Issues(f) => caps.issue_filters.contains(&f),
+        Section::Notifications => caps.has_inbox(),
+        Section::Repos => caps.repositories,
+        Section::Claude => true,
+        Section::Projects => false,
+    }
+}
+
+fn first_section(caps: &ForgeCapabilities) -> Section {
+    Section::Prs(caps.pull_filters.first().copied().unwrap_or(PrFilter::Mine))
+}
+
 pub fn section_allowed(s: Section) -> bool {
-    let p = provider();
-    if p.is_github() {
+    if provider().is_github() {
         return true;
     }
-    match s {
-        Section::Prs(f) => p.supported_filters().contains(&f),
-        Section::Claude => true,
-        _ => false,
-    }
+    caps_allow(&forge_caps(), s)
 }
 
 fn github_links() -> bool {
@@ -378,9 +396,9 @@ pub fn open(route: Route, push: bool) {
     }
     let section = a.state.borrow().section;
     if section == Section::Claude {
-        let target = if section_allowed(Section::Prs(PrFilter::Mine)) { PrFilter::Mine } else { provider().supported_filters()[0] };
-        a.state.borrow_mut().section = Section::Prs(target);
-        a.section_changed.emit(&Section::Prs(target));
+        let target = if section_allowed(Section::Prs(PrFilter::Mine)) { Section::Prs(PrFilter::Mine) } else { first_section(&forge_caps()) };
+        a.state.borrow_mut().section = target;
+        a.section_changed.emit(&target);
         select(Some(route));
         a.present();
         return;
@@ -540,7 +558,26 @@ impl App {
             root.set_visible_child_name("splash");
             return;
         }
+        if phase != Phase::Locked {
+            if let Some(old) = root.child_by_name("lock") {
+                root.remove(&old);
+            }
+        }
         match phase {
+            Phase::Locked => {
+                let Some(account) = self.state.borrow().locked.clone() else { return };
+                if let Some(old) = root.child_by_name("lock") {
+                    root.remove(&old);
+                }
+                root.add_named(&ui::unlock::lock_page(&account), Some("lock"));
+                root.set_visible_child_name("lock");
+                for name in ["main", "login"] {
+                    if let Some(old) = root.child_by_name(name) {
+                        root.remove(&old);
+                    }
+                }
+                *self.main.borrow_mut() = None;
+            }
             Phase::LoggedOut => {
                 if root.child_by_name("login").is_none() {
                     root.add_named(&ui::login::build(), Some("login"));
@@ -580,7 +617,77 @@ impl App {
             self.set_phase(Phase::LoggedOut);
             return;
         };
+        if crate::account_lock::is_protected(&account.id).await {
+            self.lock(account);
+            return;
+        }
         self.resume(account, credential).await;
+    }
+
+    fn lock(self: &Rc<Self>, account: GitAccount) {
+        crate::claude::accounts::set_scope(Some(String::new()));
+        self.state.borrow_mut().locked = Some(account);
+        self.set_phase(Phase::Locked);
+    }
+
+    pub fn leave_lock(self: &Rc<Self>) {
+        self.state.borrow_mut().locked = None;
+        crate::claude::accounts::set_scope(None);
+        self.set_phase(Phase::LoggedOut);
+    }
+
+    pub fn unlocked(self: &Rc<Self>, account: GitAccount) {
+        let was_locked = self.state.borrow().locked.as_ref().is_some_and(|a| a.id == account.id);
+        let me = self.clone();
+        if !was_locked {
+            crate::rt::spawn_local(async move { me.switch_account(account.id).await });
+            return;
+        }
+        self.state.borrow_mut().locked = None;
+        self.set_phase(Phase::Checking);
+        crate::rt::spawn_local(async move {
+            match git_accounts::credential(&account).await {
+                Some(credential) => me.resume(account, credential).await,
+                None => {
+                    crate::claude::accounts::set_scope(None);
+                    me.set_phase(Phase::LoggedOut);
+                }
+            }
+        });
+    }
+
+    pub fn request_switch(self: &Rc<Self>, id: String) {
+        let me = self.clone();
+        crate::rt::spawn_local(async move {
+            let Some(target) = git_accounts::accounts().into_iter().find(|a| a.id == id) else { return };
+            let current = me.state.borrow().account.as_ref().map(|a| a.id.clone());
+            if current.as_deref() != Some(target.id.as_str()) && crate::account_lock::is_protected(&target.id).await {
+                let unlocked = target.clone();
+                let app = me.clone();
+                ui::unlock::unlock_sheet(&target, "Enter PIN", Rc::new(move || app.unlocked(unlocked.clone())));
+            } else {
+                me.switch_account(id).await;
+            }
+        });
+    }
+
+    pub async fn reset_lock(self: Rc<Self>, account: GitAccount) {
+        use crate::claude::accounts as profiles;
+        crate::account_lock::remove(&account.id).await;
+        if profiles::scope().as_deref() == Some(account.id.as_str()) {
+            self.claude.close_all_for_profile_switch();
+        }
+        profiles::store().logout_profiles(profiles::owned(&account.id)).await;
+        git_accounts::forget_credential(&account);
+        let locked_here = self.state.borrow().locked.as_ref().is_some_and(|a| a.id == account.id);
+        let current = self.state.borrow().account.as_ref().is_some_and(|a| a.id == account.id);
+        if locked_here {
+            self.leave_lock();
+        } else if current {
+            profiles::set_scope(None);
+            self.reset_session(false);
+        }
+        toast_with(&format!("PIN removed. Sign in to {} again to use {}.", account.provider.title(), account.subtitle()), "OK", || {});
     }
 
     async fn resume(self: Rc<Self>, account: GitAccount, credential: GitCredential) {
@@ -708,28 +815,52 @@ impl App {
     fn enter_forge(self: &Rc<Self>, account: GitAccount, client: ForgeClient) {
         self.drop_main_if_switching(Some(&account));
         bind_claude(&account);
-        let supported = account.provider.supported_filters();
+        let caps = ForgeCapabilities::default();
         {
             let mut s = self.state.borrow_mut();
             s.user = Some(account.user());
             s.account = Some(account);
-            s.forge = Some(client);
+            s.forge = Some(client.clone());
+            s.forge_caps = caps.clone();
             s.api = None;
             s.scopes.clear();
             s.route = None;
             s.known_review_requests = None;
-            let keep = match s.section {
-                Section::Prs(f) => supported.contains(&f),
-                Section::Claude => true,
-                _ => false,
-            };
-            if !keep {
-                s.section = Section::Prs(supported[0]);
+            if !caps_allow(&caps, s.section) {
+                s.section = first_section(&caps);
             }
         }
         self.pr_models.borrow_mut().clear();
         self.set_phase(Phase::LoggedIn);
         self.start_polling();
+        let me = self.clone();
+        crate::rt::spawn_local(async move { me.load_forge_caps(client).await });
+    }
+
+    async fn load_forge_caps(self: Rc<Self>, client: ForgeClient) {
+        let c = client.clone();
+        let caps = crate::rt::run(async move { c.capabilities().await }).await;
+        if !self.state.borrow().forge.as_ref().is_some_and(|f| f.same(&client)) {
+            return;
+        }
+        let section = {
+            let mut s = self.state.borrow_mut();
+            if s.forge_caps == caps {
+                return;
+            }
+            s.forge_caps = caps.clone();
+            if caps_allow(&caps, s.section) {
+                None
+            } else {
+                s.section = first_section(&caps);
+                Some(s.section)
+            }
+        };
+        self.account_changed.emit(&());
+        if let Some(section) = section {
+            self.section_changed.emit(&section);
+        }
+        self.refresh_badges(true).await;
     }
 
     async fn verify_forge(self: &Rc<Self>, client: ForgeClient) {
@@ -853,6 +984,9 @@ impl App {
         if let Some(a) = &current {
             self.unbind_claude(a).await;
         }
+        if let Some(a) = &current {
+            crate::account_lock::remove(&a.id).await;
+        }
         forget_account(current.as_ref());
         self.reset_session(true);
     }
@@ -888,6 +1022,7 @@ impl App {
             s.api = None;
             s.account = None;
             s.forge = None;
+            s.forge_caps = ForgeCapabilities::default();
             s.user = None;
             s.scopes.clear();
             s.route = None;
@@ -1011,7 +1146,8 @@ impl App {
     }
 
     async fn refresh_forge_badges(self: Rc<Self>, forge: ForgeClient) {
-        let supported = forge.provider().supported_filters();
+        let caps = self.state.borrow().forge_caps.clone();
+        let supported = caps.pull_filters.clone();
         let current = |me: &Rc<Self>| me.state.borrow().forge.as_ref().is_some_and(|f| f.same(&forge));
         if supported.contains(&PrFilter::ReviewRequested) {
             let f = forge.clone();
@@ -1034,12 +1170,20 @@ impl App {
                 }
             }
         }
+        let unread = if caps.has_inbox() {
+            let f = forge.clone();
+            crate::rt::run(async move { f.notifications().await }).await.ok().map(|n| n.iter().filter(|x| x.unread).count())
+        } else {
+            Some(0)
+        };
         if !current(&self) {
             return;
         }
         {
             let mut s = self.state.borrow_mut();
-            s.unread_count = 0;
+            if let Some(n) = unread {
+                s.unread_count = n;
+            }
             s.last_badge_refresh = Some(chrono::Utc::now());
         }
         self.badges.emit(&());
@@ -1078,6 +1222,9 @@ impl App {
     }
 
     pub fn handle_url(self: &Rc<Self>, uri: &str) {
+        if self.state.borrow().phase != Phase::LoggedIn {
+            return;
+        }
         let Ok(url) = url::Url::parse(uri) else {
             if let Some(route) = util::parse_github_url(uri, true) {
                 open(route, false);
@@ -1285,6 +1432,8 @@ pub fn run(smoke: bool) -> glib::ExitCode {
             api: None,
             account: None,
             forge: None,
+            forge_caps: ForgeCapabilities::default(),
+            locked: None,
             user: None,
             scopes: vec![],
             section: Section::Prs(PrFilter::ReviewRequested),
@@ -1393,7 +1542,7 @@ pub fn set_smoke_logged_out() {
     a.set_phase(Phase::LoggedOut);
 }
 
-pub fn set_smoke_forge(provider: GitProvider) {
+pub fn set_smoke_forge(provider: GitProvider, caps: ForgeCapabilities) {
     let a = get();
     let mut account = GitAccount::draft(provider, "smoke.invalid", None);
     account.login = "smoke".into();
@@ -1402,7 +1551,8 @@ pub fn set_smoke_forge(provider: GitProvider) {
     a.drop_main_if_switching(Some(&account));
     {
         let mut s = a.state.borrow_mut();
-        s.section = Section::Prs(provider.supported_filters()[0]);
+        s.section = first_section(&caps);
+        s.forge_caps = caps;
         s.user = Some(account.user());
         s.account = Some(account);
         s.forge = Some(client);
@@ -1410,4 +1560,10 @@ pub fn set_smoke_forge(provider: GitProvider) {
         s.route = None;
     }
     a.set_phase(Phase::LoggedIn);
+}
+
+pub fn set_smoke_locked(account: GitAccount) {
+    let a = get();
+    a.splash_done.set(true);
+    a.lock(account);
 }

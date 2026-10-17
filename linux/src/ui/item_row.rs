@@ -16,7 +16,7 @@ pub fn item_row(item: &SearchItem, show_repo: bool) -> gtk::Box {
     title.set_ellipsize(gtk::pango::EllipsizeMode::End);
     col.append(&title);
     let meta = hbox(5);
-    let prefix = if item.forge { app::number_prefix() } else { "#" };
+    let prefix = if item.forge && item.is_pr() { app::number_prefix() } else { "#" };
     let where_ = if show_repo { format!("{}{prefix}{}", item.repository.name_with_owner, item.number) } else { format!("{prefix}{}", item.number) };
     meta.append(&ellipsized(&where_, &["sy-muted", "sy-small"]));
     meta.append(&label_with("·", &["sy-muted", "sy-small"]));

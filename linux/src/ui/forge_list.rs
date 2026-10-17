@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -7,11 +7,50 @@ use chrono::{DateTime, Utc};
 use gtk::glib;
 
 use super::item_row::{item_menu, item_row};
-use super::lists::{state_toggles, StateFilter};
+use super::lists::{group_header, state_toggles, StateFilter};
 use super::menu::context_menu;
 use super::widgets::*;
 use crate::api::models::{Route, SearchItem};
-use crate::app::{self, PrFilter};
+use crate::api::ApiResult;
+use crate::app::{self, IssueFilter, PrFilter};
+use crate::forge::ForgeClient;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Kind {
+    Pulls(PrFilter),
+    PullsByProject,
+    Issues(IssueFilter),
+}
+
+impl Kind {
+    pub fn key(&self) -> String {
+        match self {
+            Kind::Pulls(f) => format!("pr-{}", f.key()),
+            Kind::PullsByProject => "pr-grouped".into(),
+            Kind::Issues(f) => format!("issue-{}", f.key()),
+        }
+    }
+
+    pub fn grouped(&self) -> bool {
+        *self == Kind::PullsByProject
+    }
+
+    pub fn title(&self) -> String {
+        match self {
+            Kind::Pulls(f) => f.title().into(),
+            Kind::PullsByProject => format!("My {}s by project", app::provider().request_short()),
+            Kind::Issues(f) => format!("Issues: {}", f.title()),
+        }
+    }
+
+    async fn fetch(self, forge: ForgeClient, state: StateFilter) -> ApiResult<Vec<SearchItem>> {
+        match self {
+            Kind::Pulls(f) => forge.pull_requests(f, state).await,
+            Kind::PullsByProject => forge.pull_requests(PrFilter::Mine, state).await,
+            Kind::Issues(f) => forge.issues(f, state).await,
+        }
+    }
+}
 
 thread_local! {
     static CACHE: RefCell<HashMap<String, (Vec<SearchItem>, DateTime<Utc>)>> = RefCell::new(HashMap::new());
@@ -21,8 +60,8 @@ pub fn reset_cache() {
     CACHE.with(|c| c.borrow_mut().clear());
 }
 
-fn cache_key(filter: PrFilter, state: StateFilter) -> String {
-    format!("{}\n{}\n{}", app::cache_account(), filter.key(), state.title())
+fn cache_key(kind: Kind, state: StateFilter) -> String {
+    format!("{}\n{}\n{}", app::cache_account(), kind.key(), state.title())
 }
 
 fn matches(item: &SearchItem, text: &str) -> bool {
@@ -43,7 +82,8 @@ fn matches(item: &SearchItem, text: &str) -> bool {
 }
 
 struct ForgeList {
-    filter: PrFilter,
+    kind: Kind,
+    collapsed: RefCell<HashSet<String>>,
     state: Rc<Cell<StateFilter>>,
     items: RefCell<Vec<SearchItem>>,
     loading: Cell<bool>,
@@ -53,7 +93,7 @@ struct ForgeList {
     generation: Cell<u64>,
     text: RefCell<String>,
     list: gtk::ListBox,
-    keys: RefCell<Vec<Route>>,
+    keys: RefCell<Vec<Option<Route>>>,
     title: adw::WindowTitle,
     spinner: gtk::Spinner,
     status: Rc<RefreshStatus>,
@@ -64,9 +104,9 @@ struct ForgeList {
 impl ForgeList {
     fn reload(self: &Rc<Self>, silent: bool) {
         let Some(forge) = app::forge() else { return };
-        let filter = self.filter;
+        let kind = self.kind;
         let state = self.state.get();
-        let key = cache_key(filter, state);
+        let key = cache_key(kind, state);
         let gen = self.generation.get() + 1;
         self.generation.set(gen);
         if !silent {
@@ -87,7 +127,7 @@ impl ForgeList {
         self.render();
         let me = self.clone();
         crate::rt::spawn_local(async move {
-            let result = crate::rt::run(async move { forge.pull_requests(filter, state).await }).await;
+            let result = crate::rt::run(kind.fetch(forge, state)).await;
             if gen != me.generation.get() {
                 return;
             }
@@ -141,28 +181,53 @@ impl ForgeList {
             sig.push('|');
             sig.push_str(&crate::util::rel(Some(item.updated_at)));
         }
+        if self.kind.grouped() {
+            let mut collapsed: Vec<String> = self.collapsed.borrow().iter().cloned().collect();
+            collapsed.sort();
+            sig.push_str(&format!("|{}|{}", collapsed.join(","), text.is_empty()));
+        }
         if *self.rendered.borrow() != sig {
             *self.rendered.borrow_mut() = sig;
             rebuild_rows(&self.list, || {
-                let mut keys = vec![];
-                for item in &items {
-                    let row = gtk::ListBoxRow::new();
-                    row.set_child(Some(&item_row(item, true)));
-                    let it = item.clone();
-                    context_menu(&row, move || item_menu(&it));
-                    self.list.append(&row);
-                    keys.push(item.route());
-                }
+                let keys = if self.kind.grouped() { self.grouped_rows(&items, text.is_empty()) } else { items.iter().map(|i| self.append_item(i, true)).collect() };
                 *self.keys.borrow_mut() = keys;
             });
         }
         self.sync_selection();
     }
 
+    fn append_item(&self, item: &SearchItem, show_repo: bool) -> Option<Route> {
+        let row = gtk::ListBoxRow::new();
+        row.set_child(Some(&item_row(item, show_repo)));
+        let it = item.clone();
+        context_menu(&row, move || item_menu(&it));
+        self.list.append(&row);
+        Some(item.route())
+    }
+
+    fn grouped_rows(&self, items: &[SearchItem], text_empty: bool) -> Vec<Option<Route>> {
+        let mut keys = vec![];
+        for (repo, group) in group_by_repo(items) {
+            let open = !self.collapsed.borrow().contains(&repo) || !text_empty;
+            let row = gtk::ListBoxRow::new();
+            row.set_widget_name(&format!("group:{repo}"));
+            row.set_child(Some(&group_header(&repo, group.len(), open)));
+            row.set_selectable(false);
+            self.list.append(&row);
+            keys.push(None);
+            if open {
+                for item in group {
+                    keys.push(self.append_item(item, false));
+                }
+            }
+        }
+        keys
+    }
+
     fn sync_selection(&self) {
         let route = app::get().state.borrow().route.clone();
         let keys = self.keys.borrow();
-        match route.and_then(|r| keys.iter().position(|k| *k == r)) {
+        match route.and_then(|r| keys.iter().position(|k| k.as_ref() == Some(&r))) {
             Some(i) => {
                 if let Some(row) = self.list.row_at_index(i as i32) {
                     self.list.select_row(Some(&row));
@@ -173,11 +238,23 @@ impl ForgeList {
     }
 }
 
-pub fn build(filter: PrFilter) -> gtk::Widget {
+pub fn group_by_repo(items: &[SearchItem]) -> Vec<(String, Vec<&SearchItem>)> {
+    let mut order: Vec<(String, Vec<&SearchItem>)> = vec![];
+    for item in items {
+        let repo = &item.repository.name_with_owner;
+        match order.iter_mut().find(|(r, _)| r == repo) {
+            Some((_, group)) => group.push(item),
+            None => order.push((repo.clone(), vec![item])),
+        }
+    }
+    order
+}
+
+pub fn build(kind: Kind) -> gtk::Widget {
     let list = gtk::ListBox::new();
     list.add_css_class("sy-list");
     list.set_selection_mode(gtk::SelectionMode::Single);
-    let title = adw::WindowTitle::new(filter.title(), "");
+    let title = adw::WindowTitle::new(&kind.title(), "");
     let spinner = spinner(14);
     spinner.set_visible(false);
     let stack = gtk::Stack::new();
@@ -190,7 +267,8 @@ pub fn build(filter: PrFilter) -> gtk::Widget {
         }
     });
     let me = Rc::new(ForgeList {
-        filter,
+        kind,
+        collapsed: RefCell::new(HashSet::new()),
         state,
         items: RefCell::new(vec![]),
         loading: Cell::new(false),
@@ -238,9 +316,20 @@ pub fn build(filter: PrFilter) -> gtk::Widget {
     let weak = Rc::downgrade(&me);
     list.connect_row_activated(move |_, row| {
         let Some(me) = weak.upgrade() else { return };
-        let route = me.keys.borrow().get(row.index().max(0) as usize).cloned();
-        if let Some(route) = route {
-            app::select(Some(route));
+        let route = me.keys.borrow().get(row.index().max(0) as usize).cloned().flatten();
+        match route {
+            Some(route) => app::select(Some(route)),
+            None => {
+                if let Some(group) = row.widget_name().strip_prefix("group:") {
+                    let g = group.to_string();
+                    let mut c = me.collapsed.borrow_mut();
+                    if !c.remove(&g) {
+                        c.insert(g);
+                    }
+                    drop(c);
+                    me.render();
+                }
+            }
         }
     });
 
@@ -328,6 +417,20 @@ mod tests {
             "forge": true
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn groups_keep_first_seen_order() {
+        let mut a = item();
+        a.repository.name_with_owner = "z/last".into();
+        let b = item();
+        let mut c = item();
+        c.repository.name_with_owner = "z/last".into();
+        let items = vec![a, b, c];
+        let groups = group_by_repo(&items);
+        assert_eq!(groups.iter().map(|(r, g)| (r.as_str(), g.len())).collect::<Vec<_>>(), [("z/last", 2), ("g/app", 1)]);
+        assert_eq!(Kind::Issues(IssueFilter::Mine).key(), "issue-mine");
+        assert!(Kind::PullsByProject.grouped());
     }
 
     #[test]

@@ -4,7 +4,7 @@ use base64::Engine;
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use serde::Deserialize;
 
-use super::{newest_first, ForgeClient, ForgeItem, ForgeUser, Query};
+use super::{newest_first, ForgeCapabilities, ForgeClient, ForgeItem, ForgeRepo, ForgeUser, Query};
 use crate::api::models::{Date, SearchItem};
 use crate::api::{ApiError, ApiResult};
 use crate::app::PrFilter;
@@ -14,19 +14,19 @@ const MAX_REPOS: usize = 20;
 const CACHE_TTL: Duration = Duration::from_secs(180);
 const SEGMENT: &AsciiSet = &NON_ALPHANUMERIC.remove(b'-').remove(b'_').remove(b'.').remove(b'~');
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct Href {
     #[serde(default)]
     href: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct UserLinks {
     #[serde(default)]
     avatar: Option<Href>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct User {
     #[serde(default)]
     uuid: Option<String>,
@@ -50,6 +50,12 @@ impl User {
     }
 }
 
+#[derive(Deserialize, Clone)]
+struct Account {
+    #[serde(default)]
+    uuid: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct Page<T> {
     values: Vec<T>,
@@ -68,40 +74,59 @@ struct WorkspaceRef {
     workspace: Option<Slug>,
 }
 
-#[derive(Deserialize)]
-struct Repo {
-    full_name: String,
-}
-
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct Links {
     #[serde(default)]
     html: Option<Href>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct Branch {
     name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
+pub(super) struct Repo {
+    full_name: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    is_private: Option<bool>,
+    #[serde(default)]
+    updated_on: Option<Date>,
+    #[serde(default)]
+    mainbranch: Option<Branch>,
+    #[serde(default)]
+    links: Option<Links>,
+}
+
+#[derive(Deserialize, Clone)]
+struct RepoName {
+    full_name: String,
+}
+
+#[derive(Deserialize, Clone)]
 struct Endpoint {
     #[serde(default)]
     branch: Option<Branch>,
     #[serde(default)]
-    repository: Option<Repo>,
+    repository: Option<RepoName>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct Participant {
+    #[serde(default)]
+    user: Option<Account>,
+    #[serde(default)]
+    role: Option<String>,
     #[serde(default)]
     approved: Option<bool>,
     #[serde(default)]
     state: Option<String>,
 }
 
-#[derive(Deserialize)]
-struct PullRequest {
+#[derive(Deserialize, Clone)]
+pub(super) struct PullRequest {
     id: i64,
     title: String,
     state: String,
@@ -119,6 +144,8 @@ struct PullRequest {
     comment_count: Option<i64>,
     #[serde(default)]
     participants: Option<Vec<Participant>>,
+    #[serde(default)]
+    reviewers: Option<Vec<Account>>,
 }
 
 pub(super) fn authorization(email: Option<&str>, token: &str) -> String {
@@ -139,13 +166,21 @@ pub(super) async fn current_user(c: &ForgeClient) -> ApiResult<ForgeUser> {
     Ok(ForgeUser { avatar_url: u.avatar(), name: u.display_name.clone(), login, id })
 }
 
+pub(super) fn capabilities() -> ForgeCapabilities {
+    ForgeCapabilities { pull_filters: vec![PrFilter::ReviewRequested, PrFilter::Mine, PrFilter::Reviewed], issue_filters: vec![], inbox_title: None, repositories: true }
+}
+
 fn state_query(state: StateFilter) -> Query {
     let states: &[&str] = match state {
         StateFilter::Open => &["OPEN"],
         StateFilter::Closed => &["MERGED", "DECLINED", "SUPERSEDED"],
         StateFilter::All => &["OPEN", "MERGED", "DECLINED", "SUPERSEDED"],
     };
-    states.iter().map(|s| ("state", s.to_string())).collect()
+    let mut q: Query = states.iter().map(|s| ("state", s.to_string())).collect();
+    q.push(("pagelen", "50".into()));
+    q.push(("sort", "-updated_on".into()));
+    q.push(("fields", "+values.participants,+values.reviewers".into()));
+    q
 }
 
 pub(super) async fn pull_requests(c: &ForgeClient, filter: PrFilter, state: StateFilter) -> ApiResult<Vec<SearchItem>> {
@@ -161,50 +196,117 @@ pub(super) async fn pull_requests(c: &ForgeClient, filter: PrFilter, state: Stat
 
 async fn fetch(c: &ForgeClient, filter: PrFilter, state: StateFilter) -> ApiResult<Vec<SearchItem>> {
     let me = c.user_id().await?;
-    let spaces = workspace_slugs(c).await?;
-    let mut common = state_query(state);
-    common.push(("pagelen", "50".into()));
-    common.push(("sort", "-updated_on".into()));
-    common.push(("fields", "+values.participants".into()));
     match filter {
         PrFilter::Mine => {
             let mut items = vec![];
-            for ws in &spaces {
-                let page: Page<PullRequest> = c.http().get(&format!("/workspaces/{}/pullrequests/{}", segment(ws), segment(&me)), &common).await?;
+            for ws in workspace_slugs(c).await? {
+                let page: Page<PullRequest> = c.http().get(&format!("/workspaces/{}/pullrequests/{}", segment(&ws), segment(&me)), &state_query(state)).await?;
                 items.extend(page.values.into_iter().map(item));
             }
             Ok(newest_first(items))
         }
-        PrFilter::ReviewRequested => {
-            let mut repos: Vec<String> = vec![];
-            for ws in &spaces {
-                if repos.len() >= MAX_REPOS {
-                    break;
-                }
-                let query: Query = vec![("role", "member".into()), ("sort", "-updated_on".into()), ("pagelen", MAX_REPOS.to_string())];
-                let page: Page<Repo> = c.http().get(&format!("/repositories/{}", segment(ws)), &query).await?;
-                repos.extend(page.values.into_iter().map(|r| r.full_name));
-            }
-            let mut items = vec![];
-            let mut last_error: Option<ApiError> = None;
-            for repo in repos.iter().take(MAX_REPOS) {
-                let mut query = common.clone();
-                query.push(("q", format!("reviewers.uuid=\"{me}\"")));
-                let path = format!("/repositories/{}/pullrequests", repo.split('/').map(segment).collect::<Vec<_>>().join("/"));
-                match c.http().get::<Page<PullRequest>>(&path, &query).await {
-                    Ok(page) => items.extend(page.values.into_iter().map(item)),
-                    Err(e) => last_error = Some(e),
-                }
-            }
-            if items.is_empty() {
-                if let Some(e) = last_error.filter(|e| e.status == 401) {
-                    return Err(e);
-                }
-            }
-            Ok(newest_first(items))
-        }
+        PrFilter::ReviewRequested => Ok(newest_first(review_pulls(c, state, &me).await?.into_iter().filter(|p| awaits_review(p, &me)).map(item).collect())),
+        PrFilter::Reviewed => Ok(newest_first(review_pulls(c, state, &me).await?.into_iter().filter(|p| reviewed(p, &me)).map(item).collect())),
         _ => Ok(vec![]),
     }
+}
+
+async fn review_pulls(c: &ForgeClient, state: StateFilter, me: &str) -> ApiResult<Vec<PullRequest>> {
+    let key = state.title().to_string();
+    let hit = c.state().review_cache.get(&key).filter(|(at, _)| at.elapsed() < CACHE_TTL).map(|(_, p)| p.clone());
+    if let Some(pulls) = hit {
+        return Ok(pulls);
+    }
+    let mut pulls = vec![];
+    let mut last_error: Option<ApiError> = None;
+    for repo in member_repos(c).await?.iter().take(MAX_REPOS) {
+        match repo_pulls(c, &repo.full_name, state, me).await {
+            Ok(p) => pulls.extend(p),
+            Err(e) => last_error = Some(e),
+        }
+    }
+    if pulls.is_empty() {
+        if let Some(e) = last_error.filter(|e| e.status == 401) {
+            return Err(e);
+        }
+    }
+    c.state().review_cache.insert(key, (Instant::now(), pulls.clone()));
+    Ok(pulls)
+}
+
+async fn repo_pulls(c: &ForgeClient, repo: &str, state: StateFilter, me: &str) -> ApiResult<Vec<PullRequest>> {
+    let path = format!("/repositories/{}/pullrequests", repo.split('/').map(segment).collect::<Vec<_>>().join("/"));
+    let reviewer = format!("reviewers.uuid=\"{me}\"");
+    let broken = c.state().participant_filter_broken;
+    if !broken {
+        let mut query = state_query(state);
+        query.push(("q", format!("{reviewer} OR participants.user.uuid=\"{me}\"")));
+        match c.http().get::<Page<PullRequest>>(&path, &query).await {
+            Ok(page) => return Ok(page.values),
+            Err(e) if e.status == 400 => {
+                c.state().participant_filter_broken = true;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    let mut query = state_query(state);
+    query.push(("q", reviewer));
+    Ok(c.http().get::<Page<PullRequest>>(&path, &query).await?.values)
+}
+
+fn same(a: Option<&str>, b: &str) -> bool {
+    a.is_some_and(|a| a.eq_ignore_ascii_case(b))
+}
+
+fn my_participation<'a>(pr: &'a PullRequest, me: &str) -> Option<&'a Participant> {
+    pr.participants.as_ref()?.iter().find(|p| same(p.user.as_ref().and_then(|u| u.uuid.as_deref()), me))
+}
+
+fn awaits_review(pr: &PullRequest, me: &str) -> bool {
+    let mine = my_participation(pr, me);
+    let listed = pr.reviewers.as_ref().is_some_and(|r| r.iter().any(|a| same(a.uuid.as_deref(), me)));
+    let reviewer = listed || mine.and_then(|m| m.role.as_deref()) == Some("REVIEWER");
+    reviewer && mine.and_then(|m| m.approved) != Some(true) && mine.and_then(|m| m.state.as_deref()).is_none()
+}
+
+fn reviewed(pr: &PullRequest, me: &str) -> bool {
+    if same(pr.author.as_ref().and_then(|a| a.uuid.as_deref()), me) {
+        return false;
+    }
+    let Some(mine) = my_participation(pr, me) else { return false };
+    mine.approved == Some(true) || matches!(mine.state.as_deref(), Some("approved") | Some("changes_requested"))
+}
+
+pub(super) async fn repositories(c: &ForgeClient) -> ApiResult<Vec<ForgeRepo>> {
+    Ok(member_repos(c).await?.into_iter().map(forge_repo).collect())
+}
+
+fn forge_repo(r: Repo) -> ForgeRepo {
+    ForgeRepo {
+        url: r.links.and_then(|l| l.html).and_then(|h| h.href).unwrap_or_else(|| format!("https://bitbucket.org/{}", r.full_name)),
+        full_name: r.full_name,
+        description: r.description.filter(|d| !d.is_empty()),
+        is_private: r.is_private.unwrap_or(true),
+        updated_at: r.updated_on,
+        default_branch: r.mainbranch.map(|b| b.name),
+        stars: None,
+    }
+}
+
+async fn member_repos(c: &ForgeClient) -> ApiResult<Vec<Repo>> {
+    let hit = c.state().repo_cache.as_ref().filter(|(at, _)| at.elapsed() < CACHE_TTL).map(|(_, r)| r.clone());
+    if let Some(repos) = hit {
+        return Ok(repos);
+    }
+    let mut repos: Vec<Repo> = vec![];
+    for ws in workspace_slugs(c).await? {
+        let query: Query = vec![("role", "member".into()), ("sort", "-updated_on".into()), ("pagelen", "100".into())];
+        let page: Page<Repo> = c.http().get(&format!("/repositories/{}", segment(&ws)), &query).await?;
+        repos.extend(page.values);
+    }
+    repos.sort_by(|a, b| b.updated_on.cmp(&a.updated_on));
+    c.state().repo_cache = Some((Instant::now(), repos.clone()));
+    Ok(repos)
 }
 
 async fn workspace_slugs(c: &ForgeClient) -> ApiResult<Vec<String>> {
@@ -284,7 +386,8 @@ mod tests {
           "author": { "uuid": "{u-1}", "display_name": "Bob B", "nickname": "bob", "links": { "avatar": { "href": "https://avatar/bob" } } },
           "destination": { "branch": { "name": "develop" }, "repository": { "full_name": "acme/api" } },
           "links": { "html": { "href": "https://bitbucket.org/acme/api/pull-requests/42" } },
-          "participants": [{ "approved": true, "state": "approved" }, { "approved": false, "state": null }]
+          "reviewers": [{ "uuid": "{me}" }],
+          "participants": [{ "user": { "uuid": "{other}" }, "approved": true, "state": "approved" }, { "user": { "uuid": "{ME}" }, "role": "REVIEWER", "approved": false, "state": null }]
         },
         {
           "id": 7,
@@ -292,16 +395,30 @@ mod tests {
           "state": "DECLINED",
           "created_on": "2026-01-01T10:00:00+00:00",
           "updated_on": "2026-01-02T10:00:00+00:00",
+          "author": { "uuid": "{u-2}" },
           "destination": { "repository": { "full_name": "acme/web" } },
-          "participants": [{ "approved": true }, { "approved": false, "state": "changes_requested" }]
+          "reviewers": [{ "uuid": "{me}" }],
+          "participants": [{ "user": { "uuid": "{other}" }, "approved": true }, { "user": { "uuid": "{me}" }, "role": "REVIEWER", "approved": false, "state": "changes_requested" }]
+        },
+        {
+          "id": 9,
+          "title": "Mine",
+          "state": "OPEN",
+          "created_on": "2026-01-01T10:00:00+00:00",
+          "updated_on": "2026-01-02T10:00:00+00:00",
+          "author": { "uuid": "{me}" },
+          "participants": [{ "user": { "uuid": "{me}" }, "approved": true }]
         }
       ]
     }"#;
 
+    fn pulls() -> Vec<PullRequest> {
+        serde_json::from_str::<Page<PullRequest>>(PRS).unwrap().values
+    }
+
     #[test]
     fn maps_pull_requests() {
-        let page: Page<PullRequest> = serde_json::from_str(PRS).unwrap();
-        let items: Vec<SearchItem> = page.values.into_iter().map(item).collect();
+        let items: Vec<SearchItem> = pulls().into_iter().map(item).collect();
         let a = &items[0];
         assert_eq!(a.number, 42);
         assert_eq!(a.repository.name_with_owner, "acme/api");
@@ -314,6 +431,39 @@ mod tests {
         assert_eq!(b.pr_state.as_deref(), Some("CLOSED"));
         assert_eq!(b.review_decision.as_deref(), Some("CHANGES_REQUESTED"));
         assert_eq!(b.url, "https://bitbucket.org/acme/web/pull-requests/7");
+    }
+
+    #[test]
+    fn review_requests_skip_reviewed_pulls() {
+        let p = pulls();
+        assert!(awaits_review(&p[0], "{me}"));
+        assert!(!awaits_review(&p[1], "{me}"));
+        assert!(!awaits_review(&p[2], "{me}"));
+    }
+
+    #[test]
+    fn reviewed_by_me_excludes_own_pulls() {
+        let p = pulls();
+        assert!(!reviewed(&p[0], "{me}"));
+        assert!(reviewed(&p[1], "{me}"));
+        assert!(!reviewed(&p[2], "{me}"));
+        assert_eq!(capabilities().pull_filters, vec![PrFilter::ReviewRequested, PrFilter::Mine, PrFilter::Reviewed]);
+    }
+
+    #[test]
+    fn maps_repositories() {
+        let page: Page<Repo> = serde_json::from_str(
+            r#"{ "values": [{ "full_name": "acme/api", "description": "", "is_private": false, "updated_on": "2026-01-01T00:00:00+00:00",
+                              "mainbranch": { "name": "main" }, "links": { "html": { "href": "https://bitbucket.org/acme/api" } } },
+                            { "full_name": "acme/web" }] }"#,
+        )
+        .unwrap();
+        let r: Vec<ForgeRepo> = page.values.into_iter().map(forge_repo).collect();
+        assert_eq!(r[0].default_branch.as_deref(), Some("main"));
+        assert!(!r[0].is_private);
+        assert!(r[0].description.is_none());
+        assert!(r[1].is_private);
+        assert_eq!(r[1].url, "https://bitbucket.org/acme/web");
     }
 
     #[test]

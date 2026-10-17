@@ -33,6 +33,7 @@ base64 = "0.22"
 async-channel = "2"
 oo7 = { version = "0.6", default-features = false, features = ["tokio", "native_crypto"] }
 libc = "0.2"
+openssl = "0.10"
 
 [profile.release]
 opt-level = 3

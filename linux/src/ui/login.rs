@@ -281,24 +281,40 @@ fn prefill(a: &git_accounts::GitAccount) {
     l.token.grab_focus();
 }
 
-fn continue_with(a: &git_accounts::GitAccount, refill: std::rc::Weak<RefCell<Option<Rc<dyn Fn()>>>>, on_done: Option<Rc<dyn Fn()>>) {
-    let id = a.id.clone();
+async fn switch_then(id: String, refill: Weak<RefCell<Option<Rc<dyn Fn()>>>>, done: Option<Rc<dyn Fn()>>) {
+    app::get().switch_account(id).await;
+    if app::get().state.borrow().phase == app::Phase::LoggedIn {
+        if let Some(d) = done {
+            d();
+        }
+    } else if let Some(f) = refill.upgrade().and_then(|r| r.borrow().clone()) {
+        f();
+    }
+}
+
+fn continue_with(a: &git_accounts::GitAccount, refill: Weak<RefCell<Option<Rc<dyn Fn()>>>>, on_done: Option<Rc<dyn Fn()>>) {
+    let target = a.clone();
+    let other = app::account().is_some_and(|current| current.id != a.id);
     let run = move || {
-        let id = id.clone();
+        let target = target.clone();
         let refill = refill.clone();
         let done = on_done.clone();
         rt::spawn_local(async move {
-            app::get().switch_account(id).await;
-            if app::get().state.borrow().phase == app::Phase::LoggedIn {
-                if let Some(d) = done {
-                    d();
-                }
-            } else if let Some(f) = refill.upgrade().and_then(|r| r.borrow().clone()) {
-                f();
+            if !crate::account_lock::is_protected(&target.id).await {
+                switch_then(target.id.clone(), refill, done).await;
+                return;
             }
+            let id = target.id.clone();
+            super::unlock::unlock_sheet(
+                &target,
+                "Enter PIN",
+                Rc::new(move || {
+                    let (id, refill, done) = (id.clone(), refill.clone(), done.clone());
+                    rt::spawn_local(async move { switch_then(id, refill, done).await });
+                }),
+            );
         });
     };
-    let other = app::account().is_some_and(|current| current.id != a.id);
     if other && app::claude_running() {
         super::dialogs::confirm(&format!("Switch to {}?", a.subtitle()), Some(app::CLAUDE_SWITCH_NOTE), "Switch", false, run);
     } else {

@@ -1,3 +1,4 @@
+mod account_lock;
 mod api;
 mod app;
 mod auth;

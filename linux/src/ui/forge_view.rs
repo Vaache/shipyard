@@ -45,10 +45,11 @@ fn text(value: &str) -> gtk::Widget {
 
 pub fn page(url: &str) -> adw::NavigationPage {
     let provider = app::provider();
-    let prefix = provider.number_prefix();
     let body = vbox(16);
     pad(&body, 24);
     let item = lookup(url);
+    let is_pr = item.as_ref().is_none_or(|i| i.is_pr());
+    let prefix = if is_pr { provider.number_prefix() } else { "#" };
     let title = match &item {
         Some(i) => format!("{}{prefix}{}", i.repository.name_with_owner, i.number),
         None => provider.request_short().to_string(),
@@ -123,7 +124,8 @@ pub fn page(url: &str) -> adw::NavigationPage {
     actions.append(&copy);
     body.append(&actions);
 
-    let note = wrap_label(&format!("Diffs, reviews and comments for {} {}s open in the browser for now.", provider.title(), provider.request_title()), &["sy-muted", "sy-small"]);
+    let what = if is_pr { format!("Diffs, reviews and comments for {} {}s", provider.title(), provider.request_title()) } else { format!("Comments and history for {} issues", provider.title()) };
+    let note = wrap_label(&format!("{what} open in the browser for now."), &["sy-muted", "sy-small"]);
     note.set_xalign(0.0);
     body.append(&note);
 

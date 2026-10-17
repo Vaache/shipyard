@@ -1,9 +1,10 @@
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
-use super::{label, newest_first, ForgeClient, ForgeItem, ForgeUser, Query};
-use crate::api::models::{Date, SearchItem};
+use super::{issue, lenient, newest_first, state_matches, FlexLabel, ForgeCapabilities, ForgeClient, ForgeItem, ForgeNotification, ForgeRepo, ForgeUser, Query};
+use crate::api::models::{Actor, Date, SearchItem};
 use crate::api::ApiResult;
-use crate::app::PrFilter;
+use crate::app::{IssueFilter, PrFilter};
 use crate::ui::lists::StateFilter;
 
 #[derive(Deserialize)]
@@ -30,17 +31,6 @@ struct References {
 }
 
 #[derive(Deserialize)]
-#[serde(untagged)]
-enum Label {
-    Detailed {
-        name: String,
-        #[serde(default)]
-        color: Option<String>,
-    },
-    Name(String),
-}
-
-#[derive(Deserialize)]
 struct MergeRequest {
     iid: i64,
     title: String,
@@ -61,7 +51,81 @@ struct MergeRequest {
     #[serde(default)]
     user_notes_count: Option<i64>,
     #[serde(default)]
-    labels: Option<Vec<Label>>,
+    labels: Option<Vec<FlexLabel>>,
+}
+
+#[derive(Deserialize)]
+struct Issue {
+    iid: i64,
+    title: String,
+    web_url: String,
+    state: String,
+    created_at: Date,
+    updated_at: Date,
+    #[serde(default)]
+    author: Option<Author>,
+    #[serde(default)]
+    references: Option<References>,
+    #[serde(default)]
+    user_notes_count: Option<i64>,
+    #[serde(default)]
+    labels: Option<Vec<FlexLabel>>,
+}
+
+#[derive(Deserialize)]
+struct TodoProject {
+    #[serde(default)]
+    path_with_namespace: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct TodoTargetInfo {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    web_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Todo {
+    id: i64,
+    action_name: String,
+    target_type: String,
+    #[serde(default)]
+    target_url: Option<String>,
+    #[serde(default)]
+    body: Option<String>,
+    state: String,
+    created_at: Date,
+    #[serde(default)]
+    author: Option<Author>,
+    #[serde(default)]
+    project: Option<TodoProject>,
+    #[serde(default, deserialize_with = "lenient")]
+    target: Option<TodoTargetInfo>,
+}
+
+#[derive(Deserialize)]
+#[serde(bound = "T: DeserializeOwned")]
+struct TodoTarget<T> {
+    #[serde(default, deserialize_with = "lenient")]
+    target: Option<T>,
+}
+
+#[derive(Deserialize)]
+struct Project {
+    path_with_namespace: String,
+    #[serde(default)]
+    description: Option<String>,
+    web_url: String,
+    #[serde(default)]
+    visibility: Option<String>,
+    #[serde(default)]
+    last_activity_at: Option<Date>,
+    #[serde(default)]
+    default_branch: Option<String>,
+    #[serde(default)]
+    star_count: Option<i64>,
 }
 
 pub(super) async fn current_user(c: &ForgeClient) -> ApiResult<ForgeUser> {
@@ -69,34 +133,179 @@ pub(super) async fn current_user(c: &ForgeClient) -> ApiResult<ForgeUser> {
     Ok(ForgeUser { login: u.username, name: u.name.filter(|n| !n.is_empty()), avatar_url: u.avatar_url, id: Some(u.id.to_string()) })
 }
 
-fn states(state: StateFilter) -> &'static [&'static str] {
+pub(super) async fn capabilities(c: &ForgeClient) -> ForgeCapabilities {
+    let mut pull_filters = vec![PrFilter::ReviewRequested, PrFilter::Mine, PrFilter::Assigned, PrFilter::Mentioned];
+    if approval_filter_available(c).await {
+        pull_filters.push(PrFilter::Reviewed);
+    }
+    ForgeCapabilities { pull_filters, issue_filters: IssueFilter::ALL.to_vec(), inbox_title: Some("To-Do List"), repositories: true }
+}
+
+fn list_query() -> Query {
+    vec![("order_by", "updated_at".into()), ("sort", "desc".into()), ("per_page", "50".into()), ("with_labels_details", "true".into())]
+}
+
+fn states(state: StateFilter, closed: &'static [&'static str]) -> &'static [&'static str] {
     match state {
         StateFilter::Open => &["opened"],
-        StateFilter::Closed => &["merged", "closed"],
+        StateFilter::Closed => closed,
         StateFilter::All => &["all"],
     }
 }
 
+async fn approval_filter_available(c: &ForgeClient) -> bool {
+    let known = c.state().approval_filter;
+    if let Some(known) = known {
+        return known;
+    }
+    let probe = format!("pullyard-probe-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
+    let query: Query = vec![("scope", "all".into()), ("state", "all".into()), ("per_page", "1".into()), ("approved_by_usernames[]", probe)];
+    match c.http().get::<Vec<serde_json::Value>>("/merge_requests", &query).await {
+        Ok(page) => {
+            let works = page.is_empty();
+            c.state().approval_filter = Some(works);
+            works
+        }
+        Err(_) => false,
+    }
+}
+
+async fn mention_todos<T: DeserializeOwned>(c: &ForgeClient, kind: &str) -> ApiResult<Vec<T>> {
+    let mut all = vec![];
+    for action in ["mentioned", "directly_addressed"] {
+        for state in ["pending", "done"] {
+            let query: Query = vec![("type", kind.to_string()), ("action", action.into()), ("state", state.into()), ("per_page", "50".into())];
+            let page: Vec<TodoTarget<T>> = c.http().get("/todos", &query).await?;
+            all.extend(page.into_iter().filter_map(|t| t.target));
+        }
+    }
+    Ok(all)
+}
+
 pub(super) async fn pull_requests(c: &ForgeClient, filter: PrFilter, state: StateFilter) -> ApiResult<Vec<SearchItem>> {
-    let mut base: Query = vec![("order_by", "updated_at".into()), ("sort", "desc".into()), ("per_page", "50".into()), ("with_labels_details", "true".into())];
+    if filter == PrFilter::Mentioned {
+        let mrs: Vec<MergeRequest> = mention_todos(c, "MergeRequest").await?;
+        return Ok(newest_first(mrs.into_iter().map(item).filter(|i| state_matches(state, i)).collect()));
+    }
+    let me = c.login().await?;
+    let mut base = list_query();
     match filter {
         PrFilter::ReviewRequested => {
-            let me = c.login().await?;
             base.push(("scope", "all".into()));
-            base.push(("reviewer_username", me));
+            base.push(("reviewer_username", me.clone()));
         }
         PrFilter::Mine => base.push(("scope", "created_by_me".into())),
         PrFilter::Assigned => base.push(("scope", "assigned_to_me".into())),
-        PrFilter::Mentioned | PrFilter::Reviewed => return Ok(vec![]),
+        PrFilter::Reviewed => {
+            if !approval_filter_available(c).await {
+                return Ok(vec![]);
+            }
+            base.push(("scope", "all".into()));
+            base.push(("approved_by_usernames[]", me.clone()));
+        }
+        PrFilter::Mentioned => return Ok(vec![]),
     }
     let mut items = vec![];
-    for s in states(state) {
+    for s in states(state, &["merged", "closed"]) {
         let mut query = base.clone();
         query.push(("state", s.to_string()));
         let page: Vec<MergeRequest> = c.http().get("/merge_requests", &query).await?;
         items.extend(page.into_iter().map(item));
     }
+    let me = me.to_lowercase();
+    Ok(newest_first(items.into_iter().filter(|i| filter != PrFilter::Reviewed || i.author.as_ref().is_none_or(|a| a.login.to_lowercase() != me)).collect()))
+}
+
+pub(super) async fn issues(c: &ForgeClient, filter: IssueFilter, state: StateFilter) -> ApiResult<Vec<SearchItem>> {
+    if filter == IssueFilter::Mentioned {
+        let found: Vec<Issue> = mention_todos(c, "Issue").await?;
+        return Ok(newest_first(found.into_iter().map(issue_item).filter(|i| state_matches(state, i)).collect()));
+    }
+    let scope = if filter == IssueFilter::Assigned { "assigned_to_me" } else { "created_by_me" };
+    let mut items = vec![];
+    for s in states(state, &["closed"]) {
+        let mut query = list_query();
+        query.push(("scope", scope.into()));
+        query.push(("state", s.to_string()));
+        let page: Vec<Issue> = c.http().get("/issues", &query).await?;
+        items.extend(page.into_iter().map(issue_item));
+    }
     Ok(newest_first(items))
+}
+
+pub(super) async fn notifications(c: &ForgeClient) -> ApiResult<Vec<ForgeNotification>> {
+    let query: Query = vec![("state", "pending".into()), ("per_page", "50".into())];
+    let todos: Vec<Todo> = c.http().get("/todos", &query).await?;
+    let host = c.http().base.trim_start_matches("https://").trim_end_matches("/api/v4").to_string();
+    Ok(todos.into_iter().map(|t| notification(t, &host)).collect())
+}
+
+fn notification(t: Todo, host: &str) -> ForgeNotification {
+    let title = t.target.as_ref().and_then(|x| x.title.clone()).or(t.body.clone()).unwrap_or_else(|| t.target_type.clone());
+    let url = t.target_url.clone().or_else(|| t.target.as_ref().and_then(|x| x.web_url.clone())).unwrap_or_else(|| format!("https://{host}/dashboard/todos"));
+    ForgeNotification {
+        id: t.id.to_string(),
+        title,
+        repo: t.project.and_then(|p| p.path_with_namespace).unwrap_or_default(),
+        kind: if t.target_type == "MergeRequest" { "MR".into() } else { t.target_type.clone() },
+        reason: reason(&t.action_name),
+        url,
+        updated_at: t.created_at,
+        author: t.author.map(|a| Actor { login: a.username, avatar_url: a.avatar_url }),
+        unread: t.state == "pending",
+    }
+}
+
+pub(super) async fn repositories(c: &ForgeClient) -> ApiResult<Vec<ForgeRepo>> {
+    let query: Query = vec![("membership", "true".into()), ("order_by", "last_activity_at".into()), ("per_page", "100".into()), ("archived", "false".into())];
+    let projects: Vec<Project> = c.http().get("/projects", &query).await?;
+    Ok(projects.into_iter().map(repo).collect())
+}
+
+fn repo(p: Project) -> ForgeRepo {
+    ForgeRepo {
+        full_name: p.path_with_namespace,
+        description: p.description.filter(|d| !d.is_empty()),
+        url: p.web_url,
+        is_private: p.visibility.as_deref() != Some("public"),
+        updated_at: p.last_activity_at,
+        default_branch: p.default_branch,
+        stars: p.star_count,
+    }
+}
+
+fn reason(action: &str) -> String {
+    match action {
+        "assigned" => "Assigned".into(),
+        "mentioned" => "Mentioned".into(),
+        "directly_addressed" => "Addressed you".into(),
+        "build_failed" => "Pipeline failed".into(),
+        "marked" => "Added to do".into(),
+        "approval_required" => "Approval required".into(),
+        "unmergeable" => "Can't merge".into(),
+        "merge_train_removed" => "Removed from merge train".into(),
+        "review_requested" => "Review requested".into(),
+        "review_submitted" => "Review submitted".into(),
+        "member_access_requested" => "Access requested".into(),
+        other => other
+            .split('_')
+            .filter(|w| !w.is_empty())
+            .map(|w| {
+                let mut c = w.chars();
+                c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    }
+}
+
+fn project(reference: Option<String>, separator: char, url: &str) -> String {
+    if let Some((project, _)) = reference.as_deref().and_then(|r| r.rsplit_once(separator)) {
+        if !project.is_empty() {
+            return project.to_string();
+        }
+    }
+    project_from_url(url)
 }
 
 fn project_from_url(url: &str) -> String {
@@ -115,16 +324,7 @@ fn item(mr: MergeRequest) -> SearchItem {
         "opened" | "locked" => "OPEN",
         _ => "CLOSED",
     };
-    let repo = mr.references.and_then(|r| r.full).and_then(|f| f.split('!').next().map(|s| s.to_string())).filter(|s| !s.is_empty()).unwrap_or_else(|| project_from_url(&mr.web_url));
-    let labels = mr
-        .labels
-        .unwrap_or_default()
-        .into_iter()
-        .map(|l| match l {
-            Label::Detailed { name, color } => label(name, color),
-            Label::Name(name) => label(name, None),
-        })
-        .collect();
+    let repo = project(mr.references.and_then(|r| r.full), '!', &mr.web_url);
     ForgeItem {
         number: mr.iid,
         title: mr.title,
@@ -138,10 +338,30 @@ fn item(mr: MergeRequest) -> SearchItem {
         avatar: mr.author.and_then(|a| a.avatar_url),
         repo,
         comments: mr.user_notes_count,
-        labels,
+        labels: mr.labels.unwrap_or_default().into_iter().map(FlexLabel::info).collect(),
         review: None,
     }
     .into()
+}
+
+fn issue_item(i: Issue) -> SearchItem {
+    let repo = project(i.references.and_then(|r| r.full), '#', &i.web_url);
+    issue(ForgeItem {
+        number: i.iid,
+        title: i.title,
+        url: i.web_url,
+        state: if i.state == "opened" { "OPEN" } else { "CLOSED" },
+        draft: false,
+        created: i.created_at,
+        updated: i.updated_at,
+        base: None,
+        author: i.author.as_ref().map(|a| a.username.clone()),
+        avatar: i.author.and_then(|a| a.avatar_url),
+        repo,
+        comments: i.user_notes_count,
+        labels: i.labels.unwrap_or_default().into_iter().map(FlexLabel::info).collect(),
+        review: None,
+    })
 }
 
 #[cfg(test)]
@@ -198,6 +418,73 @@ mod tests {
     }
 
     #[test]
+    fn maps_issues() {
+        let page: Vec<Issue> = serde_json::from_str(
+            r#"[{ "iid": 8, "title": "Crash", "state": "closed", "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-03T00:00:00Z",
+                  "author": { "username": "bob" }, "references": { "full": "g/app#8" }, "user_notes_count": 1, "labels": ["bug"],
+                  "web_url": "https://gitlab.com/g/app/-/issues/8" }]"#,
+        )
+        .unwrap();
+        let i = issue_item(page.into_iter().next().unwrap());
+        assert!(!i.is_pr());
+        assert!(i.forge);
+        assert_eq!(i.issue_state.as_deref(), Some("CLOSED"));
+        assert_eq!(i.repository.name_with_owner, "g/app");
+        assert!(state_matches(StateFilter::Closed, &i));
+    }
+
+    #[test]
+    fn mention_todos_skip_unreadable_targets() {
+        let page: Vec<TodoTarget<MergeRequest>> = serde_json::from_str(
+            r#"[{ "id": 1, "target": { "iid": 4, "title": "T", "web_url": "https://gitlab.com/g/a/-/merge_requests/4", "state": "opened",
+                   "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z" } },
+                 { "id": 2, "target": { "unexpected": true } },
+                 { "id": 3 }]"#,
+        )
+        .unwrap();
+        let targets: Vec<MergeRequest> = page.into_iter().filter_map(|t| t.target).collect();
+        assert_eq!(targets.len(), 1);
+        assert_eq!(item(targets.into_iter().next().unwrap()).number, 4);
+    }
+
+    #[test]
+    fn maps_todos() {
+        let todos: Vec<Todo> = serde_json::from_str(
+            r#"[{ "id": 77, "action_name": "directly_addressed", "target_type": "MergeRequest", "target_url": "https://gitlab.com/g/a/-/merge_requests/4",
+                  "state": "pending", "created_at": "2026-01-05T00:00:00Z", "author": { "username": "carol" },
+                  "project": { "path_with_namespace": "g/a" }, "target": { "title": "Speed up" } },
+                { "id": 78, "action_name": "build_failed", "target_type": "Commit", "body": "Pipeline #5", "state": "pending",
+                  "created_at": "2026-01-04T00:00:00Z", "target": "not an object" }]"#,
+        )
+        .unwrap();
+        let n: Vec<ForgeNotification> = todos.into_iter().map(|t| notification(t, "gitlab.com")).collect();
+        assert_eq!(n[0].id, "77");
+        assert_eq!(n[0].title, "Speed up");
+        assert_eq!(n[0].kind, "MR");
+        assert_eq!(n[0].reason, "Addressed you");
+        assert_eq!(n[0].repo, "g/a");
+        assert!(n[0].unread);
+        assert_eq!(n[1].title, "Pipeline #5");
+        assert_eq!(n[1].reason, "Pipeline failed");
+        assert_eq!(n[1].url, "https://gitlab.com/dashboard/todos");
+        assert_eq!(reason("some_new_action"), "Some New Action");
+    }
+
+    #[test]
+    fn maps_projects() {
+        let projects: Vec<Project> = serde_json::from_str(
+            r#"[{ "path_with_namespace": "g/app", "description": "", "web_url": "https://gitlab.com/g/app", "visibility": "public",
+                  "last_activity_at": "2026-01-01T00:00:00Z", "default_branch": "main", "star_count": 3 }]"#,
+        )
+        .unwrap();
+        let r = repo(projects.into_iter().next().unwrap());
+        assert_eq!(r.full_name, "g/app");
+        assert!(!r.is_private);
+        assert!(r.description.is_none());
+        assert_eq!(r.stars, Some(3));
+    }
+
+    #[test]
     fn maps_user() {
         let u: User = serde_json::from_str(r#"{ "id": 5, "username": "alice", "name": "", "avatar_url": null }"#).unwrap();
         assert_eq!(u.username, "alice");
@@ -205,8 +492,9 @@ mod tests {
     }
 
     #[test]
-    fn project_path_from_web_url() {
-        assert_eq!(project_from_url("https://gitlab.com/a/b/-/merge_requests/1"), "a/b");
+    fn project_path() {
+        assert_eq!(project(Some("a/b!3".into()), '!', ""), "a/b");
+        assert_eq!(project(None, '#', "https://gitlab.com/a/b/-/issues/1"), "a/b");
         assert_eq!(project_from_url("not a url"), "?");
     }
 }

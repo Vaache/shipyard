@@ -1,10 +1,13 @@
+use std::cell::Cell;
+use std::rc::Rc;
+
 use adw::prelude::*;
 
 use super::claude::auth_view;
 use super::dialogs;
 use super::widgets::*;
 use crate::claude::accounts::{self, Status};
-use crate::git_accounts::{self, GitProvider};
+use crate::git_accounts::{self, GitAccount, GitProvider};
 use crate::{app, auth, settings, theme, updater, util};
 
 fn combo(title: &str, options: &[&str], selected: usize, on_change: impl Fn(usize) + 'static) -> adw::ComboRow {
@@ -56,6 +59,9 @@ fn account_group(dialog: &adw::PreferencesDialog) -> adw::PreferencesGroup {
                 sc.set_subtitle(&if scopes.is_empty() { "fine-grained / unknown".to_string() } else { scopes.join(", ") });
                 sc.set_subtitle_selectable(true);
                 g.add(&sc);
+            }
+            if let Some(acc) = account.clone() {
+                g.add(&pin_row(acc));
             }
             let actions = adw::ActionRow::new();
             actions.set_title("Session");
@@ -112,6 +118,57 @@ fn account_group(dialog: &adw::PreferencesDialog) -> adw::PreferencesGroup {
         }
     }
     g
+}
+
+fn pin_row(account: GitAccount) -> adw::SwitchRow {
+    let row = adw::SwitchRow::new();
+    row.set_title("Require PIN for this account");
+    row.set_subtitle("Asked when the app starts with this account and when switching to it.");
+    row.set_sensitive(false);
+    let guard = Rc::new(Cell::new(true));
+    let r = row.clone();
+    let g = guard.clone();
+    let id = account.id.clone();
+    crate::rt::spawn_local(async move {
+        let on = crate::account_lock::is_protected(&id).await;
+        r.set_active(on);
+        r.set_sensitive(true);
+        g.set(false);
+    });
+    row.connect_active_notify(move |r| {
+        if guard.get() {
+            return;
+        }
+        let want = r.is_active();
+        guard.set(true);
+        r.set_active(!want);
+        guard.set(false);
+        let (row, g) = (r.clone(), guard.clone());
+        let settle: Rc<dyn Fn(bool)> = Rc::new(move |on| {
+            g.set(true);
+            row.set_active(on);
+            g.set(false);
+        });
+        if want {
+            let done = settle.clone();
+            super::unlock::set_pin_sheet(&account, Rc::new(move || done(true)));
+        } else {
+            let done = settle.clone();
+            let id = account.id.clone();
+            super::unlock::unlock_sheet(
+                &account,
+                "Enter the PIN to turn it off",
+                Rc::new(move || {
+                    let (id, done) = (id.clone(), done.clone());
+                    crate::rt::spawn_local(async move {
+                        crate::account_lock::remove(&id).await;
+                        done(false);
+                    });
+                }),
+            );
+        }
+    });
+    row
 }
 
 fn claude_group(dialog: &adw::PreferencesDialog) -> adw::PreferencesGroup {
@@ -258,7 +315,9 @@ pub fn show() {
     ));
     page.add(&bg);
 
-    page.add(&claude_group(&dialog));
+    if app::get().state.borrow().phase == app::Phase::LoggedIn {
+        page.add(&claude_group(&dialog));
+    }
 
     let updates = group("Updates", "sy-download-symbolic", "green");
     updates.add(&switch("Check for updates automatically", None, settings::read(|s| s.update_auto_check), |v| settings::update(|s| s.update_auto_check = v)));
